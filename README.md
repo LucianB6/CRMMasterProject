@@ -7,6 +7,7 @@ SalesWay is a workspace-style platform for service-based companies, built to tra
 
 Users do not self-register. Accounts are created by an Admin/Manager, who provisions users, assigns roles (Admin / Manager / Sales Agent), and sends an invite or initial credentials (activation link / temporary password). Agents can later change only their password (and optionally minimal profile data), while identity fields (email), roles, and team membership remain company-managed.
 
+
 ### Dashboard and analytics
 
 After authentication, users land on the Dashboard, which provides charts and reports for current team activity and historical trends (daily/weekly/monthly), personal performance (individual KPIs and trends), and key metrics such as call volume, conversions, revenue collected, and operational indicators.
