@@ -1,14 +1,3 @@
-<div align="center">
-
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-
-  <h1>Built with AI Studio</h2>
-
-  <p>The fastest path from prompt to production with Gemini.</p>
-
-  <a href="https://aistudio.google.com/apps">Start building</a>
-
-</div>
 
 ## SalesWay overview
 
@@ -17,6 +6,7 @@ SalesWay is a workspace-style platform for service-based companies, built to tra
 ### Account provisioning and roles
 
 Users do not self-register. Accounts are created by an Admin/Manager, who provisions users, assigns roles (Admin / Manager / Sales Agent), and sends an invite or initial credentials (activation link / temporary password). Agents can later change only their password (and optionally minimal profile data), while identity fields (email), roles, and team membership remain company-managed.
+
 
 ### Dashboard and analytics
 
