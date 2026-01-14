@@ -1,0 +1,22 @@
+spring:
+  application:
+    name: salesway-backend
+  datasource:
+    url: jdbc:postgresql://localhost:5432/salesway
+    username: postgres
+    password: changeme
+  jpa:
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          time_zone: UTC
+app:
+  security:
+    jwt:
+      secret: "change-me-change-me-change-me-change-me"
+      expiration-seconds: 3600
+server:
+  port: 8081
