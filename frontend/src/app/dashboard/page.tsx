@@ -22,13 +22,22 @@ export default function DashboardPage() {
             Live overview of today’s activity and team performance.
           </p>
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <button className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-ink">
             Export
           </button>
           <button className="rounded-xl bg-sky-500 px-4 py-2 text-sm font-semibold text-white shadow-glow">
             New report
           </button>
+          <div className="flex items-center gap-3 rounded-full border border-slate-200 bg-slate-50 px-3 py-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-white">
+              AM
+            </div>
+            <div className="text-left">
+              <p className="text-xs font-semibold text-ink">Alex Manager</p>
+              <p className="text-xs text-slate-500">Manager</p>
+            </div>
+          </div>
         </div>
       </header>
 
