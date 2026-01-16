@@ -1,20 +1,86 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import * as React from "react";
+import { useForm } from "react-hook-form";
+import * as z from "zod";
+
+import { Logo } from "../../components/logo";
+import { Button } from "../../components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
+} from "../../components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger
+} from "../../components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage
+} from "../../components/ui/form";
+import { Input } from "../../components/ui/input";
+import { useToast } from "../../hooks/use-toast";
+
+const formSchema = z.object({
+  email: z.string().email({
+    message: "Please enter a valid email address."
+  }),
+  password: z.string().min(1, {
+    message: "Password is required."
+  })
+});
+
+const requestAccessFormSchema = z.object({
+  firstName: z.string().min(1, "First name is required."),
+  lastName: z.string().min(1, "Last name is required."),
+  email: z.string().email("Please enter a valid email address.")
+});
+
+type LoginFormValues = z.infer<typeof formSchema>;
+
+type RequestAccessFormValues = z.infer<typeof requestAccessFormSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { toast } = useToast();
+  const [isRequestAccessOpen, setIsRequestAccessOpen] = React.useState(false);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
   const apiBaseUrl =
     process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8081";
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError("");
+  const form = useForm<LoginFormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      email: "",
+      password: ""
+    }
+  });
+
+  const requestAccessForm = useForm<RequestAccessFormValues>({
+    resolver: zodResolver(requestAccessFormSchema),
+    defaultValues: {
+      firstName: "",
+      lastName: "",
+      email: ""
+    }
+  });
+
+  const onSubmit = async (values: LoginFormValues) => {
     setIsSubmitting(true);
 
     try {
@@ -23,7 +89,10 @@ export default function LoginPage() {
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({
+          email: values.email,
+          password: values.password
+        })
       });
 
       if (!response.ok) {
@@ -32,83 +101,168 @@ export default function LoginPage() {
 
       const payload = (await response.json()) as { token: string };
       localStorage.setItem("salesway_token", payload.token);
+      toast({
+        title: "Login Successful",
+        description: "Redirecting to your dashboard..."
+      });
       router.push("/dashboard");
-    } catch (err) {
-      setError("Email or password is incorrect.");
+    } catch (error) {
+      toast({
+        title: "Login failed",
+        description: "Email or password is incorrect.",
+        variant: "destructive"
+      });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  return (
-    <main className="min-h-screen bg-slate-100 px-6 py-12 lg:px-16">
-      <div className="mx-auto grid max-w-5xl items-center gap-10 lg:grid-cols-2">
-        <div>
-          <h1 className="text-3xl font-semibold text-ink">Login</h1>
-          <p className="mt-2 text-sm text-slate-500">
-            Use your company credentials to access your workspace.
-          </p>
-          <div className="mt-8 space-y-4 rounded-3xl bg-white p-6 shadow-card">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-slate-400">
-                Secure access
-              </p>
-              <p className="mt-2 text-sm text-slate-500">
-                Your manager creates your account and assigns roles.
-              </p>
-            </div>
-            <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">
-              Need access? Reach out to your manager for an invite.
-            </div>
-          </div>
-        </div>
+  const onRequestAccessSubmit = async (values: RequestAccessFormValues) => {
+    requestAccessForm.reset();
+    setIsRequestAccessOpen(false);
+    toast({
+      title: "Request Sent",
+      description:
+        "Your access request has been sent to the manager for approval."
+    });
 
-        <form
-          onSubmit={handleSubmit}
-          className="rounded-3xl bg-white p-8 shadow-card"
-        >
-          <h2 className="text-2xl font-semibold text-ink">Welcome back</h2>
-          <p className="mt-2 text-sm text-slate-500">
-            Sign in to track daily performance and KPIs.
-          </p>
-          <div className="mt-6 flex flex-col gap-5">
-            <label className="text-sm font-medium text-slate-700">
-              Email
-              <input
-                className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm focus:border-sky-400 focus:outline-none"
-                type="email"
-                placeholder="name@company.com"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
+    console.info("Request access values:", values);
+  };
+
+  return (
+    <div className="flex min-h-screen w-full items-center justify-center bg-muted/40 px-4">
+      <Card className="w-full max-w-sm">
+        <CardHeader className="items-center text-center">
+          <Logo className="mb-4" />
+          <CardTitle className="font-headline text-2xl">Welcome Back</CardTitle>
+          <CardDescription>
+            Enter your credentials to access your account.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="manager@example.com"
+                        {...field}
+                        type="email"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </label>
-            <label className="text-sm font-medium text-slate-700">
-              Password
-              <input
-                className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm focus:border-sky-400 focus:outline-none"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <div className="flex items-center justify-between">
+                      <FormLabel>Password</FormLabel>
+                      <Link
+                        href="#"
+                        className="text-sm font-medium text-primary hover:underline"
+                      >
+                        Forgot password?
+                      </Link>
+                    </div>
+                    <FormControl>
+                      <Input placeholder="••••••••" {...field} type="password" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </label>
-            {error ? (
-              <p className="rounded-xl bg-rose-50 px-4 py-3 text-xs font-semibold text-rose-600">
-                {error}
-              </p>
-            ) : null}
-            <button
-              type="submit"
-              className="w-full rounded-xl bg-sky-500 py-3 text-sm font-semibold text-white shadow-glow disabled:cursor-not-allowed disabled:opacity-70"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? "Signing in..." : "Login"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </main>
+              <div className="flex flex-col gap-2 pt-2 sm:flex-row">
+                <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  {isSubmitting ? "Signing In..." : "Sign In"}
+                </Button>
+                <Dialog
+                  open={isRequestAccessOpen}
+                  onOpenChange={setIsRequestAccessOpen}
+                >
+                  <DialogTrigger asChild>
+                    <Button variant="outline" className="w-full">
+                      Request Access
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                      <DialogTitle>Request Access</DialogTitle>
+                      <DialogDescription>
+                        Fill out the form below and a manager will review your
+                        request and create an account for you.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <Form {...requestAccessForm}>
+                      <form
+                        onSubmit={requestAccessForm.handleSubmit(
+                          onRequestAccessSubmit
+                        )}
+                        className="space-y-4"
+                      >
+                        <FormField
+                          control={requestAccessForm.control}
+                          name="firstName"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>First Name</FormLabel>
+                              <FormControl>
+                                <Input placeholder="John" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={requestAccessForm.control}
+                          name="lastName"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Last Name</FormLabel>
+                              <FormControl>
+                                <Input placeholder="Doe" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={requestAccessForm.control}
+                          name="email"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Email</FormLabel>
+                              <FormControl>
+                                <Input
+                                  placeholder="john.doe@example.com"
+                                  {...field}
+                                  type="email"
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <DialogFooter>
+                          <Button type="submit">Submit Request</Button>
+                        </DialogFooter>
+                      </form>
+                    </Form>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </form>
+          </Form>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
