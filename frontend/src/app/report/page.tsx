@@ -1,8 +1,6 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { format } from "date-fns";
-import { ro } from "date-fns/locale";
 import {
   CheckCircle,
   Clock,
@@ -93,6 +91,12 @@ type ReportFormValues = z.infer<typeof reportSchema>;
 export default function DailyReportPage() {
   const { toast } = useToast();
   const [status, setStatus] = useState<ReportStatus>("draft");
+  const formattedDate = new Intl.DateTimeFormat("ro-RO", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    year: "numeric"
+  }).format(new Date());
 
   const form = useForm<ReportFormValues>({
     resolver: zodResolver(reportSchema),
@@ -140,8 +144,7 @@ export default function DailyReportPage() {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <h1 className="font-headline text-xl">
-                Raport zilnic:{" "}
-                {format(new Date(), "eeee, dd MMMM yyyy", { locale: ro })}
+                Raport zilnic: {formattedDate}
               </h1>
               <div className="flex items-center gap-2 text-sm">
                 <currentStatusInfo.icon
