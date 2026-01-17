@@ -1,35 +1,39 @@
-"use client";
+'use client';
 
-import { FileText, LayoutGrid, LineChart } from "lucide-react";
-import { usePathname } from "next/navigation";
-import * as React from "react";
+import {
+  LayoutGrid,
+  LineChart,
+  FileText
+} from 'lucide-react';
+import { usePathname } from 'next/navigation';
+import * as React from 'react';
 
-import { Logo } from "../../components/logo";
-import { DashboardHeader } from "../../components/dashboard/header";
-import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar";
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarInset,
   SidebarMenu,
-  SidebarMenuButton,
   SidebarMenuItem,
-  SidebarProvider
-} from "../../components/ui/sidebar";
-import { PlaceHolderImages } from "../../lib/placeholder-images";
+  SidebarMenuButton,
+  SidebarProvider,
+  SidebarInset,
+  SidebarHeader,
+  SidebarFooter,
+} from '../../components/ui/sidebar';
+import { Logo } from '../../components/logo';
+import { DashboardHeader } from '../../components/dashboard/header';
+import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar';
+import { PlaceHolderImages } from '../../lib/placeholder-images';
 
-const agentAvatar = PlaceHolderImages.find((img) => img.id === "avatar-2");
+const agentAvatar = PlaceHolderImages.find((img) => img.id === 'avatar-2');
 
 const menuItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
-  { href: "/dashboard/history", label: "Istoric", icon: LineChart },
-  { href: "/dashboard/report", label: "Raport Zilnic", icon: FileText }
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutGrid },
+  { href: '/dashboard/history', label: 'Istoric', icon: LineChart },
+  { href: '/dashboard/report', label: 'Raport Zilnic', icon: FileText },
 ];
 
 export default function DashboardLayout({
-  children
+  children,
 }: {
   children: React.ReactNode;
 }) {
@@ -83,7 +87,9 @@ export default function DashboardLayout({
 
       <SidebarInset>
         <DashboardHeader />
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-4 md:p-6">
+          {children}
+        </main>
       </SidebarInset>
     </SidebarProvider>
   );

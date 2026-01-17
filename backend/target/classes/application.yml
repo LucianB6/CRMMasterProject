@@ -17,7 +17,7 @@ app:
   security:
     jwt:
       secret: "r7X4pQ9kV2mL8sZ1nA5tY6uH3fJ0wC9d"
-      expiration-seconds: 3600
+      expiration-seconds: 83600
 
 server:
   port: 8081

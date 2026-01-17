@@ -1,0 +1,46 @@
+{
+  "placeholderImages": [
+    {
+      "id": "landing-hero",
+      "description": "A screenshot of the SalesWay dashboard showing various charts and metrics.",
+      "imageUrl": "https://images.unsplash.com/photo-1610913721979-b20ede600e63?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw4fHxkYXNoYm9hcmQlMjBhbmFseXRpY3N8ZW58MHx8fHwxNzY4NDMzOTk4fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "dashboard analytics"
+    },
+    {
+      "id": "feature-reporting",
+      "description": "An icon representing reporting and analytics.",
+      "imageUrl": "https://images.unsplash.com/photo-1709881070774-63ac21f2123a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxMHx8cmVwb3J0JTIwY2hhcnR8ZW58MHx8fHwxNzY4NTUxMTAzfDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "report chart"
+    },
+    {
+      "id": "feature-ai",
+      "description": "An icon representing the AI sales assistant.",
+      "imageUrl": "https://images.unsplash.com/photo-1589254066007-898d52d910d3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw0fHxyb2JvdCUyMGNoYXRib3R8ZW58MHx8fHwxNzY4NTUxMTAzfDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "robot chatbot"
+    },
+    {
+      "id": "feature-performance",
+      "description": "An icon representing performance tracking.",
+      "imageUrl": "https://images.unsplash.com/photo-1610690909553-49802d92b737?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw3fHxncmFwaCUyMGFycm93fGVufDB8fHx8MTc2ODU1MTEwM3ww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "graph arrow"
+    },
+    {
+      "id": "avatar-1",
+      "description": "A portrait of a satisfied manager.",
+      "imageUrl": "https://images.unsplash.com/photo-1590086782792-42dd2350140d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw0fHxwZXJzb24lMjBwb3J0cmFpdHxlbnwwfHx8fDE3Njg0NTYzODZ8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "person portrait"
+    },
+    {
+      "id": "avatar-2",
+      "description": "A portrait of a happy sales agent.",
+      "imageUrl": "https://images.unsplash.com/flagged/photo-1595514191830-3e96a518989b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxMHx8cGVyc29uJTIwcG9ydHJhaXR8ZW58MHx8fHwxNzY4NDU2Mzg2fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "person portrait"
+    },
+    {
+      "id": "avatar-3",
+      "description": "A portrait of a company executive.",
+      "imageUrl": "https://images.unsplash.com/photo-1540569014015-19a7be504e3a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwyfHxwZXJzb24lMjBwb3J0cmFpdHxlbnwwfHx8fDE3Njg0NTYzODZ8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "person portrait"
+    }
+  ]
+}
