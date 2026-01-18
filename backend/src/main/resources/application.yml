@@ -4,7 +4,7 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/salesway
     username: postgres
-    password: changeme
+    password: user
   jpa:
     hibernate:
       ddl-auto: none
@@ -16,7 +16,9 @@ spring:
 app:
   security:
     jwt:
-      secret: "change-me-change-me-change-me-change-me"
+      secret: "r7X4pQ9kV2mL8sZ1nA5tY6uH3fJ0wC9d"
       expiration-seconds: 3600
+
 server:
   port: 8081
+
