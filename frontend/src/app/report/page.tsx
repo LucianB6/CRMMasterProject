@@ -34,6 +34,7 @@ import { Textarea } from "../../components/ui/textarea";
 import { useToast } from "../../hooks/use-toast";
 import { cn } from "../../lib/utils";
 
+
 const reportSchema = z.object({
   outbound_dials: z.coerce.number().int().min(0, "Valoare pozitivă necesară."),
   pickups: z.coerce.number().int().min(0, "Valoare pozitivă necesară."),
@@ -74,9 +75,11 @@ const reportSchema = z.object({
     .string()
     .max(1000, "Maxim 1000 de caractere.")
     .optional(),
-  confirmation: z.literal(true, {
-    errorMap: () => ({ message: "Trebuie să confirmi corectitudinea datelor." })
-  })
+  confirmation: z
+    .boolean()
+    .refine((value) => value, {
+      message: "Trebuie să confirmi corectitudinea datelor."
+    })
 });
 
 type ReportStatus = "draft" | "submitted" | "locked";
@@ -154,7 +157,7 @@ export default function DailyReportPage() {
   });
 
   const apiBaseUrl = useMemo(
-    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "",
+    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8081",
     []
   );
 
@@ -169,7 +172,7 @@ export default function DailyReportPage() {
     if (typeof window === "undefined") {
       return null;
     }
-    return window.localStorage.getItem("token");
+    return window.localStorage.getItem("salesway_token");
   }, []);
 
   const handleApiResponse = useCallback(
