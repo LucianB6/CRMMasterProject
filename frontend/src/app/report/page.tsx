@@ -137,6 +137,13 @@ const baseReportValues = {
   confirmation: false
 };
 
+/**
+ * Renders and manages the Daily Report page with a validated form for viewing, saving drafts, and submitting the day's report.
+ *
+ * The component loads the current day's report, populates and validates form fields, enforces status-driven read-only behavior, and provides actions to save a draft or submit the report.
+ *
+ * @returns The React element for the daily report page containing the form and its controls.
+ */
 export default function DailyReportPage() {
   const { toast } = useToast();
   const [status, setStatus] = useState<ReportStatus>("draft");
