@@ -133,7 +133,7 @@ public class DailyReportService {
                 .orElseGet(() -> {
                     DailyReportInputs inputs = new DailyReportInputs();
                     inputs.setDailyReport(report);
-                    return dailyReportInputsRepository.save(inputs);
+                    return dailyReportInputsRepository.saveAndFlush(inputs);
                 });
     }
 
