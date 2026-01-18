@@ -118,33 +118,9 @@ public class DailyReportService {
                 ? EnumSet.of(MembershipStatus.ACTIVE, MembershipStatus.INVITED)
                 : EnumSet.of(MembershipStatus.ACTIVE);
 
-        Optional<CompanyMembership> eligibleMembership = companyMembershipRepository
-                .findFirstByUserIdAndStatusIn(userDetails.getUser().getId(), eligibleStatuses);
-        if (eligibleMembership.isPresent()) {
-            return eligibleMembership.get();
-        }
-
-        Optional<CompanyMembership> existingMembership = companyMembershipRepository
-                .findFirstByUserId(userDetails.getUser().getId());
-        if (existingMembership.isEmpty()) {
-            return createPersonalMembership(userDetails);
-        }
-
-        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No eligible membership found");
-    }
-
-    private CompanyMembership createPersonalMembership(CustomUserDetails userDetails) {
-        Company company = new Company();
-        company.setName("Personal Workspace - " + userDetails.getUsername());
-        company.setTimezone("UTC");
-        Company savedCompany = companyRepository.save(company);
-
-        CompanyMembership membership = new CompanyMembership();
-        membership.setCompany(savedCompany);
-        membership.setUser(userDetails.getUser());
-        membership.setRole(MembershipRole.AGENT);
-        membership.setStatus(MembershipStatus.ACTIVE);
-        return companyMembershipRepository.save(membership);
+        return companyMembershipRepository
+                .findFirstByUserIdAndStatusIn(userDetails.getUser().getId(), eligibleStatuses)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "No eligible membership found"));
     }
 
     private DailyReport getOrCreateReport(CompanyMembership membership, LocalDate reportDate) {
