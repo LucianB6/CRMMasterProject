@@ -3,6 +3,9 @@ package com.salesway.reports.service;
 import com.salesway.common.enums.DailyReportAuditAction;
 import com.salesway.common.enums.DailyReportStatus;
 import com.salesway.common.enums.MembershipStatus;
+import com.salesway.common.enums.MembershipRole;
+import com.salesway.companies.entity.Company;
+import com.salesway.companies.repository.CompanyRepository;
 import com.salesway.memberships.entity.CompanyMembership;
 import com.salesway.memberships.repository.CompanyMembershipRepository;
 import com.salesway.reports.dto.DailyReportInputsRequest;
@@ -29,6 +32,7 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.EnumSet;
 import java.util.Optional;
 
 @Service
@@ -40,24 +44,27 @@ public class DailyReportService {
     private final DailyReportMetricsRepository dailyReportMetricsRepository;
     private final DailyReportAuditLogRepository dailyReportAuditLogRepository;
     private final CompanyMembershipRepository companyMembershipRepository;
+    private final CompanyRepository companyRepository;
 
     public DailyReportService(
             DailyReportRepository dailyReportRepository,
             DailyReportInputsRepository dailyReportInputsRepository,
             DailyReportMetricsRepository dailyReportMetricsRepository,
             DailyReportAuditLogRepository dailyReportAuditLogRepository,
-            CompanyMembershipRepository companyMembershipRepository
+            CompanyMembershipRepository companyMembershipRepository,
+            CompanyRepository companyRepository
     ) {
         this.dailyReportRepository = dailyReportRepository;
         this.dailyReportInputsRepository = dailyReportInputsRepository;
         this.dailyReportMetricsRepository = dailyReportMetricsRepository;
         this.dailyReportAuditLogRepository = dailyReportAuditLogRepository;
         this.companyMembershipRepository = companyMembershipRepository;
+        this.companyRepository = companyRepository;
     }
 
     @Transactional
     public DailyReportResponse getTodayReport() {
-        CompanyMembership membership = getReportingMembership(false);
+        CompanyMembership membership = getReportingMembership(true);
         DailyReport report = getOrCreateReport(membership, LocalDate.now(ZoneOffset.UTC));
         DailyReportInputs inputs = getOrCreateInputs(report);
         return toResponse(report, inputs);
@@ -101,27 +108,43 @@ public class DailyReportService {
         return toResponse(report, inputs);
     }
 
-    private CompanyMembership getReportingMembership(boolean requireActive) {
+    private CompanyMembership getReportingMembership(boolean allowInvited) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !(authentication.getPrincipal() instanceof CustomUserDetails userDetails)) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing authentication");
         }
 
-        Optional<CompanyMembership> activeMembership = companyMembershipRepository
-                .findFirstByUserIdAndStatus(userDetails.getUser().getId(), MembershipStatus.ACTIVE);
-        if (activeMembership.isPresent()) {
-            return activeMembership.get();
+        EnumSet<MembershipStatus> eligibleStatuses = allowInvited
+                ? EnumSet.of(MembershipStatus.ACTIVE, MembershipStatus.INVITED)
+                : EnumSet.of(MembershipStatus.ACTIVE);
+
+        Optional<CompanyMembership> eligibleMembership = companyMembershipRepository
+                .findFirstByUserIdAndStatusIn(userDetails.getUser().getId(), eligibleStatuses);
+        if (eligibleMembership.isPresent()) {
+            return eligibleMembership.get();
         }
 
-        if (!requireActive) {
-            Optional<CompanyMembership> invitedMembership = companyMembershipRepository
-                    .findFirstByUserIdAndStatus(userDetails.getUser().getId(), MembershipStatus.INVITED);
-            if (invitedMembership.isPresent()) {
-                return invitedMembership.get();
-            }
+        Optional<CompanyMembership> existingMembership = companyMembershipRepository
+                .findFirstByUserId(userDetails.getUser().getId());
+        if (existingMembership.isEmpty()) {
+            return createPersonalMembership(userDetails);
         }
 
-        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No active membership found");
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No eligible membership found");
+    }
+
+    private CompanyMembership createPersonalMembership(CustomUserDetails userDetails) {
+        Company company = new Company();
+        company.setName("Personal Workspace - " + userDetails.getUsername());
+        company.setTimezone("UTC");
+        Company savedCompany = companyRepository.save(company);
+
+        CompanyMembership membership = new CompanyMembership();
+        membership.setCompany(savedCompany);
+        membership.setUser(userDetails.getUser());
+        membership.setRole(MembershipRole.AGENT);
+        membership.setStatus(MembershipStatus.ACTIVE);
+        return companyMembershipRepository.save(membership);
     }
 
     private DailyReport getOrCreateReport(CompanyMembership membership, LocalDate reportDate) {
