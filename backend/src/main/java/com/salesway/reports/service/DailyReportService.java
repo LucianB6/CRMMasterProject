@@ -57,7 +57,7 @@ public class DailyReportService {
 
     @Transactional
     public DailyReportResponse getTodayReport() {
-        CompanyMembership membership = getActiveMembership();
+        CompanyMembership membership = getReportingMembership(false);
         DailyReport report = getOrCreateReport(membership, LocalDate.now(ZoneOffset.UTC));
         DailyReportInputs inputs = getOrCreateInputs(report);
         return toResponse(report, inputs);
@@ -65,7 +65,7 @@ public class DailyReportService {
 
     @Transactional
     public DailyReportResponse saveDraft(DailyReportInputsRequest request) {
-        CompanyMembership membership = getActiveMembership();
+        CompanyMembership membership = getReportingMembership(true);
         DailyReport report = getOrCreateReport(membership, LocalDate.now(ZoneOffset.UTC));
         ensureEditable(report, false);
 
@@ -83,7 +83,7 @@ public class DailyReportService {
 
     @Transactional
     public DailyReportResponse submitReport(DailyReportInputsRequest request) {
-        CompanyMembership membership = getActiveMembership();
+        CompanyMembership membership = getReportingMembership(true);
         DailyReport report = getOrCreateReport(membership, LocalDate.now(ZoneOffset.UTC));
         ensureEditable(report, true);
 
@@ -101,15 +101,27 @@ public class DailyReportService {
         return toResponse(report, inputs);
     }
 
-    private CompanyMembership getActiveMembership() {
+    private CompanyMembership getReportingMembership(boolean requireActive) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !(authentication.getPrincipal() instanceof CustomUserDetails userDetails)) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing authentication");
         }
 
-        return companyMembershipRepository
-                .findFirstByUserIdAndStatus(userDetails.getUser().getId(), MembershipStatus.ACTIVE)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "No active membership found"));
+        Optional<CompanyMembership> activeMembership = companyMembershipRepository
+                .findFirstByUserIdAndStatus(userDetails.getUser().getId(), MembershipStatus.ACTIVE);
+        if (activeMembership.isPresent()) {
+            return activeMembership.get();
+        }
+
+        if (!requireActive) {
+            Optional<CompanyMembership> invitedMembership = companyMembershipRepository
+                    .findFirstByUserIdAndStatus(userDetails.getUser().getId(), MembershipStatus.INVITED);
+            if (invitedMembership.isPresent()) {
+                return invitedMembership.get();
+            }
+        }
+
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No active membership found");
     }
 
     private DailyReport getOrCreateReport(CompanyMembership membership, LocalDate reportDate) {
