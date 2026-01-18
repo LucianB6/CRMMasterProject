@@ -16,8 +16,8 @@ spring:
 app:
   security:
     jwt:
-      secret: ${JWT_SECRET:default-for-local-dev}
-      expiration-seconds: 86400
+      secret: "r7X4pQ9kV2mL8sZ1nA5tY6uH3fJ0wC9d"
+      expiration-seconds: 83600
 
 server:
   port: 8081

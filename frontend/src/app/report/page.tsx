@@ -34,6 +34,7 @@ import { Textarea } from "../../components/ui/textarea";
 import { useToast } from "../../hooks/use-toast";
 import { cn } from "../../lib/utils";
 
+
 const reportSchema = z.object({
   outbound_dials: z.coerce.number().int().min(0, "Valoare pozitivă necesară."),
   pickups: z.coerce.number().int().min(0, "Valoare pozitivă necesară."),
@@ -74,9 +75,11 @@ const reportSchema = z.object({
     .string()
     .max(1000, "Maxim 1000 de caractere.")
     .optional(),
-  confirmation: z.literal(true, {
-    errorMap: () => ({ message: "Trebuie să confirmi corectitudinea datelor." })
-  })
+  confirmation: z
+    .boolean()
+    .refine((value) => value, {
+      message: "Trebuie să confirmi corectitudinea datelor."
+    })
 });
 
 type ReportStatus = "draft" | "submitted" | "locked";
@@ -134,6 +137,13 @@ const baseReportValues = {
   confirmation: false
 };
 
+/**
+ * Renders and manages the Daily Report page with a validated form for viewing, saving drafts, and submitting the day's report.
+ *
+ * The component loads the current day's report, populates and validates form fields, enforces status-driven read-only behavior, and provides actions to save a draft or submit the report.
+ *
+ * @returns The React element for the daily report page containing the form and its controls.
+ */
 export default function DailyReportPage() {
   const { toast } = useToast();
   const [status, setStatus] = useState<ReportStatus>("draft");
@@ -154,7 +164,7 @@ export default function DailyReportPage() {
   });
 
   const apiBaseUrl = useMemo(
-    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "",
+    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8081",
     []
   );
 
@@ -169,7 +179,7 @@ export default function DailyReportPage() {
     if (typeof window === "undefined") {
       return null;
     }
-    return window.localStorage.getItem("token");
+    return window.localStorage.getItem("salesway_token");
   }, []);
 
   const handleApiResponse = useCallback(
