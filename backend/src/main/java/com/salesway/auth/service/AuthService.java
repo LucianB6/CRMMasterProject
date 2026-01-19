@@ -23,12 +23,15 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.Map;
 
 @Service
 public class AuthService {
+    private static final Logger LOG = LoggerFactory.getLogger(AuthService.class);
     private final AuthenticationManager authenticationManager;
     private final UserRepository userRepository;
     private final JwtService jwtService;
@@ -141,16 +144,23 @@ public class AuthService {
     private void notifyLogin(User user) {
         companyMembershipRepository.findFirstByUserId(user.getId())
                 .filter(membership -> membership.getManagerMembership() != null)
-                .ifPresent(membership -> notificationService.createNotification(
-                        membership.getCompany(),
-                        membership.getManagerMembership(),
-                        com.salesway.common.enums.NotificationType.USER_LOGIN,
-                        Map.of(
-                                "agent_membership_id", membership.getId().toString(),
-                                "agent_email", membership.getUser().getEmail(),
-                                "message", "Utilizatorul " + membership.getUser().getEmail() + " s-a conectat cu succes."
-                        ),
-                        Instant.now()
-                ));
+                .ifPresent(membership -> {
+                    try {
+                        notificationService.createNotification(
+                                membership.getCompany(),
+                                membership.getManagerMembership(),
+                                com.salesway.common.enums.NotificationType.USER_LOGIN,
+                                Map.of(
+                                        "agent_membership_id", membership.getId().toString(),
+                                        "agent_email", membership.getUser().getEmail(),
+                                        "message", "Utilizatorul " + membership.getUser().getEmail()
+                                                + " s-a conectat cu succes."
+                                ),
+                                Instant.now()
+                        );
+                    } catch (RuntimeException ex) {
+                        LOG.warn("Failed to create login notification for user {}", user.getId(), ex);
+                    }
+                });
     }
 }
