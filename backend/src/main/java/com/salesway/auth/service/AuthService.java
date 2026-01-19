@@ -12,6 +12,7 @@ import com.salesway.companies.entity.Company;
 import com.salesway.companies.repository.CompanyRepository;
 import com.salesway.memberships.entity.CompanyMembership;
 import com.salesway.memberships.repository.CompanyMembershipRepository;
+import com.salesway.notifications.service.NotificationService;
 import com.salesway.security.CustomUserDetails;
 import com.salesway.security.JwtService;
 import org.springframework.http.HttpStatus;
@@ -34,6 +35,7 @@ public class AuthService {
     private final CompanyRepository companyRepository;
     private final CompanyMembershipRepository companyMembershipRepository;
     private final PasswordEncoder passwordEncoder;
+    private final NotificationService notificationService;
 
     public AuthService(
             AuthenticationManager authenticationManager,
@@ -41,7 +43,8 @@ public class AuthService {
             JwtService jwtService,
             CompanyRepository companyRepository,
             CompanyMembershipRepository companyMembershipRepository,
-            PasswordEncoder passwordEncoder
+            PasswordEncoder passwordEncoder,
+            NotificationService notificationService
     ) {
         this.authenticationManager = authenticationManager;
         this.userRepository = userRepository;
@@ -49,6 +52,7 @@ public class AuthService {
         this.companyRepository = companyRepository;
         this.companyMembershipRepository = companyMembershipRepository;
         this.passwordEncoder = passwordEncoder;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -63,6 +67,7 @@ public class AuthService {
         user.setLastLoginAt(Instant.now());
         userRepository.save(user);
         ensureMembership(user);
+        notifyLogin(user);
 
         String token = jwtService.generateToken(
                 user.getEmail(),
@@ -131,5 +136,21 @@ public class AuthService {
         membership.setRole(MembershipRole.AGENT);
         membership.setStatus(MembershipStatus.ACTIVE);
         companyMembershipRepository.save(membership);
+    }
+
+    private void notifyLogin(User user) {
+        companyMembershipRepository.findFirstByUserId(user.getId())
+                .filter(membership -> membership.getManagerMembership() != null)
+                .ifPresent(membership -> notificationService.createNotification(
+                        membership.getCompany(),
+                        membership.getManagerMembership(),
+                        com.salesway.common.enums.NotificationType.USER_LOGIN,
+                        Map.of(
+                                "agent_membership_id", membership.getId().toString(),
+                                "agent_email", membership.getUser().getEmail(),
+                                "message", "Utilizatorul " + membership.getUser().getEmail() + " s-a conectat cu succes."
+                        ),
+                        Instant.now()
+                ));
     }
 }
