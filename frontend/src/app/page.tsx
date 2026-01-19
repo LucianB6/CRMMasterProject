@@ -1,24 +1,24 @@
-import { AreaChart, Bot, ShieldCheck, Telescope } from 'lucide-react';
-import Image from 'next/image';
-import Link from 'next/link';
-import { PlaceHolderImages } from '../lib/placeholder-images';
-import { Avatar, AvatarFallback, AvatarImage } from '../components/ui/avatar';
-import { Button } from '../components/ui/button';
-import { Card, CardContent } from '../components/ui/card';
-import { Logo } from '../components/logo';
+import { AreaChart, Bot, ShieldCheck, Telescope } from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
+import { PlaceHolderImages } from "../lib/placeholder-images";
+import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
+import { Button } from "../components/ui/button";
+import { Card, CardContent } from "../components/ui/card";
+import { Logo } from "../components/logo";
 
-const heroImage = PlaceHolderImages.find((img) => img.id === 'landing-hero');
+const heroImage = PlaceHolderImages.find((img) => img.id === "landing-hero");
 const featureImages = {
-  reporting: PlaceHolderImages.find((img) => img.id === 'feature-reporting'),
-  ai: PlaceHolderImages.find((img) => img.id === 'feature-ai'),
+  reporting: PlaceHolderImages.find((img) => img.id === "feature-reporting"),
+  ai: PlaceHolderImages.find((img) => img.id === "feature-ai"),
   performance: PlaceHolderImages.find(
-    (img) => img.id === 'feature-performance'
-  ),
+    (img) => img.id === "feature-performance"
+  )
 };
 const avatars = {
-  'avatar-1': PlaceHolderImages.find((img) => img.id === 'avatar-1'),
-  'avatar-2': PlaceHolderImages.find((img) => img.id === 'avatar-2'),
-  'avatar-3': PlaceHolderImages.find((img) => img.id === 'avatar-3'),
+  "avatar-1": PlaceHolderImages.find((img) => img.id === "avatar-1"),
+  "avatar-2": PlaceHolderImages.find((img) => img.id === "avatar-2"),
+  "avatar-3": PlaceHolderImages.find((img) => img.id === "avatar-3")
 };
 
 export default function LandingPage() {
