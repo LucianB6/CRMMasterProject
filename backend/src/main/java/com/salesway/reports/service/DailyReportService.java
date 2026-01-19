@@ -29,6 +29,7 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.EnumSet;
 import java.util.Optional;
 
 @Service
@@ -57,7 +58,7 @@ public class DailyReportService {
 
     @Transactional
     public DailyReportResponse getTodayReport() {
-        CompanyMembership membership = getActiveMembership();
+        CompanyMembership membership = getReportingMembership(true);
         DailyReport report = getOrCreateReport(membership, LocalDate.now(ZoneOffset.UTC));
         DailyReportInputs inputs = getOrCreateInputs(report);
         return toResponse(report, inputs);
@@ -65,7 +66,7 @@ public class DailyReportService {
 
     @Transactional
     public DailyReportResponse saveDraft(DailyReportInputsRequest request) {
-        CompanyMembership membership = getActiveMembership();
+        CompanyMembership membership = getReportingMembership(true);
         DailyReport report = getOrCreateReport(membership, LocalDate.now(ZoneOffset.UTC));
         ensureEditable(report, false);
 
@@ -83,7 +84,7 @@ public class DailyReportService {
 
     @Transactional
     public DailyReportResponse submitReport(DailyReportInputsRequest request) {
-        CompanyMembership membership = getActiveMembership();
+        CompanyMembership membership = getReportingMembership(true);
         DailyReport report = getOrCreateReport(membership, LocalDate.now(ZoneOffset.UTC));
         ensureEditable(report, true);
 
@@ -101,15 +102,19 @@ public class DailyReportService {
         return toResponse(report, inputs);
     }
 
-    private CompanyMembership getActiveMembership() {
+    private CompanyMembership getReportingMembership(boolean allowInvited) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !(authentication.getPrincipal() instanceof CustomUserDetails userDetails)) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing authentication");
         }
 
+        EnumSet<MembershipStatus> eligibleStatuses = allowInvited
+                ? EnumSet.of(MembershipStatus.ACTIVE, MembershipStatus.INVITED)
+                : EnumSet.of(MembershipStatus.ACTIVE);
+
         return companyMembershipRepository
-                .findFirstByUserIdAndStatus(userDetails.getUser().getId(), MembershipStatus.ACTIVE)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "No active membership found"));
+                .findFirstByUserIdAndStatusIn(userDetails.getUser().getId(), eligibleStatuses)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "No eligible membership found"));
     }
 
     private DailyReport getOrCreateReport(CompanyMembership membership, LocalDate reportDate) {
