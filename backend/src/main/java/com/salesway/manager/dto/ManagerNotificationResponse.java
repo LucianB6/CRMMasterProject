@@ -1,95 +1,69 @@
 package com.salesway.manager.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.salesway.common.enums.DailyReportAuditAction;
+import com.salesway.common.enums.NotificationStatus;
+import com.salesway.common.enums.NotificationType;
 
 import java.time.Instant;
-import java.time.LocalDate;
+import java.util.Map;
 import java.util.UUID;
 
 public class ManagerNotificationResponse {
     @JsonProperty("id")
     private final UUID id;
 
-    @JsonProperty("action")
-    private final DailyReportAuditAction action;
+    @JsonProperty("type")
+    private final NotificationType type;
+
+    @JsonProperty("status")
+    private final NotificationStatus status;
 
     @JsonProperty("created_at")
     private final Instant createdAt;
 
-    @JsonProperty("report_id")
-    private final UUID reportId;
+    @JsonProperty("scheduled_for")
+    private final Instant scheduledFor;
 
-    @JsonProperty("report_date")
-    private final LocalDate reportDate;
-
-    @JsonProperty("agent_membership_id")
-    private final UUID agentMembershipId;
-
-    @JsonProperty("agent_email")
-    private final String agentEmail;
-
-    @JsonProperty("actor_membership_id")
-    private final UUID actorMembershipId;
-
-    @JsonProperty("actor_email")
-    private final String actorEmail;
+    @JsonProperty("payload")
+    private final Map<String, Object> payload;
 
     public ManagerNotificationResponse(
             UUID id,
-            DailyReportAuditAction action,
+            NotificationType type,
+            NotificationStatus status,
             Instant createdAt,
-            UUID reportId,
-            LocalDate reportDate,
-            UUID agentMembershipId,
-            String agentEmail,
-            UUID actorMembershipId,
-            String actorEmail
+            Instant scheduledFor,
+            Map<String, Object> payload
     ) {
         this.id = id;
-        this.action = action;
+        this.type = type;
+        this.status = status;
         this.createdAt = createdAt;
-        this.reportId = reportId;
-        this.reportDate = reportDate;
-        this.agentMembershipId = agentMembershipId;
-        this.agentEmail = agentEmail;
-        this.actorMembershipId = actorMembershipId;
-        this.actorEmail = actorEmail;
+        this.scheduledFor = scheduledFor;
+        this.payload = payload;
     }
 
     public UUID getId() {
         return id;
     }
 
-    public DailyReportAuditAction getAction() {
-        return action;
+    public NotificationType getType() {
+        return type;
+    }
+
+    public NotificationStatus getStatus() {
+        return status;
     }
 
     public Instant getCreatedAt() {
         return createdAt;
     }
 
-    public UUID getReportId() {
-        return reportId;
+    public Instant getScheduledFor() {
+        return scheduledFor;
     }
 
-    public LocalDate getReportDate() {
-        return reportDate;
-    }
-
-    public UUID getAgentMembershipId() {
-        return agentMembershipId;
-    }
-
-    public String getAgentEmail() {
-        return agentEmail;
-    }
-
-    public UUID getActorMembershipId() {
-        return actorMembershipId;
-    }
-
-    public String getActorEmail() {
-        return actorEmail;
+    public Map<String, Object> getPayload() {
+        return payload;
     }
 }

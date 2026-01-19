@@ -32,4 +32,9 @@ public interface CompanyMembershipRepository extends JpaRepository<CompanyMember
             MembershipRole role,
             Collection<MembershipStatus> statuses
     );
+
+    List<CompanyMembership> findByRoleAndStatusInAndManagerMembershipIsNotNull(
+            MembershipRole role,
+            Collection<MembershipStatus> statuses
+    );
 }
