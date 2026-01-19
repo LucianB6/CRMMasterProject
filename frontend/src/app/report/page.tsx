@@ -398,7 +398,7 @@ export default function DailyReportPage() {
                 name="sales_call_booked_from_outbound"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Programări Outbound</FormLabel>
+                    <FormLabel>Outbound</FormLabel>
                     <FormControl>
                       <Input
                         type="number"
