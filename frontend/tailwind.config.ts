@@ -15,6 +15,10 @@ export default {
         code: ['monospace'],
       },
       colors: {
+        ink: '#0f172a',
+        slate: {
+          950: '#020617',
+        },
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
         card: {
@@ -65,6 +69,10 @@ export default {
           border: 'hsl(var(--sidebar-border))',
           ring: 'hsl(var(--sidebar-ring))',
         },
+      },
+      boxShadow: {
+        glow: '0 20px 80px rgba(14, 165, 233, 0.2)',
+        card: '0 16px 40px rgba(15, 23, 42, 0.12)',
       },
       borderRadius: {
         lg: 'var(--radius)',

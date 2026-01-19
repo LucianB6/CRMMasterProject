@@ -3,6 +3,9 @@ package com.salesway.reports.service;
 import com.salesway.common.enums.DailyReportAuditAction;
 import com.salesway.common.enums.DailyReportStatus;
 import com.salesway.common.enums.MembershipStatus;
+import com.salesway.common.enums.MembershipRole;
+import com.salesway.companies.entity.Company;
+import com.salesway.companies.repository.CompanyRepository;
 import com.salesway.memberships.entity.CompanyMembership;
 import com.salesway.memberships.repository.CompanyMembershipRepository;
 import com.salesway.reports.dto.DailyReportInputsRequest;
@@ -41,19 +44,22 @@ public class DailyReportService {
     private final DailyReportMetricsRepository dailyReportMetricsRepository;
     private final DailyReportAuditLogRepository dailyReportAuditLogRepository;
     private final CompanyMembershipRepository companyMembershipRepository;
+    private final CompanyRepository companyRepository;
 
     public DailyReportService(
             DailyReportRepository dailyReportRepository,
             DailyReportInputsRepository dailyReportInputsRepository,
             DailyReportMetricsRepository dailyReportMetricsRepository,
             DailyReportAuditLogRepository dailyReportAuditLogRepository,
-            CompanyMembershipRepository companyMembershipRepository
+            CompanyMembershipRepository companyMembershipRepository,
+            CompanyRepository companyRepository
     ) {
         this.dailyReportRepository = dailyReportRepository;
         this.dailyReportInputsRepository = dailyReportInputsRepository;
         this.dailyReportMetricsRepository = dailyReportMetricsRepository;
         this.dailyReportAuditLogRepository = dailyReportAuditLogRepository;
         this.companyMembershipRepository = companyMembershipRepository;
+        this.companyRepository = companyRepository;
     }
 
     @Transactional
