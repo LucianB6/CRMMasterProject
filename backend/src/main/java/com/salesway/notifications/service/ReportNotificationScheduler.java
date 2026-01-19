@@ -12,6 +12,7 @@ import com.salesway.reports.repository.DailyReportRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -48,6 +49,7 @@ public class ReportNotificationScheduler {
     }
 
     @Scheduled(cron = "0 */5 * * * *")
+    @Transactional
     public void sendReportReminders() {
         List<CompanyMembership> agents = companyMembershipRepository.findByRoleAndStatusInAndManagerMembershipIsNotNull(
                 MembershipRole.AGENT,
@@ -99,6 +101,7 @@ public class ReportNotificationScheduler {
     }
 
     @Scheduled(cron = "0 */15 * * * *")
+    @Transactional
     public void sendMissingReportNotifications() {
         List<CompanyMembership> agents = companyMembershipRepository.findByRoleAndStatusInAndManagerMembershipIsNotNull(
                 MembershipRole.AGENT,
