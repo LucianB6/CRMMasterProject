@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.EnumSet;
+import java.util.List;
 
 @Service
 public class ManagerAccessService {
@@ -33,8 +34,30 @@ public class ManagerAccessService {
                         EnumSet.of(MembershipRole.MANAGER, MembershipRole.ADMIN),
                         EnumSet.of(MembershipStatus.ACTIVE)
                 )
+                .orElse(null);
+
+        if (membership != null) {
+            return membership;
+        }
+
+        CompanyMembership fallback = companyMembershipRepository
+                .findFirstByUserIdAndStatusIn(
+                        userDetails.getUser().getId(),
+                        EnumSet.of(MembershipStatus.ACTIVE)
+                )
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Manager access required"));
 
-        return membership;
+        List<CompanyMembership> managedAgents = companyMembershipRepository
+                .findByManagerMembershipIdAndRoleAndStatusIn(
+                        fallback.getId(),
+                        MembershipRole.AGENT,
+                        EnumSet.of(MembershipStatus.ACTIVE)
+                );
+
+        if (managedAgents.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Manager access required");
+        }
+
+        return fallback;
     }
 }
