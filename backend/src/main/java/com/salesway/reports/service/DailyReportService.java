@@ -3,14 +3,12 @@ package com.salesway.reports.service;
 import com.salesway.common.enums.DailyReportAuditAction;
 import com.salesway.common.enums.DailyReportStatus;
 import com.salesway.common.enums.MembershipStatus;
-import com.salesway.common.enums.MembershipRole;
-import com.salesway.companies.entity.Company;
-import com.salesway.companies.repository.CompanyRepository;
 import com.salesway.memberships.entity.CompanyMembership;
 import com.salesway.memberships.repository.CompanyMembershipRepository;
 import com.salesway.reports.dto.DailyReportInputsRequest;
 import com.salesway.reports.dto.DailyReportInputsResponse;
 import com.salesway.reports.dto.DailyReportResponse;
+import com.salesway.reports.dto.DailyReportSummaryResponse;
 import com.salesway.reports.entity.DailyReport;
 import com.salesway.reports.entity.DailyReportAuditLog;
 import com.salesway.reports.entity.DailyReportInputs;
@@ -32,8 +30,14 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.Collections;
 import java.util.EnumSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class DailyReportService {
@@ -44,22 +48,19 @@ public class DailyReportService {
     private final DailyReportMetricsRepository dailyReportMetricsRepository;
     private final DailyReportAuditLogRepository dailyReportAuditLogRepository;
     private final CompanyMembershipRepository companyMembershipRepository;
-    private final CompanyRepository companyRepository;
 
     public DailyReportService(
             DailyReportRepository dailyReportRepository,
             DailyReportInputsRepository dailyReportInputsRepository,
             DailyReportMetricsRepository dailyReportMetricsRepository,
             DailyReportAuditLogRepository dailyReportAuditLogRepository,
-            CompanyMembershipRepository companyMembershipRepository,
-            CompanyRepository companyRepository
+            CompanyMembershipRepository companyMembershipRepository
     ) {
         this.dailyReportRepository = dailyReportRepository;
         this.dailyReportInputsRepository = dailyReportInputsRepository;
         this.dailyReportMetricsRepository = dailyReportMetricsRepository;
         this.dailyReportAuditLogRepository = dailyReportAuditLogRepository;
         this.companyMembershipRepository = companyMembershipRepository;
-        this.companyRepository = companyRepository;
     }
 
     @Transactional
@@ -68,6 +69,134 @@ public class DailyReportService {
         DailyReport report = getOrCreateReport(membership, LocalDate.now(ZoneOffset.UTC));
         DailyReportInputs inputs = getOrCreateInputs(report);
         return toResponse(report, inputs);
+    }
+
+    @Transactional
+    public DailyReportResponse getReport(LocalDate reportDate) {
+        CompanyMembership membership = getReportingMembership(true);
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        if (reportDate.equals(today)) {
+            DailyReport report = getOrCreateReport(membership, reportDate);
+            DailyReportInputs inputs = getOrCreateInputs(report);
+            return toResponse(report, inputs);
+        }
+
+        DailyReport report = dailyReportRepository
+                .findByAgentMembershipIdAndReportDate(membership.getId(), reportDate)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Report not found"));
+        DailyReportInputs inputs = dailyReportInputsRepository
+                .findByDailyReportId(report.getId())
+                .orElseGet(DailyReportInputs::new);
+        return toResponse(report, inputs);
+    }
+
+    @Transactional(readOnly = true)
+    public List<DailyReportResponse> getReportsInRange(LocalDate from, LocalDate to) {
+        validateDateRange(from, to);
+        CompanyMembership membership = getReportingMembership(true);
+        List<DailyReport> reports = dailyReportRepository
+                .findByAgentMembershipIdAndReportDateBetweenOrderByReportDateAsc(membership.getId(), from, to);
+        return mapReportsWithInputs(reports);
+    }
+
+    @Transactional(readOnly = true)
+    public List<DailyReportResponse> getRecentReports(int days) {
+        if (days <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Days must be positive");
+        }
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        LocalDate from = today.minusDays(days - 1L);
+        return getReportsInRange(from, today);
+    }
+
+    @Transactional(readOnly = true)
+    public List<DailyReportResponse> getCurrentMonthReports() {
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        LocalDate from = today.withDayOfMonth(1);
+        return getReportsInRange(from, today);
+    }
+
+    @Transactional(readOnly = true)
+    public DailyReportSummaryResponse getSummary(LocalDate from, LocalDate to) {
+        validateDateRange(from, to);
+        CompanyMembership membership = getReportingMembership(true);
+        List<DailyReport> reports = dailyReportRepository
+                .findByAgentMembershipIdAndReportDateBetweenOrderByReportDateAsc(membership.getId(), from, to);
+        if (reports.isEmpty()) {
+            return emptySummary(from, to);
+        }
+
+        Map<UUID, DailyReportInputs> inputsMap = fetchInputsByReportId(reports);
+
+        int outboundDials = 0;
+        int pickups = 0;
+        int conversations30sPlus = 0;
+        int salesCallBookedFromOutbound = 0;
+        int salesCallOnCalendar = 0;
+        int noShow = 0;
+        int rescheduleRequest = 0;
+        int cancel = 0;
+        int deposits = 0;
+        int salesOneCallClose = 0;
+        int followupSales = 0;
+        int upsellConversationTaken = 0;
+        int upsells = 0;
+        BigDecimal contractValue = ZERO;
+        BigDecimal newCashCollected = ZERO;
+
+        for (DailyReport report : reports) {
+            DailyReportInputs inputs = inputsMap.getOrDefault(report.getId(), new DailyReportInputs());
+            outboundDials += inputs.getOutboundDials();
+            pickups += inputs.getPickups();
+            conversations30sPlus += inputs.getConversations30sPlus();
+            salesCallBookedFromOutbound += inputs.getSalesCallBookedFromOutbound();
+            salesCallOnCalendar += inputs.getSalesCallOnCalendar();
+            noShow += inputs.getNoShow();
+            rescheduleRequest += inputs.getRescheduleRequest();
+            cancel += inputs.getCancel();
+            deposits += inputs.getDeposits();
+            salesOneCallClose += inputs.getSalesOneCallClose();
+            followupSales += inputs.getFollowupSales();
+            upsellConversationTaken += inputs.getUpsellConversationTaken();
+            upsells += inputs.getUpsells();
+            contractValue = contractValue.add(inputs.getContractValue());
+            newCashCollected = newCashCollected.add(inputs.getNewCashCollected());
+        }
+
+        int totalSales = salesOneCallClose + followupSales + upsells;
+        int salesCallShowups = Math.max(0, salesCallOnCalendar - noShow - cancel);
+
+        return new DailyReportSummaryResponse(
+                from,
+                to,
+                reports.size(),
+                outboundDials,
+                pickups,
+                conversations30sPlus,
+                salesCallBookedFromOutbound,
+                salesCallOnCalendar,
+                noShow,
+                rescheduleRequest,
+                cancel,
+                deposits,
+                salesOneCallClose,
+                followupSales,
+                upsellConversationTaken,
+                upsells,
+                contractValue,
+                newCashCollected,
+                totalSales,
+                rate(pickups, outboundDials),
+                rate(salesCallShowups, salesCallOnCalendar),
+                rate(salesCallBookedFromOutbound, conversations30sPlus),
+                rate(salesOneCallClose, totalSales),
+                rate(followupSales, totalSales),
+                rate(totalSales, salesCallOnCalendar),
+                rate(upsells, upsellConversationTaken),
+                rate(newCashCollected, contractValue),
+                divide(contractValue, totalSales, 2),
+                divide(newCashCollected, totalSales, 2)
+        );
     }
 
     @Transactional
@@ -204,6 +333,73 @@ public class DailyReportService {
         metrics.setComputedAt(Instant.now());
 
         dailyReportMetricsRepository.save(metrics);
+    }
+
+    private void validateDateRange(LocalDate from, LocalDate to) {
+        if (from == null || to == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Date range is required");
+        }
+        if (from.isAfter(to)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid date range");
+        }
+    }
+
+    private List<DailyReportResponse> mapReportsWithInputs(List<DailyReport> reports) {
+        if (reports.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Map<UUID, DailyReportInputs> inputsByReportId = fetchInputsByReportId(reports);
+        return reports.stream()
+                .map(report -> {
+                    DailyReportInputs inputs = inputsByReportId.getOrDefault(report.getId(), new DailyReportInputs());
+                    return toResponse(report, inputs);
+                })
+                .toList();
+    }
+
+    private Map<UUID, DailyReportInputs> fetchInputsByReportId(List<DailyReport> reports) {
+        List<UUID> reportIds = reports.stream()
+                .map(DailyReport::getId)
+                .toList();
+        if (reportIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return dailyReportInputsRepository.findByDailyReportIdIn(reportIds).stream()
+                .collect(Collectors.toMap(DailyReportInputs::getId, Function.identity()));
+    }
+
+    private DailyReportSummaryResponse emptySummary(LocalDate from, LocalDate to) {
+        return new DailyReportSummaryResponse(
+                from,
+                to,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                ZERO,
+                ZERO,
+                0,
+                ZERO,
+                ZERO,
+                ZERO,
+                ZERO,
+                ZERO,
+                ZERO,
+                ZERO,
+                ZERO,
+                ZERO,
+                ZERO
+        );
     }
 
     private BigDecimal rate(int numerator, int denominator) {
