@@ -15,6 +15,12 @@ public interface CompanyMembershipRepository extends JpaRepository<CompanyMember
 
     Optional<CompanyMembership> findFirstByUserIdAndStatusIn(UUID userId, Collection<MembershipStatus> statuses);
 
+    Optional<CompanyMembership> findFirstByUserIdAndRoleInAndStatusIn(
+            UUID userId,
+            Collection<MembershipRole> roles,
+            Collection<MembershipStatus> statuses
+    );
+
     Optional<CompanyMembership> findFirstByUserId(UUID userId);
 
     Optional<CompanyMembership> findByCompanyIdAndId(UUID companyId, UUID membershipId);
