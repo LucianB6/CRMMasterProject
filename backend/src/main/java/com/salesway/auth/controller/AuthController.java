@@ -2,6 +2,8 @@ package com.salesway.auth.controller;
 
 import com.salesway.auth.dto.LoginRequest;
 import com.salesway.auth.dto.LoginResponse;
+import com.salesway.auth.dto.SignupRequest;
+import com.salesway.auth.dto.SignupResponse;
 import com.salesway.auth.service.AuthService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -22,5 +24,10 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         return ResponseEntity.ok(authService.login(request));
+    }
+
+    @PostMapping("/signup")
+    public ResponseEntity<SignupResponse> signup(@Valid @RequestBody SignupRequest request) {
+        return ResponseEntity.ok(authService.signup(request));
     }
 }

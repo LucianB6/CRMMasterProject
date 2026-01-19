@@ -1,17 +1,206 @@
-const kpis = [
-  { label: "Outbound dials", value: "128", delta: "+12%" },
-  { label: "Conversations 30s+", value: "54", delta: "+5%" },
-  { label: "Deposits", value: "$6,400", delta: "+9%" },
-  { label: "Total closing rate", value: "23%", delta: "-2%" }
-];
+"use client";
 
-const activity = [
-  { label: "Outbound dials", value: "610" },
-  { label: "Calendar booked", value: "42" },
-  { label: "No show", value: "7" }
-];
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+
+import { useToast } from "../../hooks/use-toast";
+
+type ApiReportStatus = "DRAFT" | "SUBMITTED" | "AUTO_SUBMITTED";
+
+type ApiReportResponse = {
+  id: string;
+  reportDate: string;
+  status: ApiReportStatus;
+  submittedAt: string | null;
+  inputs: {
+    outbound_dials: number;
+    pickups: number;
+    conversations_30s_plus: number;
+    sales_call_booked_from_outbound: number;
+    sales_call_on_calendar: number;
+    no_show: number;
+    reschedule_request: number;
+    cancel: number;
+    deposits: number;
+    sales_one_call_close: number;
+    followup_sales: number;
+    upsell_conversation_taken: number;
+    upsells: number;
+    contract_value: number;
+    new_cash_collected: number;
+  };
+};
+
+const emptyReport: ApiReportResponse = {
+  id: "",
+  reportDate: "",
+  status: "DRAFT",
+  submittedAt: null,
+  inputs: {
+    outbound_dials: 0,
+    pickups: 0,
+    conversations_30s_plus: 0,
+    sales_call_booked_from_outbound: 0,
+    sales_call_on_calendar: 0,
+    no_show: 0,
+    reschedule_request: 0,
+    cancel: 0,
+    deposits: 0,
+    sales_one_call_close: 0,
+    followup_sales: 0,
+    upsell_conversation_taken: 0,
+    upsells: 0,
+    contract_value: 0,
+    new_cash_collected: 0
+  }
+};
+
+type KpiCard = {
+  label: string;
+  value: string;
+  delta?: string;
+  deltaLabel?: string;
+};
+
+type ActivityRow = {
+  label: string;
+  value: string;
+};
 
 export default function DashboardPage() {
+  const { toast } = useToast();
+  const [report, setReport] = useState<ApiReportResponse>(emptyReport);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const apiBaseUrl = useMemo(
+    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "",
+    []
+  );
+
+  const getAuthToken = useCallback(() => {
+    if (typeof window === "undefined") {
+      return null;
+    }
+    return window.localStorage.getItem("token");
+  }, []);
+
+  const formatNumber = useCallback((value: number) => {
+    return new Intl.NumberFormat("ro-RO").format(value);
+  }, []);
+
+  const formatCurrency = useCallback((value: number) => {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 0
+    }).format(value);
+  }, []);
+
+  const formatPercent = useCallback((value: number) => {
+    return `${new Intl.NumberFormat("ro-RO", {
+      maximumFractionDigits: 0
+    }).format(value)}%`;
+  }, []);
+
+  const closingRate = useMemo(() => {
+    const totalSales = report.inputs.sales_one_call_close + report.inputs.followup_sales;
+    const denominator = report.inputs.sales_call_on_calendar;
+    if (denominator <= 0) {
+      return 0;
+    }
+    return (totalSales / denominator) * 100;
+  }, [report.inputs.followup_sales, report.inputs.sales_call_on_calendar, report.inputs.sales_one_call_close]);
+
+  const kpis: KpiCard[] = useMemo(
+    () => [
+      {
+        label: "Outbound dials",
+        value: formatNumber(report.inputs.outbound_dials),
+        deltaLabel: "astăzi"
+      },
+      {
+        label: "Conversations 30s+",
+        value: formatNumber(report.inputs.conversations_30s_plus),
+        deltaLabel: "astăzi"
+      },
+      {
+        label: "Deposits",
+        value: formatCurrency(report.inputs.deposits),
+        deltaLabel: "astăzi"
+      },
+      {
+        label: "Total closing rate",
+        value: formatPercent(closingRate),
+        deltaLabel: "astăzi"
+      }
+    ],
+    [
+      closingRate,
+      formatCurrency,
+      formatNumber,
+      formatPercent,
+      report.inputs.conversations_30s_plus,
+      report.inputs.deposits,
+      report.inputs.outbound_dials
+    ]
+  );
+
+  const activity: ActivityRow[] = useMemo(
+    () => [
+      {
+        label: "Outbound dials",
+        value: formatNumber(report.inputs.outbound_dials)
+      },
+      {
+        label: "Calendar booked",
+        value: formatNumber(report.inputs.sales_call_on_calendar)
+      },
+      {
+        label: "No show",
+        value: formatNumber(report.inputs.no_show)
+      }
+    ],
+    [
+      formatNumber,
+      report.inputs.no_show,
+      report.inputs.outbound_dials,
+      report.inputs.sales_call_on_calendar
+    ]
+  );
+
+  useEffect(() => {
+    const fetchDashboardReport = async () => {
+      try {
+        setIsLoading(true);
+        const token = getAuthToken();
+        const response = await fetch(`${apiBaseUrl}/reports/daily/today`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined
+        });
+        if (!response.ok) {
+          const message = await response.text();
+          throw new Error(message || `Status ${response.status}`);
+        }
+        const data = (await response.json()) as ApiReportResponse;
+        setReport(data);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Eroare necunoscută";
+        toast({
+          title: "Nu am putut încărca datele dashboard-ului",
+          description: message,
+          variant: "destructive"
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    void fetchDashboardReport();
+  }, [apiBaseUrl, getAuthToken, toast]);
+
+  const managerAlertText = isLoading
+    ? "Se încarcă activitatea..."
+    : "Datele sunt actualizate pe baza raportului zilnic.";
+
   return (
     <main className="min-h-screen bg-slate-100 px-6 py-10 lg:px-14">
       <header className="flex flex-col gap-6 rounded-3xl bg-white p-8 shadow-card lg:flex-row lg:items-center lg:justify-between">
@@ -51,13 +240,19 @@ export default function DashboardPage() {
               {kpi.label}
             </p>
             <p className="mt-3 text-2xl font-semibold text-ink">{kpi.value}</p>
-            <p
-              className={`mt-2 text-xs font-semibold ${
-                kpi.delta.startsWith("-") ? "text-rose-500" : "text-emerald-500"
-              }`}
-            >
-              {kpi.delta} vs yesterday
-            </p>
+            {kpi.delta ? (
+              <p
+                className={`mt-2 text-xs font-semibold ${
+                  kpi.delta.startsWith("-") ? "text-rose-500" : "text-emerald-500"
+                }`}
+              >
+                {kpi.delta} vs yesterday
+              </p>
+            ) : (
+              <p className="mt-2 text-xs font-semibold text-slate-400">
+                {kpi.deltaLabel ?? "astăzi"}
+              </p>
+            )}
           </div>
         ))}
       </section>
@@ -83,10 +278,8 @@ export default function DashboardPage() {
           <h2 className="text-lg font-semibold text-ink">Manager alerts</h2>
           <div className="mt-5 space-y-4">
             <div className="rounded-2xl bg-amber-50 p-4 text-sm text-amber-900">
-              <p className="font-semibold">2 agents missing updates</p>
-              <p className="mt-1 text-xs text-amber-700">
-                Remind them to submit daily activity.
-              </p>
+              <p className="font-semibold">Status raport zilnic</p>
+              <p className="mt-1 text-xs text-amber-700">{managerAlertText}</p>
               <button className="mt-3 text-xs font-semibold text-amber-900 underline">
                 Review
               </button>

@@ -7,7 +7,7 @@ import {
   Lock,
   Pencil
 } from "lucide-react";
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 
@@ -88,9 +88,57 @@ const statusConfig = {
 
 type ReportFormValues = z.infer<typeof reportSchema>;
 
+type ApiReportStatus = "DRAFT" | "SUBMITTED" | "AUTO_SUBMITTED";
+
+type ApiReportResponse = {
+  id: string;
+  reportDate: string;
+  status: ApiReportStatus;
+  submittedAt: string | null;
+  inputs: {
+    outbound_dials: number;
+    pickups: number;
+    conversations_30s_plus: number;
+    sales_call_booked_from_outbound: number;
+    sales_call_on_calendar: number;
+    no_show: number;
+    reschedule_request: number;
+    cancel: number;
+    deposits: number;
+    sales_one_call_close: number;
+    followup_sales: number;
+    upsell_conversation_taken: number;
+    upsells: number;
+    contract_value: number;
+    new_cash_collected: number;
+  };
+};
+
+const baseReportValues = {
+  outbound_dials: 0,
+  pickups: 0,
+  conversations_30s_plus: 0,
+  sales_call_booked_from_outbound: 0,
+  sales_call_on_calendar: 0,
+  no_show: 0,
+  reschedule_request: 0,
+  cancel: 0,
+  deposits: 0,
+  sales_one_call_close: 0,
+  followup_sales: 0,
+  upsell_conversation_taken: 0,
+  upsells: 0,
+  contract_value: 0,
+  new_cash_collected: 0,
+  observations: "",
+  confirmation: false
+};
+
 export default function DailyReportPage() {
   const { toast } = useToast();
   const [status, setStatus] = useState<ReportStatus>("draft");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const formattedDate = new Intl.DateTimeFormat("ro-RO", {
     weekday: "long",
     day: "2-digit",
@@ -101,38 +149,132 @@ export default function DailyReportPage() {
   const form = useForm<ReportFormValues>({
     resolver: zodResolver(reportSchema),
     defaultValues: {
-      outbound_dials: 0,
-      pickups: 0,
-      conversations_30s_plus: 0,
-      sales_call_booked_from_outbound: 0,
-      sales_call_on_calendar: 0,
-      no_show: 0,
-      reschedule_request: 0,
-      cancel: 0,
-      deposits: 0,
-      sales_one_call_close: 0,
-      followup_sales: 0,
-      upsell_conversation_taken: 0,
-      upsells: 0,
-      contract_value: 0,
-      new_cash_collected: 0,
-      observations: "",
-      confirmation: false
+      ...baseReportValues
     }
   });
 
+  const apiBaseUrl = useMemo(
+    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "",
+    []
+  );
+
+  const resolveStatus = useCallback((apiStatus: ApiReportStatus) => {
+    if (apiStatus === "SUBMITTED" || apiStatus === "AUTO_SUBMITTED") {
+      return "submitted";
+    }
+    return "draft";
+  }, []);
+
+  const getAuthToken = useCallback(() => {
+    if (typeof window === "undefined") {
+      return null;
+    }
+    return window.localStorage.getItem("token");
+  }, []);
+
+  const handleApiResponse = useCallback(
+    async (response: Response, errorTitle: string) => {
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(
+          message || `${errorTitle} (status ${response.status})`
+        );
+      }
+      return (await response.json()) as ApiReportResponse;
+    },
+    []
+  );
+
+  const fetchTodayReport = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const token = getAuthToken();
+      const response = await fetch(`${apiBaseUrl}/reports/daily/today`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined
+      });
+      const data = await handleApiResponse(
+        response,
+        "Nu am putut încărca raportul de azi"
+      );
+      const nextValues: ReportFormValues = {
+        ...baseReportValues,
+        ...data.inputs
+      };
+      form.reset(nextValues);
+      setStatus(resolveStatus(data.status));
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Eroare necunoscută";
+      toast({
+        title: "Eroare la încărcare",
+        description: message,
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [apiBaseUrl, form, getAuthToken, handleApiResponse, resolveStatus, toast]);
+
+  useEffect(() => {
+    void fetchTodayReport();
+  }, [fetchTodayReport]);
+
+  const saveReport = useCallback(
+    async (endpoint: "draft" | "submit", values: ReportFormValues) => {
+      setIsSaving(true);
+      try {
+        const token = getAuthToken();
+        const { confirmation, observations, ...payload } = values;
+        const response = await fetch(
+          `${apiBaseUrl}/reports/daily/${endpoint}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
+            body: JSON.stringify(payload)
+          }
+        );
+        const data = await handleApiResponse(
+          response,
+          "Nu am putut salva raportul"
+        );
+        form.reset({ ...values, confirmation, observations });
+        setStatus(resolveStatus(data.status));
+        toast({
+          title:
+            endpoint === "submit"
+              ? "Raport trimis cu succes!"
+              : "Draft salvat!",
+          description:
+            endpoint === "submit"
+              ? "Managerul tău a fost notificat."
+              : "Datele tale au fost salvate."
+        });
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Eroare necunoscută";
+        toast({
+          title: "Eroare la salvare",
+          description: message,
+          variant: "destructive"
+        });
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [apiBaseUrl, form, getAuthToken, handleApiResponse, resolveStatus, toast]
+  );
+
   function onSubmit(values: ReportFormValues) {
-    console.info(values);
-    setStatus("submitted");
-    toast({
-      title: "Raport trimis cu succes!",
-      description: "Managerul tău a fost notificat."
-    });
+    void saveReport("submit", values);
   }
 
   const isReadOnly = status === "submitted" || status === "locked";
   const { isValid } = form.formState;
   const currentStatusInfo = statusConfig[status];
+  const isBusy = isLoading || isSaving;
 
   return (
     <Form {...form}>
@@ -164,12 +306,12 @@ export default function DailyReportPage() {
               <Button
                 variant="outline"
                 type="button"
-                disabled={isReadOnly}
-                onClick={() => toast({ title: "Draft salvat!" })}
+                disabled={isReadOnly || isBusy}
+                onClick={() => saveReport("draft", form.getValues())}
               >
                 Salvează draft
               </Button>
-              <Button type="submit" disabled={isReadOnly || !isValid}>
+              <Button type="submit" disabled={isReadOnly || !isValid || isBusy}>
                 Trimite raportul
               </Button>
             </div>
