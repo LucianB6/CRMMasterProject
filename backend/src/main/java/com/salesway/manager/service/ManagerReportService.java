@@ -2,6 +2,7 @@ package com.salesway.manager.service;
 
 import com.salesway.common.enums.DailyReportAuditAction;
 import com.salesway.common.enums.DailyReportStatus;
+import com.salesway.common.enums.MembershipRole;
 import com.salesway.manager.dto.ManagerDailyReportResponse;
 import com.salesway.manager.dto.ManagerDailyReportUpdateRequest;
 import com.salesway.memberships.entity.CompanyMembership;
@@ -60,18 +61,9 @@ public class ManagerReportService {
         CompanyMembership manager = managerAccessService.getManagerMembership();
         List<DailyReport> reports;
         if (agentMembershipId != null) {
-            reports = dailyReportRepository.findByCompanyIdAndAgentMembershipIdAndReportDateBetweenOrderByReportDateAsc(
-                    manager.getCompany().getId(),
-                    agentMembershipId,
-                    from,
-                    to
-            );
+            reports = getScopedReportsForAgent(manager, agentMembershipId, from, to);
         } else {
-            reports = dailyReportRepository.findByCompanyIdAndReportDateBetweenOrderByReportDateAsc(
-                    manager.getCompany().getId(),
-                    from,
-                    to
-            );
+            reports = getScopedReports(manager, from, to);
         }
 
         if (reports.isEmpty()) {
@@ -131,6 +123,44 @@ public class ManagerReportService {
         if (from.isAfter(to)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid date range");
         }
+    }
+
+    private List<DailyReport> getScopedReports(CompanyMembership manager, LocalDate from, LocalDate to) {
+        if (manager.getRole() == MembershipRole.ADMIN) {
+            return dailyReportRepository.findByCompanyIdAndReportDateBetweenOrderByReportDateAsc(
+                    manager.getCompany().getId(),
+                    from,
+                    to
+            );
+        }
+        return dailyReportRepository.findByAgentMembershipManagerMembershipIdAndReportDateBetweenOrderByReportDateAsc(
+                manager.getId(),
+                from,
+                to
+        );
+    }
+
+    private List<DailyReport> getScopedReportsForAgent(
+            CompanyMembership manager,
+            UUID agentMembershipId,
+            LocalDate from,
+            LocalDate to
+    ) {
+        if (manager.getRole() == MembershipRole.ADMIN) {
+            return dailyReportRepository.findByCompanyIdAndAgentMembershipIdAndReportDateBetweenOrderByReportDateAsc(
+                    manager.getCompany().getId(),
+                    agentMembershipId,
+                    from,
+                    to
+            );
+        }
+        return dailyReportRepository
+                .findByAgentMembershipManagerMembershipIdAndAgentMembershipIdAndReportDateBetweenOrderByReportDateAsc(
+                        manager.getId(),
+                        agentMembershipId,
+                        from,
+                        to
+                );
     }
 
     private Map<UUID, DailyReportInputs> fetchInputsByReportId(List<DailyReport> reports) {

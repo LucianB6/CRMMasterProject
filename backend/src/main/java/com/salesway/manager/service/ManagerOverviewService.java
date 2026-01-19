@@ -53,8 +53,7 @@ public class ManagerOverviewService {
     public DailyReportSummaryResponse getTeamSummary(LocalDate from, LocalDate to) {
         validateDateRange(from, to);
         CompanyMembership manager = managerAccessService.getManagerMembership();
-        List<DailyReport> reports = dailyReportRepository
-                .findByCompanyIdAndReportDateBetweenOrderByReportDateAsc(manager.getCompany().getId(), from, to);
+        List<DailyReport> reports = getScopedReports(manager, from, to);
         return buildSummary(from, to, reports);
     }
 
@@ -62,20 +61,12 @@ public class ManagerOverviewService {
     public DailyReportSummaryResponse getAgentSummary(UUID agentMembershipId, LocalDate from, LocalDate to) {
         validateDateRange(from, to);
         CompanyMembership manager = managerAccessService.getManagerMembership();
-        CompanyMembership agent = companyMembershipRepository
-                .findByCompanyIdAndId(manager.getCompany().getId(), agentMembershipId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Agent not found"));
+        CompanyMembership agent = findAgentForManager(manager, agentMembershipId);
         if (agent.getRole() != MembershipRole.AGENT) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Membership is not an agent");
         }
 
-        List<DailyReport> reports = dailyReportRepository
-                .findByCompanyIdAndAgentMembershipIdAndReportDateBetweenOrderByReportDateAsc(
-                        manager.getCompany().getId(),
-                        agentMembershipId,
-                        from,
-                        to
-                );
+        List<DailyReport> reports = getScopedReportsForAgent(manager, agentMembershipId, from, to);
         return buildSummary(from, to, reports);
     }
 
@@ -83,8 +74,7 @@ public class ManagerOverviewService {
     public List<ManagerTeamPerformancePointResponse> getTeamPerformance(LocalDate from, LocalDate to) {
         validateDateRange(from, to);
         CompanyMembership manager = managerAccessService.getManagerMembership();
-        List<DailyReport> reports = dailyReportRepository
-                .findByCompanyIdAndReportDateBetweenOrderByReportDateAsc(manager.getCompany().getId(), from, to);
+        List<DailyReport> reports = getScopedReports(manager, from, to);
         if (reports.isEmpty()) {
             return Collections.emptyList();
         }
@@ -118,9 +108,14 @@ public class ManagerOverviewService {
     @Transactional(readOnly = true)
     public List<ManagerAgentResponse> getAgents() {
         CompanyMembership manager = managerAccessService.getManagerMembership();
-        List<CompanyMembership> agents = companyMembershipRepository
-                .findByCompanyIdAndRoleAndStatusIn(
+        List<CompanyMembership> agents = manager.getRole() == MembershipRole.ADMIN
+                ? companyMembershipRepository.findByCompanyIdAndRoleAndStatusIn(
                         manager.getCompany().getId(),
+                        MembershipRole.AGENT,
+                        EnumSet.of(MembershipStatus.ACTIVE, MembershipStatus.INVITED)
+                )
+                : companyMembershipRepository.findByManagerMembershipIdAndRoleAndStatusIn(
+                        manager.getId(),
                         MembershipRole.AGENT,
                         EnumSet.of(MembershipStatus.ACTIVE, MembershipStatus.INVITED)
                 );
@@ -267,6 +262,52 @@ public class ManagerOverviewService {
         if (from.isAfter(to)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid date range");
         }
+    }
+
+    private CompanyMembership findAgentForManager(CompanyMembership manager, UUID agentMembershipId) {
+        return manager.getRole() == MembershipRole.ADMIN
+                ? companyMembershipRepository.findByCompanyIdAndId(manager.getCompany().getId(), agentMembershipId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Agent not found"))
+                : companyMembershipRepository.findByIdAndManagerMembershipId(agentMembershipId, manager.getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Agent not found"));
+    }
+
+    private List<DailyReport> getScopedReports(CompanyMembership manager, LocalDate from, LocalDate to) {
+        if (manager.getRole() == MembershipRole.ADMIN) {
+            return dailyReportRepository.findByCompanyIdAndReportDateBetweenOrderByReportDateAsc(
+                    manager.getCompany().getId(),
+                    from,
+                    to
+            );
+        }
+        return dailyReportRepository.findByAgentMembershipManagerMembershipIdAndReportDateBetweenOrderByReportDateAsc(
+                manager.getId(),
+                from,
+                to
+        );
+    }
+
+    private List<DailyReport> getScopedReportsForAgent(
+            CompanyMembership manager,
+            UUID agentMembershipId,
+            LocalDate from,
+            LocalDate to
+    ) {
+        if (manager.getRole() == MembershipRole.ADMIN) {
+            return dailyReportRepository.findByCompanyIdAndAgentMembershipIdAndReportDateBetweenOrderByReportDateAsc(
+                    manager.getCompany().getId(),
+                    agentMembershipId,
+                    from,
+                    to
+            );
+        }
+        return dailyReportRepository
+                .findByAgentMembershipManagerMembershipIdAndAgentMembershipIdAndReportDateBetweenOrderByReportDateAsc(
+                        manager.getId(),
+                        agentMembershipId,
+                        from,
+                        to
+                );
     }
 
     private BigDecimal rate(int numerator, int denominator) {

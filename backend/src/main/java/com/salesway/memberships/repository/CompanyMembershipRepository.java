@@ -24,4 +24,12 @@ public interface CompanyMembershipRepository extends JpaRepository<CompanyMember
             MembershipRole role,
             Collection<MembershipStatus> statuses
     );
+
+    Optional<CompanyMembership> findByIdAndManagerMembershipId(UUID membershipId, UUID managerMembershipId);
+
+    List<CompanyMembership> findByManagerMembershipIdAndRoleAndStatusIn(
+            UUID managerMembershipId,
+            MembershipRole role,
+            Collection<MembershipStatus> statuses
+    );
 }
