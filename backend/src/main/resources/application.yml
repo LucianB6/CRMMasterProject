@@ -18,6 +18,9 @@ app:
     jwt:
       secret: "r7X4pQ9kV2mL8sZ1nA5tY6uH3fJ0wC9d"
       expiration-seconds: 83600
+  notifications:
+    report-deadline-time: "18:00"
+    report-reminder-minutes: 30
 
 server:
   port: 8081

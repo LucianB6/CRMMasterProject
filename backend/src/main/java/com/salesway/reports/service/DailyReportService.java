@@ -18,6 +18,9 @@ import com.salesway.reports.repository.DailyReportInputsRepository;
 import com.salesway.reports.repository.DailyReportMetricsRepository;
 import com.salesway.reports.repository.DailyReportRepository;
 import com.salesway.security.CustomUserDetails;
+import com.salesway.notifications.service.NotificationService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -41,6 +44,7 @@ import java.util.stream.Collectors;
 
 @Service
 public class DailyReportService {
+    private static final Logger LOG = LoggerFactory.getLogger(DailyReportService.class);
     private static final BigDecimal ZERO = BigDecimal.ZERO;
 
     private final DailyReportRepository dailyReportRepository;
@@ -48,19 +52,22 @@ public class DailyReportService {
     private final DailyReportMetricsRepository dailyReportMetricsRepository;
     private final DailyReportAuditLogRepository dailyReportAuditLogRepository;
     private final CompanyMembershipRepository companyMembershipRepository;
+    private final NotificationService notificationService;
 
     public DailyReportService(
             DailyReportRepository dailyReportRepository,
             DailyReportInputsRepository dailyReportInputsRepository,
             DailyReportMetricsRepository dailyReportMetricsRepository,
             DailyReportAuditLogRepository dailyReportAuditLogRepository,
-            CompanyMembershipRepository companyMembershipRepository
+            CompanyMembershipRepository companyMembershipRepository,
+            NotificationService notificationService
     ) {
         this.dailyReportRepository = dailyReportRepository;
         this.dailyReportInputsRepository = dailyReportInputsRepository;
         this.dailyReportMetricsRepository = dailyReportMetricsRepository;
         this.dailyReportAuditLogRepository = dailyReportAuditLogRepository;
         this.companyMembershipRepository = companyMembershipRepository;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -233,6 +240,7 @@ public class DailyReportService {
         dailyReportRepository.save(report);
         updateMetrics(report, inputs);
         writeAudit(report, membership, DailyReportAuditAction.SUBMIT);
+        notifyManager(report, inputs);
 
         return toResponse(report, inputs);
     }
@@ -454,5 +462,49 @@ public class DailyReportService {
         log.setActorMembership(membership);
         log.setAction(action);
         dailyReportAuditLogRepository.save(log);
+    }
+
+    private void notifyManager(DailyReport report, DailyReportInputs inputs) {
+        CompanyMembership agent = report.getAgentMembership();
+        CompanyMembership manager = agent.getManagerMembership();
+        if (manager == null) {
+            return;
+        }
+
+        try {
+            notificationService.createNotification(
+                    report.getCompany(),
+                    manager,
+                    com.salesway.common.enums.NotificationType.REPORT_SUBMITTED,
+                    Map.of(
+                            "agent_membership_id", agent.getId().toString(),
+                            "agent_email", agent.getUser().getEmail(),
+                            "report_date", report.getReportDate().toString(),
+                            "message", "Utilizatorul " + agent.getUser().getEmail()
+                                    + " a dat submit la activitatea de azi."
+                    ),
+                    Instant.now()
+            );
+
+            if (inputs.getContractValue() != null && inputs.getContractValue().compareTo(ZERO) > 0) {
+                notificationService.createNotification(
+                        report.getCompany(),
+                        manager,
+                        com.salesway.common.enums.NotificationType.SALE_RECORDED,
+                        Map.of(
+                                "agent_membership_id", agent.getId().toString(),
+                                "agent_email", agent.getUser().getEmail(),
+                                "contract_value", inputs.getContractValue(),
+                                "new_cash_collected", inputs.getNewCashCollected(),
+                                "report_date", report.getReportDate().toString(),
+                                "message", "Utilizatorul " + agent.getUser().getEmail()
+                                        + " a vandut in valoare de " + inputs.getContractValue() + " lei."
+                        ),
+                        Instant.now()
+                );
+            }
+        } catch (RuntimeException ex) {
+            LOG.warn("Failed to create report notifications for report {}", report.getId(), ex);
+        }
     }
 }
