@@ -28,13 +28,12 @@ public class ManagerAccessService {
         }
 
         CompanyMembership membership = companyMembershipRepository
-                .findFirstByUserIdAndStatusIn(userDetails.getUser().getId(), EnumSet.of(MembershipStatus.ACTIVE))
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "No active membership found"));
-
-        MembershipRole role = membership.getRole();
-        if (role != MembershipRole.MANAGER && role != MembershipRole.ADMIN) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Manager access required");
-        }
+                .findFirstByUserIdAndRoleInAndStatusIn(
+                        userDetails.getUser().getId(),
+                        EnumSet.of(MembershipRole.MANAGER, MembershipRole.ADMIN),
+                        EnumSet.of(MembershipStatus.ACTIVE)
+                )
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Manager access required"));
 
         return membership;
     }
