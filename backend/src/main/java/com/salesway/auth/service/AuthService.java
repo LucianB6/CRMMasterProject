@@ -129,7 +129,10 @@ public class AuthService {
         }
 
         CompanyMembership managerMembership = companyMembershipRepository
-                .findFirstByRoleAndStatus(MembershipRole.MANAGER, MembershipStatus.ACTIVE)
+                .findFirstByRoleInAndStatus(
+                        java.util.EnumSet.of(MembershipRole.MANAGER, MembershipRole.ADMIN),
+                        MembershipStatus.ACTIVE
+                )
                 .orElse(null);
 
         Company company;
