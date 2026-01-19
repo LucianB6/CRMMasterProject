@@ -128,16 +128,26 @@ public class AuthService {
             return;
         }
 
-        Company company = new Company();
-        company.setName("Personal Workspace - " + user.getEmail());
-        company.setTimezone("UTC");
-        Company savedCompany = companyRepository.save(company);
+        CompanyMembership managerMembership = companyMembershipRepository
+                .findFirstByRoleAndStatus(MembershipRole.MANAGER, MembershipStatus.ACTIVE)
+                .orElse(null);
+
+        Company company;
+        if (managerMembership != null) {
+            company = managerMembership.getCompany();
+        } else {
+            company = new Company();
+            company.setName("Personal Workspace - " + user.getEmail());
+            company.setTimezone("UTC");
+            company = companyRepository.save(company);
+        }
 
         CompanyMembership membership = new CompanyMembership();
-        membership.setCompany(savedCompany);
+        membership.setCompany(company);
         membership.setUser(user);
         membership.setRole(MembershipRole.AGENT);
         membership.setStatus(MembershipStatus.ACTIVE);
+        membership.setManagerMembership(managerMembership);
         companyMembershipRepository.save(membership);
     }
 

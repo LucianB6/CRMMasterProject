@@ -37,4 +37,6 @@ public interface CompanyMembershipRepository extends JpaRepository<CompanyMember
             MembershipRole role,
             Collection<MembershipStatus> statuses
     );
+
+    Optional<CompanyMembership> findFirstByRoleAndStatus(MembershipRole role, MembershipStatus status);
 }
