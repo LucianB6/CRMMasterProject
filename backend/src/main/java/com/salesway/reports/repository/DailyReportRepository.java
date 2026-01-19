@@ -16,4 +16,17 @@ public interface DailyReportRepository extends JpaRepository<DailyReport, UUID> 
             LocalDate from,
             LocalDate to
     );
+
+    List<DailyReport> findByCompanyIdAndReportDateBetweenOrderByReportDateAsc(
+            UUID companyId,
+            LocalDate from,
+            LocalDate to
+    );
+
+    List<DailyReport> findByCompanyIdAndAgentMembershipIdAndReportDateBetweenOrderByReportDateAsc(
+            UUID companyId,
+            UUID agentMembershipId,
+            LocalDate from,
+            LocalDate to
+    );
 }
