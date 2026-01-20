@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -26,34 +26,208 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { agents, teamPerformanceData, quickStats } from '@/lib/mock-data';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/hooks/use-toast';
+
+type ManagerAgent = {
+  membership_id: string;
+  email: string;
+  team_name: string | null;
+};
+
+type DailySummaryResponse = {
+  outbound_dials: number | null;
+  sales_call_on_calendar: number | null;
+  total_sales: number | null;
+  contract_value: number | null;
+};
+
+type TeamPerformancePoint = {
+  report_date: string;
+  outbound_dials: number | null;
+  total_sales: number | null;
+};
+
+type ManagerReportResponse = {
+  report_date: string;
+  inputs: {
+    outbound_dials: number | null;
+    sales_one_call_close: number | null;
+    followup_sales: number | null;
+    upsells: number | null;
+  };
+};
+
+type ChartPoint = {
+  day: string;
+  calls: number;
+  sales: number;
+};
 
 export default function ManagerOverviewPage() {
+  const { toast } = useToast();
   const [selectedAgentId, setSelectedAgentId] = useState('all');
+  const [agents, setAgents] = useState<ManagerAgent[]>([]);
+  const [summary, setSummary] = useState<DailySummaryResponse | null>(null);
+  const [teamPerformance, setTeamPerformance] = useState<ChartPoint[]>([]);
+  const [agentPerformance, setAgentPerformance] = useState<ChartPoint[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const apiBaseUrl = useMemo(
+    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8081',
+    []
+  );
+
+  const getAuthToken = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+    return window.localStorage.getItem('salesway_token');
+  }, []);
+
+  const buildDateRange = useCallback(() => {
+    const today = new Date();
+    const from = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    from.setUTCDate(from.getUTCDate() - 6);
+    const to = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    const toKey = to.toISOString().slice(0, 10);
+    const fromKey = from.toISOString().slice(0, 10);
+    return { from: fromKey, to: toKey };
+  }, []);
+
+  const formatDayLabel = useCallback((dateString: string) => {
+    const date = new Date(dateString);
+    if (Number.isNaN(date.getTime())) {
+      return dateString;
+    }
+    return new Intl.DateTimeFormat('ro-RO', {
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+    }).format(date);
+  }, []);
 
   const currentStats = useMemo(() => {
-    return quickStats[selectedAgentId as keyof typeof quickStats];
-  }, [selectedAgentId]);
+    const safe = (value: number | null | undefined) => value ?? 0;
+    return {
+      calls: safe(summary?.outbound_dials),
+      conversions: safe(summary?.sales_call_on_calendar),
+      sales: safe(summary?.total_sales),
+      value: safe(summary?.contract_value),
+    };
+  }, [summary]);
 
   const chartData = useMemo(() => {
-    if (selectedAgentId === 'all') {
-      return teamPerformanceData;
-    }
-    const agentName = agents.find((a) => a.id === selectedAgentId)?.name;
-    if (!agentName) return { calls: [], sales: [] };
+    return selectedAgentId === 'all' ? teamPerformance : agentPerformance;
+  }, [agentPerformance, selectedAgentId, teamPerformance]);
 
-    const filterByAgent = (data: Array<Record<string, number | string>>) =>
-      data.map((d) => ({
-        day: d.day,
-        [agentName]: d[agentName],
-      }));
-
-    return {
-      calls: filterByAgent(teamPerformanceData.calls['7']),
-      sales: filterByAgent(teamPerformanceData.sales['7']),
+  useEffect(() => {
+    const fetchAgents = async () => {
+      try {
+        const token = getAuthToken();
+        const response = await fetch(`${apiBaseUrl}/manager/overview/agents`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        if (!response.ok) {
+          throw new Error('Nu am putut încărca agenții.');
+        }
+        const data = (await response.json()) as ManagerAgent[];
+        setAgents(data);
+      } catch (error) {
+        toast({
+          title: 'Eroare',
+          description:
+            error instanceof Error
+              ? error.message
+              : 'Nu am putut încărca agenții.',
+          variant: 'destructive',
+        });
+      }
     };
-  }, [selectedAgentId]);
+
+    fetchAgents();
+  }, [apiBaseUrl, getAuthToken, toast]);
+
+  useEffect(() => {
+    const fetchOverview = async () => {
+      try {
+        setIsLoading(true);
+        const token = getAuthToken();
+        const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+        const { from, to } = buildDateRange();
+
+        const summaryUrl =
+          selectedAgentId === 'all'
+            ? `${apiBaseUrl}/manager/overview/summary?from=${from}&to=${to}`
+            : `${apiBaseUrl}/manager/overview/agents/${selectedAgentId}/summary?from=${from}&to=${to}`;
+
+        const summaryResponse = await fetch(summaryUrl, { headers });
+        if (!summaryResponse.ok) {
+          throw new Error('Nu am putut încărca sumarul.');
+        }
+        const summaryData = (await summaryResponse.json()) as DailySummaryResponse;
+        setSummary(summaryData);
+
+        if (selectedAgentId === 'all') {
+          const performanceResponse = await fetch(
+            `${apiBaseUrl}/manager/overview/team-performance?from=${from}&to=${to}`,
+            { headers }
+          );
+          if (!performanceResponse.ok) {
+            throw new Error('Nu am putut încărca performanța echipei.');
+          }
+          const performanceData = (await performanceResponse.json()) as TeamPerformancePoint[];
+          const mapped = performanceData.map((point) => ({
+            day: formatDayLabel(point.report_date),
+            calls: point.outbound_dials ?? 0,
+            sales: point.total_sales ?? 0,
+          }));
+          setTeamPerformance(mapped);
+        } else {
+          const reportsResponse = await fetch(
+            `${apiBaseUrl}/manager/reports?from=${from}&to=${to}&agent_membership_id=${selectedAgentId}`,
+            { headers }
+          );
+          if (!reportsResponse.ok) {
+            throw new Error('Nu am putut încărca rapoartele agentului.');
+          }
+          const reports = (await reportsResponse.json()) as ManagerReportResponse[];
+          const mapped = reports.map((report) => {
+            const totalSales =
+              (report.inputs.sales_one_call_close ?? 0) +
+              (report.inputs.followup_sales ?? 0) +
+              (report.inputs.upsells ?? 0);
+            return {
+              day: formatDayLabel(report.report_date),
+              calls: report.inputs.outbound_dials ?? 0,
+              sales: totalSales,
+            };
+          });
+          setAgentPerformance(mapped);
+        }
+      } catch (error) {
+        toast({
+          title: 'Eroare',
+          description:
+            error instanceof Error
+              ? error.message
+              : 'Nu am putut încărca datele de overview.',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchOverview();
+  }, [
+    apiBaseUrl,
+    buildDateRange,
+    formatDayLabel,
+    getAuthToken,
+    selectedAgentId,
+    toast,
+  ]);
 
   return (
     <div className="space-y-6">
@@ -80,8 +254,8 @@ export default function ManagerOverviewPage() {
             <SelectContent>
               <SelectItem value="all">Toți Agenții</SelectItem>
               {agents.map((agent) => (
-                <SelectItem key={agent.id} value={agent.id}>
-                  {agent.name}
+                <SelectItem key={agent.membership_id} value={agent.membership_id}>
+                  {agent.email}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -91,7 +265,7 @@ export default function ManagerOverviewPage() {
 
       <div className="space-y-2">
         <h2 className="text-lg font-semibold tracking-tight">
-          Quick Stats - Azi
+          Quick Stats - ultimele 7 zile
         </h2>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>
@@ -139,6 +313,11 @@ export default function ManagerOverviewPage() {
             </CardContent>
           </Card>
         </div>
+        {isLoading && (
+          <p className="text-sm text-muted-foreground">
+            Se actualizează datele...
+          </p>
+        )}
       </div>
 
       <Card>
@@ -154,13 +333,7 @@ export default function ManagerOverviewPage() {
             </TabsList>
             <TabsContent value="calls">
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart
-                  data={
-                    selectedAgentId === 'all'
-                      ? teamPerformanceData.calls['7']
-                      : chartData.calls
-                  }
-                >
+                <BarChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="day" stroke="#888888" fontSize={12} />
                   <YAxis stroke="#888888" fontSize={12} allowDecimals={false} />
@@ -171,34 +344,18 @@ export default function ManagerOverviewPage() {
                     }}
                   />
                   <Legend iconSize={10} />
-                  {agents.map((agent, index) => {
-                    if (
-                      selectedAgentId === 'all' ||
-                      selectedAgentId === agent.id
-                    ) {
-                      return (
-                        <Bar
-                          key={agent.id}
-                          dataKey={agent.name}
-                          fill={`hsl(var(--chart-${index + 1}))`}
-                          radius={[4, 4, 0, 0]}
-                        />
-                      );
-                    }
-                    return null;
-                  })}
+                  <Bar
+                    dataKey="calls"
+                    name="Apeluri"
+                    fill="hsl(var(--chart-1))"
+                    radius={[4, 4, 0, 0]}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             </TabsContent>
             <TabsContent value="sales">
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart
-                  data={
-                    selectedAgentId === 'all'
-                      ? teamPerformanceData.sales['7']
-                      : chartData.sales
-                  }
-                >
+                <BarChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="day" stroke="#888888" fontSize={12} />
                   <YAxis stroke="#888888" fontSize={12} allowDecimals={false} />
@@ -209,22 +366,12 @@ export default function ManagerOverviewPage() {
                     }}
                   />
                   <Legend iconSize={10} />
-                  {agents.map((agent, index) => {
-                    if (
-                      selectedAgentId === 'all' ||
-                      selectedAgentId === agent.id
-                    ) {
-                      return (
-                        <Bar
-                          key={agent.id}
-                          dataKey={agent.name}
-                          fill={`hsl(var(--chart-${index + 1}))`}
-                          radius={[4, 4, 0, 0]}
-                        />
-                      );
-                    }
-                    return null;
-                  })}
+                  <Bar
+                    dataKey="sales"
+                    name="Vânzări"
+                    fill="hsl(var(--chart-2))"
+                    radius={[4, 4, 0, 0]}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             </TabsContent>
