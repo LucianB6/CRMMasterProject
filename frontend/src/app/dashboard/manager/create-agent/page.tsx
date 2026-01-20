@@ -4,14 +4,14 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 import { useCallback, useMemo, useState } from 'react';
-import { Button } from '@/components/ui/button';
+import { Button } from '../../../../components/ui/button';
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
+} from '../../../../components/ui/card';
 import {
   Form,
   FormControl,
@@ -19,9 +19,9 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { useToast } from '@/hooks/use-toast';
+} from '../../../../components/ui/form';
+import { Input } from '../../../../components/ui/input';
+import { useToast } from '../../../../hooks/use-toast';
 
 const createAgentSchema = z.object({
   email: z.string().email('Te rugăm să introduci o adresă de email validă.'),
