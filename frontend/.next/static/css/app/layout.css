@@ -1385,6 +1385,9 @@ video {
   --tw-bg-opacity: 1;
   background-color: rgb(255 255 255 / var(--tw-bg-opacity, 1));
 }
+.bg-accent\/10 {
+  background-color: hsl(var(--accent) / 0.1);
+}
 .fill-current {
   fill: currentColor;
 }
@@ -2609,6 +2612,10 @@ video {
     width: auto;
   }
 
+  .sm\:w-\[280px\] {
+    width: 280px;
+  }
+
   .sm\:max-w-\[425px\] {
     max-width: 425px;
   }
@@ -2625,12 +2632,20 @@ video {
     grid-template-columns: 1fr auto auto;
   }
 
+  .sm\:grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .sm\:flex-row {
     flex-direction: row;
   }
 
   .sm\:flex-col {
     flex-direction: column;
+  }
+
+  .sm\:items-end {
+    align-items: flex-end;
   }
 
   .sm\:items-center {
