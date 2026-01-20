@@ -1,23 +1,14 @@
 package com.salesway.auth.dto;
 
-import java.time.Instant;
 import java.util.UUID;
 
 public class SignupResponse {
-    private final String token;
     private final UUID userId;
     private final String email;
-    private final Instant lastLoginAt;
 
-    public SignupResponse(String token, UUID userId, String email, Instant lastLoginAt) {
-        this.token = token;
+    public SignupResponse(UUID userId, String email) {
         this.userId = userId;
         this.email = email;
-        this.lastLoginAt = lastLoginAt;
-    }
-
-    public String getToken() {
-        return token;
     }
 
     public UUID getUserId() {
@@ -26,9 +17,5 @@ public class SignupResponse {
 
     public String getEmail() {
         return email;
-    }
-
-    public Instant getLastLoginAt() {
-        return lastLoginAt;
     }
 }
