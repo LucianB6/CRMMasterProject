@@ -3,7 +3,8 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { CheckCircle, Clock, Lock } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -32,7 +33,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { agents, agentReports, reportStatusConfig } from '@/lib/mock-data';
 import { Label } from '@/components/ui/label';
 
 const reportSchema = z.object({
@@ -78,40 +78,256 @@ const reportSchema = z.object({
     .string()
     .max(1000, 'Maxim 1000 de caractere.')
     .optional(),
-  confirmation: z.boolean(),
 });
 
+type ManagerAgent = {
+  membership_id: string;
+  email: string;
+};
+
+type ManagerReportStatus = 'DRAFT' | 'SUBMITTED' | 'AUTO_SUBMITTED';
+
+type ManagerReportResponse = {
+  id: string;
+  report_date: string;
+  status: ManagerReportStatus;
+  agent_membership_id: string;
+  agent_email: string;
+  inputs: {
+    outbound_dials: number | null;
+    pickups: number | null;
+    conversations_30s_plus: number | null;
+    sales_call_booked_from_outbound: number | null;
+    sales_call_on_calendar: number | null;
+    no_show: number | null;
+    reschedule_request: number | null;
+    cancel: number | null;
+    deposits: number | null;
+    sales_one_call_close: number | null;
+    followup_sales: number | null;
+    upsell_conversation_taken: number | null;
+    upsells: number | null;
+    contract_value: number | null;
+    new_cash_collected: number | null;
+  };
+};
+
+const statusConfig = {
+  DRAFT: { text: 'Draft', icon: Clock, color: 'text-yellow-500' },
+  SUBMITTED: { text: 'Trimis', icon: CheckCircle, color: 'text-green-500' },
+  AUTO_SUBMITTED: { text: 'Auto-trimis', icon: Lock, color: 'text-muted-foreground' },
+};
+
+const baseReportValues = {
+  outbound_dials: 0,
+  pickups: 0,
+  conversations_30s_plus: 0,
+  sales_call_booked_from_outbound: 0,
+  sales_call_on_calendar: 0,
+  no_show: 0,
+  reschedule_request: 0,
+  cancel: 0,
+  deposits: 0,
+  sales_one_call_close: 0,
+  followup_sales: 0,
+  upsell_conversation_taken: 0,
+  upsells: 0,
+  contract_value: 0,
+  new_cash_collected: 0,
+  observations: '',
+};
+
 export default function ManagerReportsPage() {
-  const [selectedAgentId, setSelectedAgentId] = useState(agents[0].id);
   const { toast } = useToast();
+  const [selectedAgentId, setSelectedAgentId] = useState('');
+  const [agents, setAgents] = useState<ManagerAgent[]>([]);
+  const [currentReport, setCurrentReport] =
+    useState<ManagerReportResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
   const form = useForm<z.infer<typeof reportSchema>>({
     resolver: zodResolver(reportSchema),
-    defaultValues: agentReports[selectedAgentId as keyof typeof agentReports]
-      ?.data,
+    defaultValues: baseReportValues,
   });
 
-  useEffect(() => {
-    const report = agentReports[selectedAgentId as keyof typeof agentReports];
-    if (report) {
-      form.reset(report.data);
+  const apiBaseUrl = useMemo(
+    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8081',
+    []
+  );
+
+  const getAuthToken = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return null;
     }
-  }, [selectedAgentId, form]);
+    return window.localStorage.getItem('salesway_token');
+  }, []);
 
-  function onSubmit(values: z.infer<typeof reportSchema>) {
-    console.log(`Manager submitted for ${selectedAgentId}:`, values);
-    toast({
-      title: 'Raport actualizat!',
-      description: `Datele pentru ${
-        agents.find((a) => a.id === selectedAgentId)?.name
-      } au fost salvate.`,
-    });
-  }
+  const formatDateKey = useCallback((date: Date) => {
+    return date.toISOString().slice(0, 10);
+  }, []);
 
-  const selectedReport = agentReports[selectedAgentId as keyof typeof agentReports];
+  const normalizeInputs = useCallback((report: ManagerReportResponse | null) => {
+    if (!report) {
+      return baseReportValues;
+    }
+    const safe = (value: number | null | undefined) => value ?? 0;
+    return {
+      outbound_dials: safe(report.inputs.outbound_dials),
+      pickups: safe(report.inputs.pickups),
+      conversations_30s_plus: safe(report.inputs.conversations_30s_plus),
+      sales_call_booked_from_outbound: safe(report.inputs.sales_call_booked_from_outbound),
+      sales_call_on_calendar: safe(report.inputs.sales_call_on_calendar),
+      no_show: safe(report.inputs.no_show),
+      reschedule_request: safe(report.inputs.reschedule_request),
+      cancel: safe(report.inputs.cancel),
+      deposits: safe(report.inputs.deposits),
+      sales_one_call_close: safe(report.inputs.sales_one_call_close),
+      followup_sales: safe(report.inputs.followup_sales),
+      upsell_conversation_taken: safe(report.inputs.upsell_conversation_taken),
+      upsells: safe(report.inputs.upsells),
+      contract_value: safe(report.inputs.contract_value),
+      new_cash_collected: safe(report.inputs.new_cash_collected),
+      observations: baseReportValues.observations,
+    };
+  }, []);
+
+  useEffect(() => {
+    const fetchAgents = async () => {
+      try {
+        const token = getAuthToken();
+        const response = await fetch(`${apiBaseUrl}/manager/overview/agents`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        if (!response.ok) {
+          throw new Error('Nu am putut încărca agenții.');
+        }
+        const data = (await response.json()) as ManagerAgent[];
+        setAgents(data);
+        if (data.length > 0) {
+          setSelectedAgentId((prev) => prev || data[0].membership_id);
+        }
+      } catch (error) {
+        toast({
+          title: 'Eroare',
+          description:
+            error instanceof Error
+              ? error.message
+              : 'Nu am putut încărca agenții.',
+          variant: 'destructive',
+        });
+      }
+    };
+
+    fetchAgents();
+  }, [apiBaseUrl, getAuthToken, toast]);
+
+  useEffect(() => {
+    const fetchReport = async () => {
+      if (!selectedAgentId) {
+        setIsLoading(false);
+        return;
+      }
+      try {
+        setIsLoading(true);
+        const token = getAuthToken();
+        const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+        const today = new Date();
+        const from = formatDateKey(today);
+        const to = formatDateKey(today);
+        const response = await fetch(
+          `${apiBaseUrl}/manager/reports?from=${from}&to=${to}&agent_membership_id=${selectedAgentId}`,
+          { headers }
+        );
+        if (!response.ok) {
+          throw new Error('Nu am putut încărca raportul agentului.');
+        }
+        const data = (await response.json()) as ManagerReportResponse[];
+        const sorted = [...data].sort((a, b) =>
+          a.report_date < b.report_date ? 1 : -1
+        );
+        const latest = sorted[0] ?? null;
+        setCurrentReport(latest);
+        form.reset(normalizeInputs(latest));
+      } catch (error) {
+        toast({
+          title: 'Eroare',
+          description:
+            error instanceof Error
+              ? error.message
+              : 'Nu am putut încărca raportul agentului.',
+          variant: 'destructive',
+        });
+        setCurrentReport(null);
+        form.reset(baseReportValues);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchReport();
+  }, [apiBaseUrl, form, formatDateKey, getAuthToken, normalizeInputs, selectedAgentId, toast]);
+
+  const submitReport = useCallback(
+    async (values: z.infer<typeof reportSchema>, status: ManagerReportStatus) => {
+      if (!currentReport) {
+        toast({
+          title: 'Raport lipsă',
+          description: 'Nu există un raport de actualizat pentru agentul selectat.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      try {
+        setIsSaving(true);
+        const token = getAuthToken();
+        const { observations, ...payload } = values;
+        const response = await fetch(
+          `${apiBaseUrl}/manager/reports/${currentReport.id}`,
+          {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({
+              ...payload,
+              status,
+            }),
+          }
+        );
+        if (!response.ok) {
+          const message = await response.text();
+          throw new Error(
+            message || `Nu am putut salva raportul (status ${response.status}).`
+          );
+        }
+        const updated = (await response.json()) as ManagerReportResponse;
+        setCurrentReport(updated);
+        form.reset(normalizeInputs(updated));
+        toast({
+          title: status === 'SUBMITTED' ? 'Raport publicat!' : 'Raport salvat!',
+          description: `Datele pentru ${updated.agent_email} au fost actualizate.`,
+        });
+      } catch (error) {
+        toast({
+          title: 'Eroare',
+          description:
+            error instanceof Error
+              ? error.message
+              : 'Nu am putut salva raportul.',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [apiBaseUrl, currentReport, form, getAuthToken, normalizeInputs, toast]
+  );
+
   const currentStatusInfo =
-    reportStatusConfig[selectedReport.status as keyof typeof reportStatusConfig];
-  const Icon = currentStatusInfo.Icon;
+    (currentReport && statusConfig[currentReport.status]) || statusConfig.DRAFT;
+  const Icon = currentStatusInfo.icon;
 
   return (
     <div className="space-y-6">
@@ -137,8 +353,8 @@ export default function ManagerReportsPage() {
               </SelectTrigger>
               <SelectContent>
                 {agents.map((agent) => (
-                  <SelectItem key={agent.id} value={agent.id}>
-                    {agent.name}
+                  <SelectItem key={agent.membership_id} value={agent.membership_id}>
+                    {agent.email}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -154,18 +370,22 @@ export default function ManagerReportsPage() {
       </Card>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <form
+          onSubmit={form.handleSubmit((values) => submitReport(values, 'SUBMITTED'))}
+          className="space-y-6"
+        >
           <div className="flex justify-end gap-2">
             <Button
               variant="outline"
               type="button"
-              onClick={() =>
-                toast({ title: 'Modificările au fost salvate ca draft!' })
-              }
+              onClick={form.handleSubmit((values) => submitReport(values, 'DRAFT'))}
+              disabled={isLoading || isSaving}
             >
               Salvează modificări
             </Button>
-            <Button type="submit">Publică raportul</Button>
+            <Button type="submit" disabled={isLoading || isSaving}>
+              Publică raportul
+            </Button>
           </div>
           <div className="space-y-6">
             <Card>

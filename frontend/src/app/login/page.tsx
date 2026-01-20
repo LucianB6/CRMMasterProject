@@ -80,6 +80,22 @@ export default function LoginPage() {
     }
   });
 
+  const resolveLandingRoute = async (token: string) => {
+    try {
+      const response = await fetch(`${apiBaseUrl}/manager/overview/agents`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      if (response.ok) {
+        return "/dashboard/manager/overview";
+      }
+    } catch (error) {
+      console.warn("Failed to resolve manager route.", error);
+    }
+    return "/dashboard";
+  };
+
   const onSubmit = async (values: LoginFormValues) => {
     setIsSubmitting(true);
 
@@ -101,11 +117,12 @@ export default function LoginPage() {
 
       const payload = (await response.json()) as { token: string };
       localStorage.setItem("salesway_token", payload.token);
+      const landingRoute = await resolveLandingRoute(payload.token);
       toast({
         title: "Login Successful",
         description: "Redirecting to your dashboard..."
       });
-      router.push("/dashboard");
+      router.push(landingRoute);
     } catch (error) {
       toast({
         title: "Login failed",
