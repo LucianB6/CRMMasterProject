@@ -12,6 +12,7 @@ import com.salesway.companies.entity.Company;
 import com.salesway.companies.repository.CompanyRepository;
 import com.salesway.memberships.entity.CompanyMembership;
 import com.salesway.memberships.repository.CompanyMembershipRepository;
+import com.salesway.manager.service.ManagerAccessService;
 import com.salesway.notifications.service.NotificationService;
 import com.salesway.security.CustomUserDetails;
 import com.salesway.security.JwtService;
@@ -39,6 +40,7 @@ public class AuthService {
     private final CompanyMembershipRepository companyMembershipRepository;
     private final PasswordEncoder passwordEncoder;
     private final NotificationService notificationService;
+    private final ManagerAccessService managerAccessService;
 
     public AuthService(
             AuthenticationManager authenticationManager,
@@ -47,7 +49,8 @@ public class AuthService {
             CompanyRepository companyRepository,
             CompanyMembershipRepository companyMembershipRepository,
             PasswordEncoder passwordEncoder,
-            NotificationService notificationService
+            NotificationService notificationService,
+            ManagerAccessService managerAccessService
     ) {
         this.authenticationManager = authenticationManager;
         this.userRepository = userRepository;
@@ -56,6 +59,7 @@ public class AuthService {
         this.companyMembershipRepository = companyMembershipRepository;
         this.passwordEncoder = passwordEncoder;
         this.notificationService = notificationService;
+        this.managerAccessService = managerAccessService;
     }
 
     @Transactional
@@ -88,13 +92,16 @@ public class AuthService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Email already in use");
         }
 
+        CompanyMembership managerMembership = managerAccessService.getManagerMembership();
         User user = new User();
         user.setEmail(normalizedEmail);
+        user.setFirstName(request.getFirstName());
+        user.setLastName(request.getLastName());
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
         user.setPasswordUpdatedAt(Instant.now());
         user.setLastLoginAt(Instant.now());
         user = userRepository.save(user);
-        ensureMembership(user);
+        createMembershipForManager(user, managerMembership, request.getRole());
 
         String token = jwtService.generateToken(
                 user.getEmail(),
@@ -108,6 +115,10 @@ public class AuthService {
         String password = request.getPassword();
         if (password == null || password.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password is required");
+        }
+
+        if (!password.equals(request.getRetypePassword())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Passwords do not match");
         }
 
         String emailLocalPart = normalizedEmail.split("@", 2)[0];
@@ -151,6 +162,23 @@ public class AuthService {
         membership.setRole(MembershipRole.AGENT);
         membership.setStatus(MembershipStatus.ACTIVE);
         membership.setManagerMembership(managerMembership);
+        companyMembershipRepository.save(membership);
+    }
+
+    private void createMembershipForManager(
+            User user,
+            CompanyMembership managerMembership,
+            MembershipRole membershipRole
+    ) {
+        CompanyMembership membership = new CompanyMembership();
+        membership.setCompany(managerMembership.getCompany());
+        membership.setUser(user);
+        MembershipRole resolvedRole = membershipRole == null ? MembershipRole.AGENT : membershipRole;
+        membership.setRole(resolvedRole);
+        membership.setStatus(MembershipStatus.ACTIVE);
+        if (resolvedRole == MembershipRole.AGENT) {
+            membership.setManagerMembership(managerMembership);
+        }
         companyMembershipRepository.save(membership);
     }
 
