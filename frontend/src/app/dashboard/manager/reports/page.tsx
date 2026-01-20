@@ -6,14 +6,14 @@ import * as z from 'zod';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { CheckCircle, Clock, Lock } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
+import { Button } from '../../../../components/ui/button';
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
+} from '../../../../components/ui/card';
 import {
   Form,
   FormControl,
@@ -21,19 +21,19 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { cn } from '@/lib/utils';
-import { useToast } from '@/hooks/use-toast';
+} from '../../../../components/ui/form';
+import { Input } from '../../../../components/ui/input';
+import { Textarea } from '../../../../components/ui/textarea';
+import { cn } from '../../../../lib/utils';
+import { useToast } from '../../../../hooks/use-toast';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
+} from '../../../../components/ui/select';
+import { Label } from '../../../../components/ui/label';
 
 const reportSchema = z.object({
   outbound_dials: z.coerce.number().int().min(0, 'Valoare pozitivă necesară.'),
