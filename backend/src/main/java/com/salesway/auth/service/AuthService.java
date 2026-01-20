@@ -99,16 +99,10 @@ public class AuthService {
         user.setLastName(request.getLastName());
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
         user.setPasswordUpdatedAt(Instant.now());
-        user.setLastLoginAt(Instant.now());
         user = userRepository.save(user);
         createMembershipForManager(user, managerMembership, request.getRole());
 
-        String token = jwtService.generateToken(
-                user.getEmail(),
-                Map.of("userId", user.getId().toString())
-        );
-
-        return new SignupResponse(token, user.getId(), user.getEmail(), user.getLastLoginAt());
+        return new SignupResponse(user.getId(), user.getEmail());
     }
 
     private void validateSignup(SignupRequest request, String normalizedEmail) {
