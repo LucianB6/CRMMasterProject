@@ -17,7 +17,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 @RestController
-@RequestMapping("/calendar/events")
+@RequestMapping({"/calendar/events", "/api/calendar/events"})
 public class CalendarEventController {
     private final CalendarEventService calendarEventService;
 
