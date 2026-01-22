@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -88,6 +88,15 @@ type Goal = {
   dateTo: Date;
 };
 
+type ApiGoal = {
+  id: string;
+  title: string;
+  metricKey: string;
+  target: number;
+  dateFrom: string;
+  dateTo: string;
+};
+
 type ReportInputs = {
   outbound_dials: number;
   pickups: number;
@@ -124,12 +133,11 @@ const emptyInputs: ReportInputs = {
   new_cash_collected: 0,
 };
 
-const goalsStorageKey = 'salesway_goals';
-
 export default function GoalsPage() {
   const { toast } = useToast();
   const [goals, setGoals] = useState<Goal[]>([]);
   const [isAddGoalDialogOpen, setIsAddGoalDialogOpen] = useState(false);
+  const [isGoalsLoading, setIsGoalsLoading] = useState(false);
   const [reportInputs, setReportInputs] = useState<ReportInputs>(emptyInputs);
   const [isReportLoading, setIsReportLoading] = useState(true);
 
@@ -146,41 +154,50 @@ export default function GoalsPage() {
     },
   });
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const stored = window.localStorage.getItem(goalsStorageKey);
-    if (!stored) return;
-    try {
-      const parsed = JSON.parse(stored) as Array<{
-        id: string;
-        title: string;
-        metricKey: string;
-        target: number;
-        dateFrom: string;
-        dateTo: string;
-      }>;
-      const restored = parsed
-        .map((goal) => ({
-          ...goal,
-          dateFrom: new Date(goal.dateFrom),
-          dateTo: new Date(goal.dateTo),
-        }))
-        .filter(
-          (goal) =>
-            Number.isFinite(goal.target) &&
-            !Number.isNaN(goal.dateFrom.getTime()) &&
-            !Number.isNaN(goal.dateTo.getTime())
-        );
-      setGoals(restored);
-    } catch (error) {
-      console.error('Failed to parse saved goals', error);
+  const getAuthToken = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return null;
     }
+    return window.localStorage.getItem('salesway_token');
   }, []);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(goalsStorageKey, JSON.stringify(goals));
-  }, [goals]);
+  const normalizeGoal = useCallback((goal: ApiGoal): Goal => {
+    return {
+      id: goal.id,
+      title: goal.title,
+      metricKey: goal.metricKey,
+      target: goal.target,
+      dateFrom: new Date(goal.dateFrom),
+      dateTo: new Date(goal.dateTo),
+    };
+  }, []);
+
+  const fetchGoals = useCallback(async () => {
+    try {
+      setIsGoalsLoading(true);
+      const token = getAuthToken();
+      const response = await fetch(`${apiBaseUrl}/goals`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || `Status ${response.status}`);
+      }
+
+      const data = (await response.json()) as ApiGoal[];
+      setGoals(data.map(normalizeGoal));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Eroare necunoscută';
+      toast({
+        title: 'Nu am putut încărca obiectivele',
+        description: message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsGoalsLoading(false);
+    }
+  }, [apiBaseUrl, getAuthToken, normalizeGoal, toast]);
 
   useEffect(() => {
     const fetchReport = async () => {
@@ -220,35 +237,81 @@ export default function GoalsPage() {
     void fetchReport();
   }, [apiBaseUrl, toast]);
 
-  function handleAddGoal(values: z.infer<typeof goalSchema>) {
+  async function handleAddGoal(values: z.infer<typeof goalSchema>) {
     const metric = availableMetrics.find((m) => m.key === values.metricKey);
     if (!metric) return;
 
-    const newGoal: Goal = {
-      id: `goal_${Date.now()}`,
-      title: metric.label,
-      metricKey: values.metricKey,
-      target: values.target,
-      dateFrom: values.dateFrom,
-      dateTo: values.dateTo,
-    };
+    try {
+      const token = getAuthToken();
+      const response = await fetch(`${apiBaseUrl}/goals`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          title: metric.label,
+          metricKey: values.metricKey,
+          target: values.target,
+          dateFrom: format(values.dateFrom, 'yyyy-MM-dd'),
+          dateTo: format(values.dateTo, 'yyyy-MM-dd'),
+        }),
+      });
 
-    setGoals((prev) => [...prev, newGoal]);
-    setIsAddGoalDialogOpen(false);
-    form.reset();
-    toast({
-      title: 'Obiectiv adăugat!',
-      description: `Ai setat un nou obiectiv: ${newGoal.title}.`,
-    });
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || `Status ${response.status}`);
+      }
+
+      const savedGoal = normalizeGoal((await response.json()) as ApiGoal);
+      setGoals((prev) => [savedGoal, ...prev]);
+      setIsAddGoalDialogOpen(false);
+      form.reset();
+      toast({
+        title: 'Obiectiv adăugat!',
+        description: `Ai setat un nou obiectiv: ${savedGoal.title}.`,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Eroare necunoscută';
+      toast({
+        title: 'Nu am putut salva obiectivul',
+        description: message,
+        variant: 'destructive',
+      });
+    }
   }
 
-  function handleDeleteGoal(goalId: string) {
-    setGoals((prev) => prev.filter((g) => g.id !== goalId));
-    toast({
-      title: 'Obiectiv șters.',
-      variant: 'destructive',
-    });
+  async function handleDeleteGoal(goalId: string) {
+    try {
+      const token = getAuthToken();
+      const response = await fetch(`${apiBaseUrl}/goals/${goalId}`, {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || `Status ${response.status}`);
+      }
+
+      setGoals((prev) => prev.filter((g) => g.id !== goalId));
+      toast({
+        title: 'Obiectiv șters.',
+        variant: 'destructive',
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Eroare necunoscută';
+      toast({
+        title: 'Nu am putut șterge obiectivul',
+        description: message,
+        variant: 'destructive',
+      });
+    }
   }
+
+  useEffect(() => {
+    void fetchGoals();
+  }, [fetchGoals]);
 
   return (
     <div className="space-y-6">
@@ -268,9 +331,13 @@ export default function GoalsPage() {
       {goals.length === 0 ? (
         <Card className="flex flex-col items-center justify-center gap-4 py-16 text-center">
           <Target className="h-16 w-16 text-muted-foreground" />
-          <h3 className="text-xl font-semibold">Niciun obiectiv setat</h3>
+          <h3 className="text-xl font-semibold">
+            {isGoalsLoading ? 'Se încarcă obiectivele...' : 'Niciun obiectiv setat'}
+          </h3>
           <p className="text-muted-foreground">
-            Apasă pe &quot;Adaugă Obiectiv&quot; pentru a începe.
+            {isGoalsLoading
+              ? 'Așteaptă puțin, încărcăm datele.'
+              : 'Apasă pe &quot;Adaugă Obiectiv&quot; pentru a începe.'}
           </p>
         </Card>
       ) : (
