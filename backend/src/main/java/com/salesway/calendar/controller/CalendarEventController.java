@@ -8,13 +8,16 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping({"/calendar/events", "/api/calendar/events"})
@@ -38,5 +41,13 @@ public class CalendarEventController {
             @Valid @RequestBody CalendarEventRequest request
     ) {
         return ResponseEntity.ok(calendarEventService.createEvent(request));
+    }
+
+    @PutMapping("/{eventId}")
+    public ResponseEntity<CalendarEventResponse> updateEvent(
+            @PathVariable UUID eventId,
+            @Valid @RequestBody CalendarEventRequest request
+    ) {
+        return ResponseEntity.ok(calendarEventService.updateEvent(eventId, request));
     }
 }
