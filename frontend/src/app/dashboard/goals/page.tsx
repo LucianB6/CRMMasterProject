@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -15,7 +15,6 @@ import {
   CardDescription,
 } from '../../../components/ui/card';
 import { Progress } from '../../../components/ui/progress';
-import { agentReports } from '../../../lib/mock-data';
 import { Button } from '../../../components/ui/button';
 import {
   Dialog,
@@ -89,12 +88,55 @@ type Goal = {
   dateTo: Date;
 };
 
-const currentReportData = agentReports['john-p'].data;
+type ReportInputs = {
+  outbound_dials: number;
+  pickups: number;
+  conversations_30s_plus: number;
+  sales_call_booked_from_outbound: number;
+  sales_call_on_calendar: number;
+  no_show: number;
+  reschedule_request: number;
+  cancel: number;
+  deposits: number;
+  sales_one_call_close: number;
+  followup_sales: number;
+  upsell_conversation_taken: number;
+  upsells: number;
+  contract_value: number;
+  new_cash_collected: number;
+};
+
+const emptyInputs: ReportInputs = {
+  outbound_dials: 0,
+  pickups: 0,
+  conversations_30s_plus: 0,
+  sales_call_booked_from_outbound: 0,
+  sales_call_on_calendar: 0,
+  no_show: 0,
+  reschedule_request: 0,
+  cancel: 0,
+  deposits: 0,
+  sales_one_call_close: 0,
+  followup_sales: 0,
+  upsell_conversation_taken: 0,
+  upsells: 0,
+  contract_value: 0,
+  new_cash_collected: 0,
+};
+
+const goalsStorageKey = 'salesway_goals';
 
 export default function GoalsPage() {
   const { toast } = useToast();
   const [goals, setGoals] = useState<Goal[]>([]);
   const [isAddGoalDialogOpen, setIsAddGoalDialogOpen] = useState(false);
+  const [reportInputs, setReportInputs] = useState<ReportInputs>(emptyInputs);
+  const [isReportLoading, setIsReportLoading] = useState(true);
+
+  const apiBaseUrl = useMemo(
+    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8081',
+    []
+  );
 
   const form = useForm<z.infer<typeof goalSchema>>({
     resolver: zodResolver(goalSchema),
@@ -103,6 +145,80 @@ export default function GoalsPage() {
       target: 0,
     },
   });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const stored = window.localStorage.getItem(goalsStorageKey);
+    if (!stored) return;
+    try {
+      const parsed = JSON.parse(stored) as Array<{
+        id: string;
+        title: string;
+        metricKey: string;
+        target: number;
+        dateFrom: string;
+        dateTo: string;
+      }>;
+      const restored = parsed
+        .map((goal) => ({
+          ...goal,
+          dateFrom: new Date(goal.dateFrom),
+          dateTo: new Date(goal.dateTo),
+        }))
+        .filter(
+          (goal) =>
+            Number.isFinite(goal.target) &&
+            !Number.isNaN(goal.dateFrom.getTime()) &&
+            !Number.isNaN(goal.dateTo.getTime())
+        );
+      setGoals(restored);
+    } catch (error) {
+      console.error('Failed to parse saved goals', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(goalsStorageKey, JSON.stringify(goals));
+  }, [goals]);
+
+  useEffect(() => {
+    const fetchReport = async () => {
+      if (typeof window === 'undefined') return;
+      const token = window.localStorage.getItem('salesway_token');
+      if (!token) {
+        setIsReportLoading(false);
+        return;
+      }
+
+      try {
+        const response = await fetch(`${apiBaseUrl}/reports/daily/today`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (!response.ok) {
+          throw new Error('Failed to fetch report');
+        }
+        const data = (await response.json()) as { inputs?: Partial<ReportInputs> };
+        setReportInputs({
+          ...emptyInputs,
+          ...(data.inputs ?? {}),
+        });
+      } catch (error) {
+        console.error('Failed to load report inputs', error);
+        toast({
+          title: 'Nu am putut încărca raportul de azi.',
+          description: 'Verifică conexiunea și încearcă din nou.',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsReportLoading(false);
+      }
+    };
+
+    void fetchReport();
+  }, [apiBaseUrl, toast]);
 
   function handleAddGoal(values: z.infer<typeof goalSchema>) {
     const metric = availableMetrics.find((m) => m.key === values.metricKey);
@@ -163,13 +279,10 @@ export default function GoalsPage() {
             let currentValue = 0;
             if (goal.metricKey === 'total_sales') {
               currentValue =
-                (currentReportData.sales_one_call_close || 0) +
-                (currentReportData.followup_sales || 0);
+                reportInputs.sales_one_call_close + reportInputs.followup_sales;
             } else {
               const reportValue =
-                currentReportData[
-                  goal.metricKey as keyof typeof currentReportData
-                ];
+                reportInputs[goal.metricKey as keyof ReportInputs];
               currentValue = typeof reportValue === 'number' ? reportValue : 0;
             }
 
@@ -220,7 +333,9 @@ export default function GoalsPage() {
                   <Progress value={progressPercentage} />
                   <div className="flex justify-between text-sm font-medium text-muted-foreground">
                     <span>Progres</span>
-                    <span>{fullDisplay}</span>
+                    <span>
+                      {isReportLoading ? 'Se încarcă...' : fullDisplay}
+                    </span>
                   </div>
                 </CardContent>
               </Card>
