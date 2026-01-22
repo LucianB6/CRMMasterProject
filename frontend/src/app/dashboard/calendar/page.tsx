@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
+import { useCallback, useMemo, useState, useEffect } from 'react';
 import {
   addMonths,
   addWeeks,
@@ -11,6 +11,7 @@ import {
   isSameDay,
   isSameMonth,
   isToday,
+  parseISO,
   startOfMonth,
   startOfWeek,
   subMonths,
@@ -68,10 +69,19 @@ const eventSchema = z
   });
 
 type Event = {
+  id: string;
   date: Date;
   title: string;
   startTime: string;
   endTime: string;
+};
+
+type ApiCalendarEvent = {
+  id: string;
+  event_date: string;
+  title: string;
+  start_time: string;
+  end_time: string;
 };
 
 export default function CalendarPage() {
@@ -81,8 +91,20 @@ export default function CalendarPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [view, setView] = useState<'month' | 'week'>('month');
+  const [isLoadingEvents, setIsLoadingEvents] = useState(true);
 
   const [hourHeight, setHourHeight] = useState(64);
+  const apiBaseUrl = useMemo(
+    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8081',
+    []
+  );
+
+  const getAuthToken = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+    return window.localStorage.getItem('salesway_token');
+  }, []);
 
   useEffect(() => {
     const handleResize = () => {
@@ -187,15 +209,104 @@ export default function CalendarPage() {
     form.reset({ title: '', startTime: '', endTime: '' });
   };
 
-  function onSubmit(values: z.infer<typeof eventSchema>) {
-    if (selectedDate) {
-      const newEvent: Event = {
-        date: selectedDate,
-        title: values.title,
-        startTime: values.startTime,
-        endTime: values.endTime,
-      };
-      setEvents([...events, newEvent]);
+  const normalizeEvent = useCallback((event: ApiCalendarEvent): Event => {
+    return {
+      id: event.id,
+      date: parseISO(event.event_date),
+      title: event.title,
+      startTime: event.start_time,
+      endTime: event.end_time,
+    };
+  }, []);
+
+  const formatIsoDate = useCallback((date: Date) => {
+    return format(date, 'yyyy-MM-dd');
+  }, []);
+
+  const fetchEvents = useCallback(
+    async (from: Date, to: Date) => {
+      try {
+        setIsLoadingEvents(true);
+        const token = getAuthToken();
+        const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+        const response = await fetch(
+          `${apiBaseUrl}/calendar/events?from=${formatIsoDate(
+            from
+          )}&to=${formatIsoDate(to)}`,
+          { headers }
+        );
+
+        if (!response.ok) {
+          const message = await response.text();
+          throw new Error(message || `Status ${response.status}`);
+        }
+
+        const data = (await response.json()) as ApiCalendarEvent[];
+        setEvents(data.map(normalizeEvent));
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Eroare necunoscută';
+        toast({
+          title: 'Nu am putut încărca evenimentele',
+          description: message,
+          variant: 'destructive',
+        });
+      } finally {
+        setIsLoadingEvents(false);
+      }
+    },
+    [apiBaseUrl, formatIsoDate, getAuthToken, normalizeEvent, toast]
+  );
+
+  const upsertEvent = useCallback((event: Event) => {
+    setEvents((previous) => {
+      const existingIndex = previous.findIndex(
+        (item) => item.id === event.id
+      );
+      if (existingIndex === -1) {
+        return [...previous, event].sort((a, b) => {
+          if (a.date.getTime() === b.date.getTime()) {
+            return a.startTime.localeCompare(b.startTime);
+          }
+          return a.date.getTime() - b.date.getTime();
+        });
+      }
+      const next = [...previous];
+      next[existingIndex] = event;
+      return next;
+    });
+  }, []);
+
+  async function onSubmit(values: z.infer<typeof eventSchema>) {
+    if (!selectedDate) {
+      return;
+    }
+
+    try {
+      const token = getAuthToken();
+      const response = await fetch(`${apiBaseUrl}/calendar/events`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          title: values.title,
+          event_date: formatIsoDate(selectedDate),
+          start_time: values.startTime,
+          end_time: values.endTime,
+        }),
+      });
+
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || `Status ${response.status}`);
+      }
+
+      const createdEvent = normalizeEvent(
+        (await response.json()) as ApiCalendarEvent
+      );
+      upsertEvent(createdEvent);
       toast({
         title: 'Eveniment adăugat',
         description: `Evenimentul "${values.title}" a fost adăugat pe ${format(
@@ -205,6 +316,14 @@ export default function CalendarPage() {
         )} între orele ${values.startTime} - ${values.endTime}.`,
       });
       setIsDialogOpen(false);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Eroare necunoscută';
+      toast({
+        title: 'Nu am putut salva evenimentul',
+        description: message,
+        variant: 'destructive',
+      });
     }
   }
 
@@ -218,6 +337,13 @@ export default function CalendarPage() {
     events
       .filter((event) => isSameDay(event.date, day))
       .sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+  useEffect(() => {
+    if (!days.length) {
+      return;
+    }
+    void fetchEvents(days[0], days[days.length - 1]);
+  }, [days, fetchEvents]);
 
   return (
     <div className="space-y-6">
@@ -295,13 +421,18 @@ export default function CalendarPage() {
                     <div className="mt-7 space-y-1 sm:mt-8">
                       {dayEvents.slice(0, 2).map((event, index) => (
                         <div
-                          key={index}
+                          key={event.id}
                           className="overflow-hidden rounded-md bg-accent p-1 px-1.5 text-xs text-accent-foreground sm:px-2"
                         >
                           <div className="font-semibold">{`${event.startTime}`}</div>
                           <div className="truncate">{event.title}</div>
                         </div>
                       ))}
+                      {isLoadingEvents && dayEvents.length === 0 && (
+                        <div className="text-[10px] text-muted-foreground">
+                          Se încarcă...
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -368,7 +499,7 @@ export default function CalendarPage() {
                         />
                       ))}
 
-                      {getEventsForDay(day).map((event, eventIndex) => {
+                      {getEventsForDay(day).map((event) => {
                         const top = timeToPosition(event.startTime);
                         const height =
                           timeToPosition(event.endTime) -
@@ -376,7 +507,7 @@ export default function CalendarPage() {
 
                         return (
                           <div
-                            key={eventIndex}
+                            key={event.id}
                             className="absolute z-10 w-full cursor-default overflow-hidden rounded-md border bg-primary/80 p-1 text-xs text-primary-foreground shadow-md backdrop-blur-sm sm:p-2"
                             style={{
                               top: `${top}px`,
