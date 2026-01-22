@@ -83,17 +83,22 @@ export default function LoginPage() {
   const resolveLandingRoute = async (token: string) => {
     try {
       const response = await fetch(`${apiBaseUrl}/manager/overview/agents`, {
+        method: "GET",
         headers: {
           Authorization: `Bearer ${token}`
-        }
+        },
+        cache: "no-store"
       });
       if (response.ok) {
-        return "/dashboard/manager/overview";
+        return { route: "/dashboard/manager/overview", role: "manager" };
       }
-    } catch (error) {
-      console.warn("Failed to resolve manager route.", error);
+      if (response.status === 401 || response.status === 403) {
+        return { route: "/dashboard", role: "agent" };
+      }
+    } catch {
+      // Swallow probe errors to avoid leaking role information.
     }
-    return "/dashboard";
+    return { route: "/dashboard", role: "agent" };
   };
 
   const onSubmit = async (values: LoginFormValues) => {
@@ -117,7 +122,10 @@ export default function LoginPage() {
 
       const payload = (await response.json()) as { token: string };
       localStorage.setItem("salesway_token", payload.token);
-      const landingRoute = await resolveLandingRoute(payload.token);
+      const { route: landingRoute, role } = await resolveLandingRoute(
+        payload.token
+      );
+      localStorage.setItem("userRole", role);
       toast({
         title: "Login Successful",
         description: "Redirecting to your dashboard..."
