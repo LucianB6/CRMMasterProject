@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Calendar as CalendarIcon, MoreHorizontal } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -61,47 +61,48 @@ const taskSchema = z.object({
 
 type Task = z.infer<typeof taskSchema> & { id: string };
 
+type ApiTask = {
+  id: string;
+  title: string;
+  goal: string | null;
+  deadline: string | null;
+  status: TaskStatus;
+};
+
 const statusConfig: Record<TaskStatus, { title: string }> = {
   todo: { title: 'De făcut' },
   'in-progress': { title: 'În progres' },
   done: { title: 'Finalizat' },
 };
 
-const initialTasks: Task[] = [
-  {
-    id: 'task-1',
-    title: 'Pregătește prezentarea de vânzări Q3',
-    goal: 'Finalizează slide-urile și research-ul concurenței.',
-    deadline: new Date(new Date().setDate(new Date().getDate() + 3)),
-    status: 'in-progress',
-  },
-  {
-    id: 'task-2',
-    title: 'Follow-up cu lead-urile din conferință',
-    goal: 'Trimite emailuri personalizate către cele 15 contacte noi.',
-    status: 'todo',
-  },
-  {
-    id: 'task-3',
-    title: 'Actualizează profilul CRM',
-    goal: 'Adaugă noile interacțiuni și note pentru clienții cheie.',
-    deadline: new Date(),
-    status: 'todo',
-  },
-  {
-    id: 'task-4',
-    title: 'Finalizează raportul lunar',
-    goal: 'Compilează datele de performanță și trimite managerului.',
-    deadline: new Date(new Date().setDate(new Date().getDate() - 1)),
-    status: 'done',
-  },
-];
-
 export default function TasksPage() {
   const { toast } = useToast();
-  const [tasks, setTasks] = useState<Task[]>(initialTasks);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const apiBaseUrl = useMemo(
+    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8081',
+    []
+  );
+
+  const getAuthToken = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+    return window.localStorage.getItem('salesway_token');
+  }, []);
+
+  const normalizeTask = useCallback((task: ApiTask): Task => {
+    return {
+      id: task.id,
+      title: task.title,
+      goal: task.goal ?? '',
+      deadline: task.deadline ? new Date(task.deadline) : undefined,
+      status: task.status,
+    };
+  }, []);
 
   const form = useForm<z.infer<typeof taskSchema>>({
     resolver: zodResolver(taskSchema),
@@ -121,38 +122,126 @@ export default function TasksPage() {
 
   const openDialogForEdit = (task: Task) => {
     setEditingTask(task);
-    form.reset(task);
+    form.reset({
+      title: task.title,
+      goal: task.goal ?? '',
+      deadline: task.deadline,
+      status: task.status,
+    });
     setIsDialogOpen(true);
   };
 
-  function onSubmit(values: z.infer<typeof taskSchema>) {
-    if (editingTask) {
-      setTasks((prev) =>
-        prev.map((t) => (t.id === editingTask.id ? { ...t, ...values } : t))
-      );
+  const fetchTasks = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const token = getAuthToken();
+      const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+      const response = await fetch(`${apiBaseUrl}/tasks/board`, { headers });
+
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || `Status ${response.status}`);
+      }
+
+      const data = (await response.json()) as ApiTask[];
+      setTasks(data.map(normalizeTask));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Eroare necunoscută';
       toast({
-        title: 'Task actualizat!',
-        description: `Task-ul "${values.title}" a fost modificat.`,
+        title: 'Nu am putut încărca task-urile',
+        description: message,
+        variant: 'destructive',
       });
-    } else {
-      const newTask: Task = { ...values, id: `task_${Date.now()}` };
-      setTasks((prev) => [...prev, newTask]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [apiBaseUrl, getAuthToken, normalizeTask, toast]);
+
+  async function onSubmit(values: z.infer<typeof taskSchema>) {
+    try {
+      const token = getAuthToken();
+      const response = await fetch(
+        `${apiBaseUrl}/tasks/board${editingTask ? `/${editingTask.id}` : ''}`,
+        {
+          method: editingTask ? 'PUT' : 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            title: values.title,
+            goal: values.goal,
+            deadline: values.deadline ? format(values.deadline, 'yyyy-MM-dd') : null,
+            status: values.status,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || `Status ${response.status}`);
+      }
+
+      const savedTask = normalizeTask((await response.json()) as ApiTask);
+      setTasks((prev) => {
+        const existingIndex = prev.findIndex((task) => task.id === savedTask.id);
+        if (existingIndex === -1) {
+          return [savedTask, ...prev];
+        }
+        const next = [...prev];
+        next[existingIndex] = savedTask;
+        return next;
+      });
+
       toast({
-        title: 'Task adăugat!',
-        description: `Task-ul "${values.title}" a fost adăugat.`,
+        title: editingTask ? 'Task actualizat!' : 'Task adăugat!',
+        description: `Task-ul "${savedTask.title}" a fost ${
+          editingTask ? 'modificat' : 'adăugat'
+        }.`,
+      });
+
+      setIsDialogOpen(false);
+      setEditingTask(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Eroare necunoscută';
+      toast({
+        title: 'Nu am putut salva task-ul',
+        description: message,
+        variant: 'destructive',
       });
     }
-
-    setIsDialogOpen(false);
-    setEditingTask(null);
   }
 
-  const deleteTask = (taskId: string) => {
-    setTasks((prev) => prev.filter((t) => t.id !== taskId));
-    toast({ title: 'Task șters.', variant: 'destructive' });
+  const deleteTask = async (taskId: string) => {
+    try {
+      const token = getAuthToken();
+      const response = await fetch(`${apiBaseUrl}/tasks/board/${taskId}`, {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || `Status ${response.status}`);
+      }
+
+      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      toast({ title: 'Task șters.' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Eroare necunoscută';
+      toast({
+        title: 'Nu am putut șterge task-ul',
+        description: message,
+        variant: 'destructive',
+      });
+    }
   };
 
   const columns: TaskStatus[] = ['todo', 'in-progress', 'done'];
+
+  useEffect(() => {
+    void fetchTasks();
+  }, [fetchTasks]);
 
   return (
     <div className="flex h-full flex-col space-y-6">
@@ -175,16 +264,20 @@ export default function TasksPage() {
               <CardTitle>{statusConfig[status].title}</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              {tasks
-                .filter((t) => t.status === status)
-                .map((task) => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    onEdit={openDialogForEdit}
-                    onDelete={deleteTask}
-                  />
-                ))}
+              {isLoading ? (
+                <p className="text-sm text-muted-foreground">Se încarcă...</p>
+              ) : (
+                tasks
+                  .filter((t) => t.status === status)
+                  .map((task) => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      onEdit={openDialogForEdit}
+                      onDelete={deleteTask}
+                    />
+                  ))
+              )}
             </CardContent>
           </Card>
         ))}
