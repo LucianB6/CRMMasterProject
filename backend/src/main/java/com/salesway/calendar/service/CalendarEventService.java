@@ -19,6 +19,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 public class CalendarEventService {
@@ -55,6 +56,24 @@ public class CalendarEventService {
 
         CalendarEvent event = new CalendarEvent();
         event.setMembership(membership);
+        event.setEventDate(request.getEventDate());
+        event.setStartTime(request.getStartTime());
+        event.setEndTime(request.getEndTime());
+        event.setTitle(request.getTitle());
+
+        CalendarEvent saved = calendarEventRepository.save(event);
+        return toResponse(saved);
+    }
+
+    @Transactional
+    public CalendarEventResponse updateEvent(UUID eventId, CalendarEventRequest request) {
+        validateTimeRange(request.getStartTime(), request.getEndTime());
+        CompanyMembership membership = getReportingMembership(true);
+
+        CalendarEvent event = calendarEventRepository
+                .findByIdAndMembershipId(eventId, membership.getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found"));
+
         event.setEventDate(request.getEventDate());
         event.setStartTime(request.getStartTime());
         event.setEndTime(request.getEndTime());
