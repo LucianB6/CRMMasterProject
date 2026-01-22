@@ -35,6 +35,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Button } from '../../components/ui/button';
 import { Separator } from '../../components/ui/separator';
+import { Skeleton } from '../../components/ui/skeleton';
 import { useToast } from '../../hooks/use-toast';
 import { cn } from '../../lib/utils';
 
@@ -179,6 +180,9 @@ const notifications = [
 export default function DashboardPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const [isRoleChecked, setIsRoleChecked] = useState(false);
+  const [isReportLoading, setIsReportLoading] = useState(true);
+  const [isChartsLoading, setIsChartsLoading] = useState(true);
   const [reportStatus, setReportStatus] = useState<ReportStatus>('draft');
   const [report, setReport] = useState<NormalizedReport>(emptyReport);
   const [historyLast7Days, setHistoryLast7Days] = useState<ChartPoint[]>([]);
@@ -250,6 +254,15 @@ export default function DashboardPage() {
       maximumFractionDigits: 0,
     }).format(value);
   }, []);
+
+  useEffect(() => {
+    const role = window.localStorage.getItem('userRole');
+    if (role === 'manager') {
+      router.replace('/dashboard/manager/overview');
+      return;
+    }
+    setIsRoleChecked(true);
+  }, [router]);
 
   const buildHistorySeries = useCallback(
     (
@@ -335,6 +348,8 @@ export default function DashboardPage() {
           description: message,
           variant: 'destructive',
         });
+      } finally {
+        setIsReportLoading(false);
       }
     };
 
@@ -387,6 +402,8 @@ export default function DashboardPage() {
           description: message,
           variant: 'destructive',
         });
+      } finally {
+        setIsChartsLoading(false);
       }
     };
 
@@ -431,6 +448,26 @@ export default function DashboardPage() {
       report.inputs.sales_one_call_close,
     ]
   );
+
+  const isLoading = !isRoleChecked || isReportLoading || isChartsLoading;
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-24 w-full" />
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-48" />
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <Skeleton className="h-28 w-full" />
+            <Skeleton className="h-28 w-full" />
+            <Skeleton className="h-28 w-full" />
+            <Skeleton className="h-28 w-full" />
+          </div>
+        </div>
+        <Skeleton className="h-96 w-full" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6">

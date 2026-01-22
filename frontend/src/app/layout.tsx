@@ -1,11 +1,12 @@
-import type { Metadata } from "next";
-import "./globals.css";
-import { Toaster } from "../components/ui/toaster";
-import { cn } from "../lib/utils";
+import type { Metadata } from 'next';
+import './globals.css';
+import { Toaster } from '../components/ui/toaster';
+import { cn } from '../lib/utils';
+import { AppThemeProvider } from '../components/theme-provider';
 
 export const metadata: Metadata = {
-  title: "SalesWay",
-  description: "The workspace for high-performance sales teams."
+  title: 'SalesWay',
+  description: 'The workspace for high-performance sales teams.',
 };
 
 export default function RootLayout({
@@ -27,9 +28,16 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className={cn("font-body antialiased")}>
-        {children}
-        <Toaster />
+      <body className={cn('font-body antialiased')}>
+        <AppThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          {children}
+          <Toaster />
+        </AppThemeProvider>
       </body>
     </html>
   );

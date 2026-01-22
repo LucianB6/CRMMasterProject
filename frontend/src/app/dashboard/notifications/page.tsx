@@ -7,11 +7,11 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Separator } from '@/components/ui/separator';
-import { cn } from '@/lib/utils';
-import { useToast } from '@/hooks/use-toast';
+} from './../../../components/ui/card';
+import { Avatar, AvatarFallback } from './../../../components/ui/avatar';
+import { Separator } from './../../../components/ui/separator';
+import { cn } from './../../../lib/utils';
+import { useToast } from './../../../hooks/use-toast';
 
 type ManagerNotification = {
   id: string;

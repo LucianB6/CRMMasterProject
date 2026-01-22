@@ -4,7 +4,6 @@ import {
   Bell,
   ChevronDown,
   LogOut,
-  MessageCircle,
   Settings,
   User
 } from "lucide-react";
@@ -22,9 +21,7 @@ import {
 } from "../ui/dropdown-menu";
 import { SidebarTrigger } from "../ui/sidebar";
 import { PlaceHolderImages } from "../../lib/placeholder-images";
-import { AiAssistant } from "./ai-assistant";
-
-const agentAvatar = PlaceHolderImages.find((img) => img.id === "avatar-2");
+const managerAvatar = PlaceHolderImages.find((img) => img.id === "avatar-4");
 
 export function DashboardHeader() {
   return (
@@ -35,17 +32,12 @@ export function DashboardHeader() {
       </div>
 
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" className="rounded-full">
-          <Bell className="h-5 w-5" />
-          <span className="sr-only">Notifications</span>
+        <Button asChild variant="ghost" size="icon" className="rounded-full">
+          <Link href="/dashboard/notifications">
+            <Bell className="h-5 w-5" />
+            <span className="sr-only">Notifications</span>
+          </Link>
         </Button>
-
-        <AiAssistant>
-          <Button variant="outline">
-            <MessageCircle className="mr-2 h-4 w-4" />
-            AI Assistant
-          </Button>
-        </AiAssistant>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -54,28 +46,32 @@ export function DashboardHeader() {
               className="flex items-center gap-2 rounded-full p-1"
             >
               <Avatar className="h-8 w-8">
-                {agentAvatar && (
+                {managerAvatar && (
                   <AvatarImage
-                    src={agentAvatar.imageUrl}
-                    alt={agentAvatar.description}
+                    src={managerAvatar.imageUrl}
+                    alt={managerAvatar.description}
                   />
                 )}
-                <AvatarFallback>AD</AvatarFallback>
+                <AvatarFallback>JS</AvatarFallback>
               </Avatar>
-              <span className="hidden md:inline">Alex Doe</span>
+              <span className="hidden md:inline">Jane Smith</span>
               <ChevronDown className="hidden h-4 w-4 md:inline" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>My Account</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <User className="mr-2 h-4 w-4" />
-              <span>Profile</span>
+            <DropdownMenuItem asChild>
+              <Link href="/dashboard/profile">
+                <User className="mr-2 h-4 w-4" />
+                <span>Profile</span>
+              </Link>
             </DropdownMenuItem>
-            <DropdownMenuItem>
-              <Settings className="mr-2 h-4 w-4" />
-              <span>Settings</span>
+            <DropdownMenuItem asChild>
+              <Link href="/dashboard/settings">
+                <Settings className="mr-2 h-4 w-4" />
+                <span>Settings</span>
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
