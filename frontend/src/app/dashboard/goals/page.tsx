@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -15,7 +15,6 @@ import {
   CardDescription,
 } from '../../../components/ui/card';
 import { Progress } from '../../../components/ui/progress';
-import { agentReports } from '../../../lib/mock-data';
 import { Button } from '../../../components/ui/button';
 import {
   Dialog,
@@ -89,12 +88,63 @@ type Goal = {
   dateTo: Date;
 };
 
-const currentReportData = agentReports['john-p'].data;
+type ApiGoal = {
+  id: string;
+  title: string;
+  metricKey: string;
+  target: number;
+  dateFrom: string;
+  dateTo: string;
+};
+
+type ReportInputs = {
+  outbound_dials: number;
+  pickups: number;
+  conversations_30s_plus: number;
+  sales_call_booked_from_outbound: number;
+  sales_call_on_calendar: number;
+  no_show: number;
+  reschedule_request: number;
+  cancel: number;
+  deposits: number;
+  sales_one_call_close: number;
+  followup_sales: number;
+  upsell_conversation_taken: number;
+  upsells: number;
+  contract_value: number;
+  new_cash_collected: number;
+};
+
+const emptyInputs: ReportInputs = {
+  outbound_dials: 0,
+  pickups: 0,
+  conversations_30s_plus: 0,
+  sales_call_booked_from_outbound: 0,
+  sales_call_on_calendar: 0,
+  no_show: 0,
+  reschedule_request: 0,
+  cancel: 0,
+  deposits: 0,
+  sales_one_call_close: 0,
+  followup_sales: 0,
+  upsell_conversation_taken: 0,
+  upsells: 0,
+  contract_value: 0,
+  new_cash_collected: 0,
+};
 
 export default function GoalsPage() {
   const { toast } = useToast();
   const [goals, setGoals] = useState<Goal[]>([]);
   const [isAddGoalDialogOpen, setIsAddGoalDialogOpen] = useState(false);
+  const [isGoalsLoading, setIsGoalsLoading] = useState(false);
+  const [reportInputs, setReportInputs] = useState<ReportInputs>(emptyInputs);
+  const [isReportLoading, setIsReportLoading] = useState(true);
+
+  const apiBaseUrl = useMemo(
+    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8081',
+    []
+  );
 
   const form = useForm<z.infer<typeof goalSchema>>({
     resolver: zodResolver(goalSchema),
@@ -104,35 +154,164 @@ export default function GoalsPage() {
     },
   });
 
-  function handleAddGoal(values: z.infer<typeof goalSchema>) {
+  const getAuthToken = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+    return window.localStorage.getItem('salesway_token');
+  }, []);
+
+  const normalizeGoal = useCallback((goal: ApiGoal): Goal => {
+    return {
+      id: goal.id,
+      title: goal.title,
+      metricKey: goal.metricKey,
+      target: goal.target,
+      dateFrom: new Date(goal.dateFrom),
+      dateTo: new Date(goal.dateTo),
+    };
+  }, []);
+
+  const fetchGoals = useCallback(async () => {
+    try {
+      setIsGoalsLoading(true);
+      const token = getAuthToken();
+      const response = await fetch(`${apiBaseUrl}/goals`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || `Status ${response.status}`);
+      }
+
+      const data = (await response.json()) as ApiGoal[];
+      setGoals(data.map(normalizeGoal));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Eroare necunoscută';
+      toast({
+        title: 'Nu am putut încărca obiectivele',
+        description: message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsGoalsLoading(false);
+    }
+  }, [apiBaseUrl, getAuthToken, normalizeGoal, toast]);
+
+  useEffect(() => {
+    const fetchReport = async () => {
+      if (typeof window === 'undefined') return;
+      const token = window.localStorage.getItem('salesway_token');
+      if (!token) {
+        setIsReportLoading(false);
+        return;
+      }
+
+      try {
+        const response = await fetch(`${apiBaseUrl}/reports/daily/today`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (!response.ok) {
+          throw new Error('Failed to fetch report');
+        }
+        const data = (await response.json()) as { inputs?: Partial<ReportInputs> };
+        setReportInputs({
+          ...emptyInputs,
+          ...(data.inputs ?? {}),
+        });
+      } catch (error) {
+        console.error('Failed to load report inputs', error);
+        toast({
+          title: 'Nu am putut încărca raportul de azi.',
+          description: 'Verifică conexiunea și încearcă din nou.',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsReportLoading(false);
+      }
+    };
+
+    void fetchReport();
+  }, [apiBaseUrl, toast]);
+
+  async function handleAddGoal(values: z.infer<typeof goalSchema>) {
     const metric = availableMetrics.find((m) => m.key === values.metricKey);
     if (!metric) return;
 
-    const newGoal: Goal = {
-      id: `goal_${Date.now()}`,
-      title: metric.label,
-      metricKey: values.metricKey,
-      target: values.target,
-      dateFrom: values.dateFrom,
-      dateTo: values.dateTo,
-    };
+    try {
+      const token = getAuthToken();
+      const response = await fetch(`${apiBaseUrl}/goals`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          title: metric.label,
+          metricKey: values.metricKey,
+          target: values.target,
+          dateFrom: format(values.dateFrom, 'yyyy-MM-dd'),
+          dateTo: format(values.dateTo, 'yyyy-MM-dd'),
+        }),
+      });
 
-    setGoals((prev) => [...prev, newGoal]);
-    setIsAddGoalDialogOpen(false);
-    form.reset();
-    toast({
-      title: 'Obiectiv adăugat!',
-      description: `Ai setat un nou obiectiv: ${newGoal.title}.`,
-    });
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || `Status ${response.status}`);
+      }
+
+      const savedGoal = normalizeGoal((await response.json()) as ApiGoal);
+      setGoals((prev) => [savedGoal, ...prev]);
+      setIsAddGoalDialogOpen(false);
+      form.reset();
+      toast({
+        title: 'Obiectiv adăugat!',
+        description: `Ai setat un nou obiectiv: ${savedGoal.title}.`,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Eroare necunoscută';
+      toast({
+        title: 'Nu am putut salva obiectivul',
+        description: message,
+        variant: 'destructive',
+      });
+    }
   }
 
-  function handleDeleteGoal(goalId: string) {
-    setGoals((prev) => prev.filter((g) => g.id !== goalId));
-    toast({
-      title: 'Obiectiv șters.',
-      variant: 'destructive',
-    });
+  async function handleDeleteGoal(goalId: string) {
+    try {
+      const token = getAuthToken();
+      const response = await fetch(`${apiBaseUrl}/goals/${goalId}`, {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || `Status ${response.status}`);
+      }
+
+      setGoals((prev) => prev.filter((g) => g.id !== goalId));
+      toast({
+        title: 'Obiectiv șters.',
+        variant: 'destructive',
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Eroare necunoscută';
+      toast({
+        title: 'Nu am putut șterge obiectivul',
+        description: message,
+        variant: 'destructive',
+      });
+    }
   }
+
+  useEffect(() => {
+    void fetchGoals();
+  }, [fetchGoals]);
 
   return (
     <div className="space-y-6">
@@ -152,9 +331,13 @@ export default function GoalsPage() {
       {goals.length === 0 ? (
         <Card className="flex flex-col items-center justify-center gap-4 py-16 text-center">
           <Target className="h-16 w-16 text-muted-foreground" />
-          <h3 className="text-xl font-semibold">Niciun obiectiv setat</h3>
+          <h3 className="text-xl font-semibold">
+            {isGoalsLoading ? 'Se încarcă obiectivele...' : 'Niciun obiectiv setat'}
+          </h3>
           <p className="text-muted-foreground">
-            Apasă pe &quot;Adaugă Obiectiv&quot; pentru a începe.
+            {isGoalsLoading
+              ? 'Așteaptă puțin, încărcăm datele.'
+              : 'Apasă pe &quot;Adaugă Obiectiv&quot; pentru a începe.'}
           </p>
         </Card>
       ) : (
@@ -163,13 +346,10 @@ export default function GoalsPage() {
             let currentValue = 0;
             if (goal.metricKey === 'total_sales') {
               currentValue =
-                (currentReportData.sales_one_call_close || 0) +
-                (currentReportData.followup_sales || 0);
+                reportInputs.sales_one_call_close + reportInputs.followup_sales;
             } else {
               const reportValue =
-                currentReportData[
-                  goal.metricKey as keyof typeof currentReportData
-                ];
+                reportInputs[goal.metricKey as keyof ReportInputs];
               currentValue = typeof reportValue === 'number' ? reportValue : 0;
             }
 
@@ -220,7 +400,9 @@ export default function GoalsPage() {
                   <Progress value={progressPercentage} />
                   <div className="flex justify-between text-sm font-medium text-muted-foreground">
                     <span>Progres</span>
-                    <span>{fullDisplay}</span>
+                    <span>
+                      {isReportLoading ? 'Se încarcă...' : fullDisplay}
+                    </span>
                   </div>
                 </CardContent>
               </Card>

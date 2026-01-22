@@ -1,6 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import React from 'react';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 
@@ -47,13 +48,16 @@ const passwordSchema = z
 
 export default function ProfilePage() {
   const { toast } = useToast();
+  const [initials, setInitials] = React.useState('??');
+  const apiBaseUrl =
+    process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8081';
 
   const profileForm = useForm<z.infer<typeof profileSchema>>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
-      firstName: 'Jane',
-      lastName: 'Smith',
-      email: 'jane.smith@example.com',
+      firstName: '',
+      lastName: '',
+      email: '',
     },
   });
 
@@ -73,6 +77,50 @@ export default function ProfilePage() {
       description: 'Informațiile tale au fost salvate cu succes.',
     });
   }
+
+  React.useEffect(() => {
+    const fetchProfile = async () => {
+      if (typeof window === 'undefined') return;
+      const token = window.localStorage.getItem('salesway_token');
+      if (!token) return;
+
+      try {
+        const response = await fetch(`${apiBaseUrl}/auth/me`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const data = (await response.json()) as {
+          firstName?: string | null;
+          lastName?: string | null;
+          email?: string | null;
+        };
+        const firstName = data.firstName ?? '';
+        const lastName = data.lastName ?? '';
+        const email = data.email ?? '';
+        profileForm.reset({ firstName, lastName, email });
+
+        const fallbackName = email ? email.split('@')[0] : '';
+        const resolvedName = `${firstName} ${lastName}`.trim() || fallbackName;
+        const nextInitials = resolvedName
+          .split(' ')
+          .filter(Boolean)
+          .slice(0, 2)
+          .map((part) => part[0]?.toUpperCase() ?? '')
+          .join('');
+        setInitials(nextInitials || '??');
+      } catch (error) {
+        console.error('Failed to load profile info', error);
+      }
+    };
+
+    void fetchProfile();
+  }, [apiBaseUrl, profileForm]);
 
   function onPasswordSubmit(values: z.infer<typeof passwordSchema>) {
     console.log('Changing password');
@@ -108,8 +156,8 @@ export default function ProfilePage() {
               <div className="flex items-center gap-8">
                 <div className="flex flex-col items-center gap-2">
                   <Avatar className="h-20 w-20">
-                    <AvatarFallback className="bg-muted">
-                      <User className="h-12 w-12 text-muted-foreground" />
+                    <AvatarFallback className="bg-muted text-lg font-semibold">
+                      {initials || <User className="h-12 w-12 text-muted-foreground" />}
                     </AvatarFallback>
                   </Avatar>
                   <Button type="button" variant="outline" size="sm">
