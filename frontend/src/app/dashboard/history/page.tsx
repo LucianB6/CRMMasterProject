@@ -1,5 +1,6 @@
 'use client';
 
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -26,7 +27,7 @@ import {
   TableRow,
 } from '../../../components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../components/ui/tabs';
-import { personalHistory } from '../../../lib/mock-data';
+import { useToast } from '../../../components/ui/use-toast';
 import {
   DollarSign,
   ShoppingCart,
@@ -83,6 +84,221 @@ type HistoryData = {
   [key: string]: any;
 };
 
+type ApiReportInputs = {
+  outbound_dials: number;
+  pickups: number;
+  conversations_30s_plus: number;
+  sales_call_booked_from_outbound: number;
+  sales_call_on_calendar: number;
+  no_show: number;
+  reschedule_request: number;
+  cancel: number;
+  deposits: number;
+  sales_one_call_close: number;
+  followup_sales: number;
+  upsell_conversation_taken: number;
+  upsells: number;
+  contract_value: number;
+  new_cash_collected: number;
+};
+
+type ApiReportResponse = {
+  id: string;
+  reportDate: string;
+  status: 'DRAFT' | 'SUBMITTED' | 'AUTO_SUBMITTED';
+  submittedAt?: string;
+  inputs: ApiReportInputs;
+};
+
+type HistoryPayload = {
+  last7Days: HistoryData[];
+  currentMonth: HistoryData[];
+  currentYear: HistoryData[];
+  previousYear: HistoryData[];
+};
+
+const SUBMITTED_STATUSES = new Set<ApiReportResponse['status']>([
+  'SUBMITTED',
+  'AUTO_SUBMITTED',
+]);
+
+const defaultHistory: HistoryPayload = {
+  last7Days: [],
+  currentMonth: [],
+  currentYear: [],
+  previousYear: [],
+};
+
+const getUtcStartOfDay = (date: Date) =>
+  new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+
+const addUtcDays = (date: Date, days: number) =>
+  new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + days));
+
+const formatIsoDate = (date: Date) => date.toISOString().split('T')[0];
+
+const parseReportDate = (date: string) => new Date(`${date}T00:00:00Z`);
+
+const formatMonthLabel = (date: Date) => {
+  const formatted = date.toLocaleString('ro-RO', { month: 'short' }).replace('.', '');
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+};
+
+const getTotalsFromReport = (report: ApiReportResponse) => {
+  const inputs = report.inputs;
+  const totalSales =
+    (inputs.sales_one_call_close ?? 0) +
+    (inputs.followup_sales ?? 0) +
+    (inputs.upsells ?? 0);
+  return {
+    sales: totalSales,
+    calls: inputs.outbound_dials ?? 0,
+    followUpSales: inputs.followup_sales ?? 0,
+    outboundBookings: inputs.sales_call_booked_from_outbound ?? 0,
+    value: inputs.contract_value ?? 0,
+  };
+};
+
+const buildDailySeries = (
+  reports: ApiReportResponse[],
+  from: Date,
+  to: Date,
+  today: Date
+): HistoryData[] => {
+  const totalsByDate = new Map<string, ReturnType<typeof getTotalsFromReport>>();
+  reports.forEach((report) => {
+    if (!SUBMITTED_STATUSES.has(report.status)) {
+      return;
+    }
+    totalsByDate.set(report.reportDate, getTotalsFromReport(report));
+  });
+
+  const data: HistoryData[] = [];
+  let cursor = getUtcStartOfDay(from);
+  const end = getUtcStartOfDay(to);
+  const todayUtc = getUtcStartOfDay(today);
+
+  while (cursor <= end) {
+    const iso = formatIsoDate(cursor);
+    const diffDays = Math.round(
+      (todayUtc.getTime() - cursor.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    let periodLabel = `${diffDays} zile`;
+    if (diffDays === 0) {
+      periodLabel = 'Azi';
+    } else if (diffDays === 1) {
+      periodLabel = 'Ieri';
+    } else {
+      periodLabel = `Acum ${diffDays} zile`;
+    }
+    const totals = totalsByDate.get(iso);
+    data.push({
+      period: periodLabel,
+      sales: totals?.sales ?? 0,
+      calls: totals?.calls ?? 0,
+      followUpSales: totals?.followUpSales ?? 0,
+      outboundBookings: totals?.outboundBookings ?? 0,
+      value: totals?.value ?? 0,
+    });
+    cursor = addUtcDays(cursor, 1);
+  }
+
+  return data;
+};
+
+const buildWeeklySeries = (
+  reports: ApiReportResponse[],
+  monthStart: Date,
+  monthEnd: Date
+): HistoryData[] => {
+  const totalsByWeek = new Map<number, ReturnType<typeof getTotalsFromReport>>();
+  reports.forEach((report) => {
+    if (!SUBMITTED_STATUSES.has(report.status)) {
+      return;
+    }
+    const reportDate = parseReportDate(report.reportDate);
+    if (reportDate < monthStart || reportDate > monthEnd) {
+      return;
+    }
+    const weekIndex = Math.floor((reportDate.getUTCDate() - 1) / 7) + 1;
+    const current = totalsByWeek.get(weekIndex) ?? {
+      sales: 0,
+      calls: 0,
+      followUpSales: 0,
+      outboundBookings: 0,
+      value: 0,
+    };
+    const totals = getTotalsFromReport(report);
+    totalsByWeek.set(weekIndex, {
+      sales: current.sales + totals.sales,
+      calls: current.calls + totals.calls,
+      followUpSales: current.followUpSales + totals.followUpSales,
+      outboundBookings: current.outboundBookings + totals.outboundBookings,
+      value: current.value + totals.value,
+    });
+  });
+
+  const daysInMonth = monthEnd.getUTCDate();
+  const totalWeeks = Math.ceil(daysInMonth / 7);
+  return Array.from({ length: totalWeeks }, (_, index) => {
+    const weekNumber = index + 1;
+    const totals = totalsByWeek.get(weekNumber);
+    return {
+      period: `Săpt. ${weekNumber}`,
+      sales: totals?.sales ?? 0,
+      calls: totals?.calls ?? 0,
+      followUpSales: totals?.followUpSales ?? 0,
+      outboundBookings: totals?.outboundBookings ?? 0,
+      value: totals?.value ?? 0,
+    };
+  });
+};
+
+const buildMonthlySeries = (
+  reports: ApiReportResponse[],
+  year: number
+): HistoryData[] => {
+  const totalsByMonth = new Map<number, ReturnType<typeof getTotalsFromReport>>();
+  reports.forEach((report) => {
+    if (!SUBMITTED_STATUSES.has(report.status)) {
+      return;
+    }
+    const reportDate = parseReportDate(report.reportDate);
+    if (reportDate.getUTCFullYear() !== year) {
+      return;
+    }
+    const monthIndex = reportDate.getUTCMonth();
+    const current = totalsByMonth.get(monthIndex) ?? {
+      sales: 0,
+      calls: 0,
+      followUpSales: 0,
+      outboundBookings: 0,
+      value: 0,
+    };
+    const totals = getTotalsFromReport(report);
+    totalsByMonth.set(monthIndex, {
+      sales: current.sales + totals.sales,
+      calls: current.calls + totals.calls,
+      followUpSales: current.followUpSales + totals.followUpSales,
+      outboundBookings: current.outboundBookings + totals.outboundBookings,
+      value: current.value + totals.value,
+    });
+  });
+
+  return Array.from({ length: 12 }, (_, index) => {
+    const label = formatMonthLabel(new Date(Date.UTC(year, index, 1)));
+    const totals = totalsByMonth.get(index);
+    return {
+      period: label,
+      sales: totals?.sales ?? 0,
+      calls: totals?.calls ?? 0,
+      followUpSales: totals?.followUpSales ?? 0,
+      outboundBookings: totals?.outboundBookings ?? 0,
+      value: totals?.value ?? 0,
+    };
+  });
+};
+
 const calculateTotals = (data: HistoryData[], metricKey: MetricKey) => {
   const dataKey = metricsConfig[metricKey].dataKey;
   const totalUnits = data.reduce((sum, item) => sum + (item[dataKey] || 0), 0);
@@ -95,6 +311,110 @@ const calculateTotals = (data: HistoryData[], metricKey: MetricKey) => {
 };
 
 export default function HistoryPage() {
+  const { toast } = useToast();
+  const [historyData, setHistoryData] = useState<HistoryPayload>(defaultHistory);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const apiBaseUrl = useMemo(
+    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8081',
+    []
+  );
+
+  const getAuthToken = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+    return window.localStorage.getItem('salesway_token');
+  }, []);
+
+  const fetchHistory = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const token = getAuthToken();
+      const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+      const today = getUtcStartOfDay(new Date());
+      const currentYearStart = new Date(
+        Date.UTC(today.getUTCFullYear(), 0, 1)
+      );
+      const previousYearStart = new Date(
+        Date.UTC(today.getUTCFullYear() - 1, 0, 1)
+      );
+      const previousYearEnd = new Date(
+        Date.UTC(today.getUTCFullYear() - 1, 11, 31)
+      );
+
+      const [recentResponse, monthResponse, currentYearResponse, previousYearResponse] =
+        await Promise.all([
+          fetch(`${apiBaseUrl}/reports/daily/recent?days=7`, { headers }),
+          fetch(`${apiBaseUrl}/reports/daily/current-month`, { headers }),
+          fetch(
+            `${apiBaseUrl}/reports/daily?from=${formatIsoDate(
+              currentYearStart
+            )}&to=${formatIsoDate(today)}`,
+            { headers }
+          ),
+          fetch(
+            `${apiBaseUrl}/reports/daily?from=${formatIsoDate(
+              previousYearStart
+            )}&to=${formatIsoDate(previousYearEnd)}`,
+            { headers }
+          ),
+        ]);
+
+      const responses = [
+        recentResponse,
+        monthResponse,
+        currentYearResponse,
+        previousYearResponse,
+      ];
+      for (const response of responses) {
+        if (!response.ok) {
+          const message = await response.text();
+          throw new Error(message || `Status ${response.status}`);
+        }
+      }
+
+      const recentReports = (await recentResponse.json()) as ApiReportResponse[];
+      const monthReports = (await monthResponse.json()) as ApiReportResponse[];
+      const currentYearReports =
+        (await currentYearResponse.json()) as ApiReportResponse[];
+      const previousYearReports =
+        (await previousYearResponse.json()) as ApiReportResponse[];
+
+      const last7Start = addUtcDays(today, -6);
+      const monthStart = new Date(
+        Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1)
+      );
+      const monthEnd = new Date(
+        Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 0)
+      );
+
+      setHistoryData({
+        last7Days: buildDailySeries(recentReports, last7Start, today, today),
+        currentMonth: buildWeeklySeries(monthReports, monthStart, monthEnd),
+        currentYear: buildMonthlySeries(currentYearReports, today.getUTCFullYear()),
+        previousYear: buildMonthlySeries(
+          previousYearReports,
+          today.getUTCFullYear() - 1
+        ),
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Eroare necunoscută';
+      toast({
+        title: 'Nu am putut încărca istoricul',
+        description: message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [apiBaseUrl, getAuthToken, toast]);
+
+  useEffect(() => {
+    void fetchHistory();
+  }, [fetchHistory]);
+
   const renderMetricSection = (
     title: string,
     data: HistoryData[],
@@ -260,38 +580,44 @@ export default function HistoryPage() {
           Analizează performanța ta pe diferite perioade de timp.
         </p>
       </header>
-      <Tabs defaultValue="7days" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
-          <TabsTrigger value="7days">Ultimele 7 zile</TabsTrigger>
-          <TabsTrigger value="currentMonth">Luna curentă</TabsTrigger>
-          <TabsTrigger value="currentYear">Anul curent</TabsTrigger>
-          <TabsTrigger value="previousYear">Anul precedent</TabsTrigger>
-        </TabsList>
-        <TabsContent value="7days" className="mt-6">
-          {renderPeriodContent(
-            'Ultimele 7 zile',
-            personalHistory.last7Days,
-            'Ziua'
-          )}
-        </TabsContent>
-        <TabsContent value="currentMonth" className="mt-6">
-          {renderPeriodContent(
-            'Luna Curentă',
-            personalHistory.currentMonth,
-            'Săptămâna'
-          )}
-        </TabsContent>
-        <TabsContent value="currentYear" className="mt-6">
-          {renderPeriodContent('Anul Curent', personalHistory.currentYear, 'Luna')}
-        </TabsContent>
-        <TabsContent value="previousYear" className="mt-6">
-          {renderPeriodContent(
-            'Anul Precedent',
-            personalHistory.previousYear,
-            'Luna'
-          )}
-        </TabsContent>
-      </Tabs>
+      {isLoading ? (
+        <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+          Se încarcă istoricul...
+        </div>
+      ) : (
+        <Tabs defaultValue="7days" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
+            <TabsTrigger value="7days">Ultimele 7 zile</TabsTrigger>
+            <TabsTrigger value="currentMonth">Luna curentă</TabsTrigger>
+            <TabsTrigger value="currentYear">Anul curent</TabsTrigger>
+            <TabsTrigger value="previousYear">Anul precedent</TabsTrigger>
+          </TabsList>
+          <TabsContent value="7days" className="mt-6">
+            {renderPeriodContent(
+              'Ultimele 7 zile',
+              historyData.last7Days,
+              'Ziua'
+            )}
+          </TabsContent>
+          <TabsContent value="currentMonth" className="mt-6">
+            {renderPeriodContent(
+              'Luna Curentă',
+              historyData.currentMonth,
+              'Săptămâna'
+            )}
+          </TabsContent>
+          <TabsContent value="currentYear" className="mt-6">
+            {renderPeriodContent('Anul Curent', historyData.currentYear, 'Luna')}
+          </TabsContent>
+          <TabsContent value="previousYear" className="mt-6">
+            {renderPeriodContent(
+              'Anul Precedent',
+              historyData.previousYear,
+              'Luna'
+            )}
+          </TabsContent>
+        </Tabs>
+      )}
     </div>
   );
 }
