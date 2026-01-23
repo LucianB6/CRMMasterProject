@@ -14,6 +14,7 @@ import com.salesway.chatbot.repository.ChatConversationRepository;
 import com.salesway.goals.repository.GoalRepository;
 import com.salesway.notifications.repository.NotificationRepository;
 import com.salesway.reports.repository.DailyReportAuditLogRepository;
+import com.salesway.reports.repository.DailyReportInputsRepository;
 import com.salesway.reports.repository.DailyReportRepository;
 import com.salesway.teams.entity.Team;
 import com.salesway.teams.repository.TeamRepository;
@@ -41,6 +42,7 @@ public class ManagerTeamService {
     private final GoalRepository goalRepository;
     private final NotificationRepository notificationRepository;
     private final DailyReportAuditLogRepository dailyReportAuditLogRepository;
+    private final DailyReportInputsRepository dailyReportInputsRepository;
     private final DailyReportRepository dailyReportRepository;
     private final TaskBoardItemRepository taskBoardItemRepository;
     private final TaskProgressRepository taskProgressRepository;
@@ -58,6 +60,7 @@ public class ManagerTeamService {
             GoalRepository goalRepository,
             NotificationRepository notificationRepository,
             DailyReportAuditLogRepository dailyReportAuditLogRepository,
+            DailyReportInputsRepository dailyReportInputsRepository,
             DailyReportRepository dailyReportRepository,
             TaskBoardItemRepository taskBoardItemRepository,
             TaskProgressRepository taskProgressRepository,
@@ -74,6 +77,7 @@ public class ManagerTeamService {
         this.goalRepository = goalRepository;
         this.notificationRepository = notificationRepository;
         this.dailyReportAuditLogRepository = dailyReportAuditLogRepository;
+        this.dailyReportInputsRepository = dailyReportInputsRepository;
         this.dailyReportRepository = dailyReportRepository;
         this.taskBoardItemRepository = taskBoardItemRepository;
         this.taskProgressRepository = taskProgressRepository;
@@ -143,6 +147,7 @@ public class ManagerTeamService {
         if (!reportIds.isEmpty()) {
             taskProgressRepository.deleteByComputedFromReportIdIn(reportIds);
             dailyReportAuditLogRepository.deleteByDailyReportIdIn(reportIds);
+            dailyReportInputsRepository.deleteByDailyReportIdIn(reportIds);
             dailyReportRepository.deleteAllByIdInBatch(reportIds);
         }
 
