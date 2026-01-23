@@ -28,7 +28,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -141,9 +143,14 @@ public class ManagerTeamService {
         UUID membershipId = membership.getId();
         dailyReportAuditLogRepository.deleteByActorMembershipId(membershipId);
 
-        List<UUID> reportIds = dailyReportRepository.findByAgentMembershipId(membershipId).stream()
+        Set<UUID> reportIdSet = new LinkedHashSet<>();
+        dailyReportRepository.findByAgentMembershipId(membershipId).stream()
                 .map(report -> report.getId())
-                .toList();
+                .forEach(reportIdSet::add);
+        dailyReportRepository.findBySubmittedByMembershipId(membershipId).stream()
+                .map(report -> report.getId())
+                .forEach(reportIdSet::add);
+        List<UUID> reportIds = reportIdSet.stream().toList();
         if (!reportIds.isEmpty()) {
             taskProgressRepository.deleteByComputedFromReportIdIn(reportIds);
             dailyReportAuditLogRepository.deleteByDailyReportIdIn(reportIds);
