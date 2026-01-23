@@ -12,4 +12,6 @@ public interface DailyReportInputsRepository extends JpaRepository<DailyReportIn
     Optional<DailyReportInputs> findByDailyReportId(UUID dailyReportId);
 
     List<DailyReportInputs> findByDailyReportIdIn(Collection<UUID> dailyReportIds);
+
+    void deleteByDailyReportIdIn(Collection<UUID> dailyReportIds);
 }
