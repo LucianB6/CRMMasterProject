@@ -49,6 +49,16 @@ const managerMenuItems = [
     label: 'Privire de ansamblu',
     icon: Users,
   },
+  {
+    href: '/dashboard/manager/history',
+    label: 'Istoric echipă',
+    icon: LineChart,
+  },
+  {
+    href: '/dashboard/manager/forecast',
+    label: 'Prognoza vanzari',
+    icon: LineChart,
+  },
   { href: '/dashboard/manager/reports', label: 'Rapoarte Echipă', icon: FileText },
   { href: '/dashboard/notifications', label: 'Notificări', icon: Bell },
   {
@@ -95,11 +105,59 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
   const [userRole, setUserRole] = React.useState<string | null>(null);
+  const [displayName, setDisplayName] = React.useState("Cont");
+  const [initials, setInitials] = React.useState("?");
+  const apiBaseUrl =
+    process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8081";
 
   React.useEffect(() => {
     const role = localStorage.getItem('userRole');
     setUserRole(role || 'agent');
   }, []);
+
+  React.useEffect(() => {
+    const fetchUser = async () => {
+      if (typeof window === 'undefined') return;
+      const token = window.localStorage.getItem('salesway_token');
+      if (!token) return;
+
+      try {
+        const response = await fetch(`${apiBaseUrl}/auth/me`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const data = (await response.json()) as {
+          firstName?: string | null;
+          lastName?: string | null;
+          email?: string | null;
+        };
+        const fullName = [data.firstName, data.lastName]
+          .filter(Boolean)
+          .join(' ')
+          .trim();
+        const fallbackName = data.email?.split('@')[0] ?? 'Cont';
+        const resolvedName = fullName || fallbackName;
+        setDisplayName(resolvedName);
+        const nextInitials = resolvedName
+          .split(' ')
+          .filter(Boolean)
+          .slice(0, 2)
+          .map((part) => part[0]?.toUpperCase() ?? '')
+          .join('');
+        setInitials(nextInitials || '?');
+      } catch (error) {
+        console.error('Failed to load user info', error);
+      }
+    };
+
+    void fetchUser();
+  }, [apiBaseUrl]);
 
   if (!userRole) {
     return <DashboardSkeleton />;
@@ -187,10 +245,10 @@ export default function DashboardLayout({
                   data-ai-hint={managerAvatar.imageHint}
                 />
               )}
-              <AvatarFallback>JS</AvatarFallback>
+              <AvatarFallback>{initials}</AvatarFallback>
             </Avatar>
             <div className="flex-grow truncate">
-              <p className="font-semibold">Jane Smith</p>
+              <p className="font-semibold">{displayName}</p>
               <p className="text-xs text-sidebar-foreground/70">
                 {isManager ? 'Sales Manager' : 'Sales Agent'}
               </p>

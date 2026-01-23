@@ -56,14 +56,14 @@ export default function LandingPage() {
           </div>
           {heroImage && (
             <div className="mt-12 rounded-lg border bg-card p-2 shadow-2xl">
-              <Image
+              {/* <Image
                 src={heroImage.imageUrl}
                 alt={heroImage.description}
                 data-ai-hint={heroImage.imageHint}
                 width={1200}
                 height={800}
                 className="rounded-md"
-              />
+              /> */}
             </div>
           )}
         </section>

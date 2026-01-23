@@ -67,6 +67,7 @@ type ChartPoint = {
 export default function ManagerOverviewPage() {
   const { toast } = useToast();
   const [selectedAgentId, setSelectedAgentId] = useState('all');
+  const [rangePreset, setRangePreset] = useState<'month' | 'year'>('month');
   const [agents, setAgents] = useState<ManagerAgent[]>([]);
   const [summary, setSummary] = useState<DailySummaryResponse | null>(null);
   const [teamPerformance, setTeamPerformance] = useState<ChartPoint[]>([]);
@@ -85,10 +86,20 @@ export default function ManagerOverviewPage() {
     return window.localStorage.getItem('salesway_token');
   }, []);
 
-  const buildDateRange = useCallback(() => {
+  const buildDateRange = useCallback((preset: 'month' | 'year') => {
     const today = new Date();
-    const from = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-    from.setUTCDate(from.getUTCDate() - 6);
+    const from = new Date(
+      Date.UTC(
+        today.getUTCFullYear(),
+        today.getUTCMonth(),
+        today.getUTCDate()
+      )
+    );
+    if (preset === 'year') {
+      from.setUTCDate(from.getUTCDate() - 364);
+    } else {
+      from.setUTCDate(from.getUTCDate() - 29);
+    }
     const to = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
     const toKey = to.toISOString().slice(0, 10);
     const fromKey = from.toISOString().slice(0, 10);
@@ -154,7 +165,7 @@ export default function ManagerOverviewPage() {
         setIsLoading(true);
         const token = getAuthToken();
         const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
-        const { from, to } = buildDateRange();
+        const { from, to } = buildDateRange(rangePreset);
 
         const summaryUrl =
           selectedAgentId === 'all'
@@ -225,6 +236,7 @@ export default function ManagerOverviewPage() {
     buildDateRange,
     formatDayLabel,
     getAuthToken,
+    rangePreset,
     selectedAgentId,
     toast,
   ]);
@@ -246,7 +258,7 @@ export default function ManagerOverviewPage() {
             alege un agent pentru a-i vedea performanța individuală.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
             <SelectTrigger className="w-full sm:w-[280px]">
               <SelectValue placeholder="Selectează o opțiune" />
@@ -260,12 +272,18 @@ export default function ManagerOverviewPage() {
               ))}
             </SelectContent>
           </Select>
+          <Tabs value={rangePreset} onValueChange={(value) => setRangePreset(value as 'month' | 'year')}>
+            <TabsList>
+              <TabsTrigger value="month">Ultima lună</TabsTrigger>
+              <TabsTrigger value="year">Ultimul an</TabsTrigger>
+            </TabsList>
+          </Tabs>
         </CardContent>
       </Card>
 
       <div className="space-y-2">
         <h2 className="text-lg font-semibold tracking-tight">
-          Quick Stats - ultimele 7 zile
+          Quick Stats - {rangePreset === 'year' ? 'ultimul an' : 'ultima lună'}
         </h2>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>
@@ -323,7 +341,9 @@ export default function ManagerOverviewPage() {
       <Card>
         <CardHeader>
           <CardTitle>Performanță Echipă</CardTitle>
-          <CardDescription>Ultimele 7 zile</CardDescription>
+          <CardDescription>
+            {rangePreset === 'year' ? 'Ultimul an' : 'Ultima lună'}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="calls">

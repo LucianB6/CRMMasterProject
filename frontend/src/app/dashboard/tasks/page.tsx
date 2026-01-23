@@ -49,6 +49,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '../../../components/ui/dropdown-menu';
+import { cn } from '../../../lib/utils';
 
 type TaskStatus = 'todo' | 'in-progress' | 'done';
 
@@ -81,6 +82,8 @@ export default function TasksPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [dragTaskId, setDragTaskId] = useState<string | null>(null);
+  const [dragOverStatus, setDragOverStatus] = useState<TaskStatus | null>(null);
 
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8081',
@@ -212,6 +215,51 @@ export default function TasksPage() {
     }
   }
 
+  const updateTaskStatus = useCallback(
+    async (task: Task, nextStatus: TaskStatus, previousTask: Task) => {
+      try {
+        const token = getAuthToken();
+        const response = await fetch(`${apiBaseUrl}/tasks/board/${task.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            title: task.title,
+            goal: task.goal || null,
+            deadline: task.deadline
+              ? format(task.deadline, 'yyyy-MM-dd')
+              : null,
+            status: nextStatus,
+          }),
+        });
+
+        if (!response.ok) {
+          const message = await response.text();
+          throw new Error(message || `Status ${response.status}`);
+        }
+
+        const savedTask = normalizeTask((await response.json()) as ApiTask);
+        setTasks((prev) =>
+          prev.map((item) => (item.id === savedTask.id ? savedTask : item))
+        );
+      } catch (error) {
+        setTasks((prev) =>
+          prev.map((item) => (item.id === previousTask.id ? previousTask : item))
+        );
+        const message =
+          error instanceof Error ? error.message : 'Eroare necunoscută';
+        toast({
+          title: 'Nu am putut muta task-ul',
+          description: message,
+          variant: 'destructive',
+        });
+      }
+    },
+    [apiBaseUrl, getAuthToken, normalizeTask, toast]
+  );
+
   const deleteTask = async (taskId: string) => {
     try {
       const token = getAuthToken();
@@ -243,6 +291,50 @@ export default function TasksPage() {
     void fetchTasks();
   }, [fetchTasks]);
 
+  const handleDragStart = (task: Task, event: React.DragEvent) => {
+    setDragTaskId(task.id);
+    event.dataTransfer.setData('text/plain', task.id);
+    event.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragEnd = () => {
+    setDragTaskId(null);
+    setDragOverStatus(null);
+  };
+
+  const handleDragOver = (
+    status: TaskStatus,
+    event: React.DragEvent<HTMLDivElement>
+  ) => {
+    event.preventDefault();
+    setDragOverStatus(status);
+  };
+
+  const handleDrop = (
+    status: TaskStatus,
+    event: React.DragEvent<HTMLDivElement>
+  ) => {
+    event.preventDefault();
+    const draggedId =
+      dragTaskId || event.dataTransfer.getData('text/plain');
+    if (!draggedId) {
+      return;
+    }
+    const task = tasks.find((item) => item.id === draggedId);
+    if (!task || task.status === status) {
+      handleDragEnd();
+      return;
+    }
+
+    const previousTask = task;
+    const updatedTask = { ...task, status };
+    setTasks((prev) =>
+      prev.map((item) => (item.id === task.id ? updatedTask : item))
+    );
+    handleDragEnd();
+    void updateTaskStatus(updatedTask, status, previousTask);
+  };
+
   return (
     <div className="flex h-full flex-col space-y-6">
       <header className="flex items-center justify-between">
@@ -259,11 +351,21 @@ export default function TasksPage() {
 
       <div className="grid flex-1 grid-cols-1 items-start gap-6 md:grid-cols-3">
         {columns.map((status) => (
-          <Card key={status} className="flex h-full flex-col bg-muted/50">
+          <Card
+            key={status}
+            className="flex h-full flex-col bg-muted/50"
+            onDragOver={(event) => handleDragOver(status, event)}
+            onDrop={(event) => handleDrop(status, event)}
+          >
             <CardHeader>
               <CardTitle>{statusConfig[status].title}</CardTitle>
             </CardHeader>
-            <CardContent className="flex flex-col gap-4">
+            <CardContent
+              className={cn(
+                'flex flex-col gap-4',
+                dragOverStatus === status && 'bg-muted/70'
+              )}
+            >
               {isLoading ? (
                 <p className="text-sm text-muted-foreground">Se încarcă...</p>
               ) : (
@@ -275,6 +377,9 @@ export default function TasksPage() {
                       task={task}
                       onEdit={openDialogForEdit}
                       onDelete={deleteTask}
+                      onDragStart={handleDragStart}
+                      onDragEnd={handleDragEnd}
+                      isDragging={dragTaskId === task.id}
                     />
                   ))
               )}
@@ -384,13 +489,27 @@ function TaskCard({
   task,
   onEdit,
   onDelete,
+  onDragStart,
+  onDragEnd,
+  isDragging,
 }: {
   task: Task;
   onEdit: (task: Task) => void;
   onDelete: (id: string) => void;
+  onDragStart: (task: Task, event: React.DragEvent) => void;
+  onDragEnd: () => void;
+  isDragging: boolean;
 }) {
   return (
-    <Card className="group bg-card">
+    <Card
+      className={cn(
+        'group bg-card cursor-grab active:cursor-grabbing',
+        isDragging && 'opacity-60'
+      )}
+      draggable
+      onDragStart={(event) => onDragStart(task, event)}
+      onDragEnd={onDragEnd}
+    >
       <CardContent className="relative p-4">
         <div className="absolute right-2 top-2">
           <DropdownMenu>

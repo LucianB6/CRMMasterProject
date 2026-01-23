@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState, useEffect } from 'react';
+import { useCallback, useMemo, useRef, useState, useEffect } from 'react';
 import {
   addMonths,
   addWeeks,
@@ -56,12 +56,14 @@ const eventSchema = z
     title: z.string().min(1, 'Motivul este obligatoriu.'),
     startTime: z
       .string()
-      .regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, {
+      .regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9](?::[0-5][0-9])?$/, {
         message: 'Format oră invalid (HH:mm).',
       }),
-    endTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, {
-      message: 'Format oră invalid (HH:mm).',
-    }),
+    endTime: z
+      .string()
+      .regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9](?::[0-5][0-9])?$/, {
+        message: 'Format oră invalid (HH:mm).',
+      }),
   })
   .refine((data) => data.startTime < data.endTime, {
     message: 'Ora de sfârșit trebuie să fie după ora de început.',
@@ -84,20 +86,69 @@ type ApiCalendarEvent = {
   end_time: string;
 };
 
+const normalizeTimeForInput = (value: string) => {
+  if (!value) {
+    return '';
+  }
+  return value.length >= 5 ? value.slice(0, 5) : value;
+};
+
+const parseTimeToMinutes = (value: string) => {
+  if (!value) {
+    return 0;
+  }
+  const [hours, minutes] = value.split(':').map(Number);
+  return hours * 60 + minutes;
+};
+
+const minutesToTimeString = (minutes: number) => {
+  const clamped = Math.max(0, Math.min(24 * 60, minutes));
+  const hours = Math.floor(clamped / 60);
+  const mins = clamped % 60;
+  return `${hours.toString().padStart(2, '0')}:${mins
+    .toString()
+    .padStart(2, '0')}`;
+};
+
 export default function CalendarPage() {
   const { toast } = useToast();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [events, setEvents] = useState<Event[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [view, setView] = useState<'month' | 'week'>('month');
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragPreview, setDragPreview] = useState<{
+    id: string;
+    date: Date;
+    startTime: string;
+    endTime: string;
+    title: string;
+  } | null>(null);
 
   const [hourHeight, setHourHeight] = useState(64);
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8081',
     []
   );
+  const weekGridRef = useRef<HTMLDivElement | null>(null);
+  const dragStateRef = useRef<{
+    event: Event;
+    date: Date;
+    columnTop: number;
+    gridLeft: number;
+    columnWidth: number;
+    offsetY: number;
+    durationMinutes: number;
+    startClientY: number;
+    previewStart: string;
+    previewEnd: string;
+    previewDate: Date;
+    hasMoved: boolean;
+  } | null>(null);
+  const suppressClickRef = useRef<string | null>(null);
 
   const getAuthToken = useCallback(() => {
     if (typeof window === 'undefined') {
@@ -204,9 +255,29 @@ export default function CalendarPage() {
   };
 
   const handleDayClick = (day: Date) => {
+    setEditingEventId(null);
     setSelectedDate(day);
     setIsDialogOpen(true);
     form.reset({ title: '', startTime: '', endTime: '' });
+  };
+
+  const handleEventClick = (
+    eventItem: Event,
+    e: React.MouseEvent<HTMLDivElement>
+  ) => {
+    e.stopPropagation();
+    if (suppressClickRef.current === eventItem.id) {
+      suppressClickRef.current = null;
+      return;
+    }
+    setEditingEventId(eventItem.id);
+    setSelectedDate(eventItem.date);
+    setIsDialogOpen(true);
+    form.reset({
+      title: eventItem.title,
+      startTime: normalizeTimeForInput(eventItem.startTime),
+      endTime: normalizeTimeForInput(eventItem.endTime),
+    });
   };
 
   const normalizeEvent = useCallback((event: ApiCalendarEvent): Event => {
@@ -284,19 +355,26 @@ export default function CalendarPage() {
 
     try {
       const token = getAuthToken();
-      const response = await fetch(`${apiBaseUrl}/calendar/events`, {
-        method: 'POST',
+      const isEditing = Boolean(editingEventId);
+      const response = await fetch(
+        isEditing
+          ? `${apiBaseUrl}/calendar/events/${editingEventId}`
+          : `${apiBaseUrl}/calendar/events`,
+        {
+        method: isEditing ? 'PUT' : 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
+          ...(isEditing ? { id: editingEventId } : {}),
           title: values.title,
           event_date: formatIsoDate(selectedDate),
-          start_time: values.startTime,
-          end_time: values.endTime,
+          start_time: normalizeTimeForInput(values.startTime),
+          end_time: normalizeTimeForInput(values.endTime),
         }),
-      });
+      }
+      );
 
       if (!response.ok) {
         const message = await response.text();
@@ -308,14 +386,17 @@ export default function CalendarPage() {
       );
       upsertEvent(createdEvent);
       toast({
-        title: 'Eveniment adăugat',
-        description: `Evenimentul "${values.title}" a fost adăugat pe ${format(
+        title: isEditing ? 'Eveniment actualizat' : 'Eveniment adăugat',
+        description: `Evenimentul "${values.title}" a fost ${
+          isEditing ? 'actualizat' : 'adăugat'
+        } pe ${format(
           selectedDate,
           'dd MMMM yyyy',
           { locale: ro }
         )} între orele ${values.startTime} - ${values.endTime}.`,
       });
       setIsDialogOpen(false);
+      setEditingEventId(null);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Eroare necunoscută';
@@ -333,6 +414,189 @@ export default function CalendarPage() {
     return h * hourHeight + (m / 60) * hourHeight;
   };
 
+  const startDrag = (
+    eventItem: Event,
+    day: Date,
+    clientY: number,
+    target: HTMLElement
+  ) => {
+    const grid = weekGridRef.current;
+    if (!grid) {
+      return;
+    }
+    const gridRect = grid.getBoundingClientRect();
+    const columnWidth = gridRect.width / 7;
+    const startMinutes = parseTimeToMinutes(eventItem.startTime);
+    const endMinutes = parseTimeToMinutes(eventItem.endTime);
+    const durationMinutes = Math.max(15, endMinutes - startMinutes);
+    const offsetY =
+      clientY - (gridRect.top + timeToPosition(eventItem.startTime));
+
+    dragStateRef.current = {
+      event: eventItem,
+      date: day,
+      columnTop: gridRect.top,
+      gridLeft: gridRect.left,
+      columnWidth,
+      offsetY,
+      durationMinutes,
+      startClientY: clientY,
+      previewStart: minutesToTimeString(startMinutes),
+      previewEnd: minutesToTimeString(startMinutes + durationMinutes),
+      previewDate: day,
+      hasMoved: false,
+    };
+    setIsDragging(true);
+    setDragPreview({
+      id: eventItem.id,
+      date: day,
+      startTime: minutesToTimeString(startMinutes),
+      endTime: minutesToTimeString(startMinutes + durationMinutes),
+      title: eventItem.title,
+    });
+  };
+
+  const handleDragMove = useCallback(
+    (clientY: number, clientX: number) => {
+      const dragState = dragStateRef.current;
+      if (!dragState) {
+        return;
+      }
+
+      const rawMinutes =
+        ((clientY - dragState.columnTop - dragState.offsetY) / hourHeight) * 60;
+      const snappedMinutes = Math.round(rawMinutes / 15) * 15;
+      const clampedMinutes = Math.max(
+        0,
+        Math.min(24 * 60 - dragState.durationMinutes, snappedMinutes)
+      );
+      const columnIndex = Math.min(
+        6,
+        Math.max(
+          0,
+          Math.floor((clientX - dragState.gridLeft) / dragState.columnWidth)
+        )
+      );
+      const nextDate = days[columnIndex] ?? dragState.previewDate;
+      const startTime = minutesToTimeString(clampedMinutes);
+      const endTime = minutesToTimeString(
+        clampedMinutes + dragState.durationMinutes
+      );
+      const moved = Math.abs(clientY - dragState.startClientY) > 3;
+
+      if (
+        startTime !== dragState.previewStart ||
+        endTime !== dragState.previewEnd ||
+        nextDate.getTime() !== dragState.previewDate.getTime()
+      ) {
+        dragStateRef.current = {
+          ...dragState,
+          previewStart: startTime,
+          previewEnd: endTime,
+          previewDate: nextDate,
+          hasMoved: dragState.hasMoved || moved,
+        };
+        setDragPreview({
+          id: dragState.event.id,
+          date: nextDate,
+          startTime,
+          endTime,
+          title: dragState.event.title,
+        });
+      } else if (moved && !dragState.hasMoved) {
+        dragStateRef.current = {
+          ...dragState,
+          hasMoved: true,
+        };
+      }
+    },
+    [days, hourHeight]
+  );
+
+  const finalizeDrag = useCallback(async () => {
+    const dragState = dragStateRef.current;
+    if (!dragState) {
+      return;
+    }
+
+    dragStateRef.current = null;
+    setIsDragging(false);
+
+    if (!dragState.hasMoved) {
+      setDragPreview(null);
+      return;
+    }
+
+    const updatedEvent: Event = {
+      ...dragState.event,
+      date: dragState.previewDate,
+      startTime: dragState.previewStart,
+      endTime: dragState.previewEnd,
+    };
+
+    setDragPreview(null);
+    suppressClickRef.current = updatedEvent.id;
+    setTimeout(() => {
+      if (suppressClickRef.current === updatedEvent.id) {
+        suppressClickRef.current = null;
+      }
+    }, 0);
+
+    const previousEvent = dragState.event;
+    upsertEvent(updatedEvent);
+
+    try {
+      const token = getAuthToken();
+      const response = await fetch(
+        `${apiBaseUrl}/calendar/events/${updatedEvent.id}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            id: updatedEvent.id,
+            title: updatedEvent.title,
+            event_date: formatIsoDate(updatedEvent.date),
+            start_time: normalizeTimeForInput(updatedEvent.startTime),
+            end_time: normalizeTimeForInput(updatedEvent.endTime),
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || `Status ${response.status}`);
+      }
+
+      const savedEvent = normalizeEvent(
+        (await response.json()) as ApiCalendarEvent
+      );
+      upsertEvent(savedEvent);
+      toast({
+        title: 'Eveniment actualizat',
+        description: `Evenimentul "${savedEvent.title}" a fost mutat la ${savedEvent.startTime} - ${savedEvent.endTime}.`,
+      });
+    } catch (error) {
+      upsertEvent(previousEvent);
+      const message =
+        error instanceof Error ? error.message : 'Eroare necunoscută';
+      toast({
+        title: 'Nu am putut actualiza evenimentul',
+        description: message,
+        variant: 'destructive',
+      });
+    }
+  }, [
+    apiBaseUrl,
+    formatIsoDate,
+    getAuthToken,
+    normalizeEvent,
+    toast,
+    upsertEvent,
+  ]);
+
   const getEventsForDay = (day: Date) =>
     events
       .filter((event) => isSameDay(event.date, day))
@@ -344,6 +608,42 @@ export default function CalendarPage() {
     }
     void fetchEvents(days[0], days[days.length - 1]);
   }, [days, fetchEvents]);
+
+  useEffect(() => {
+    if (!isDragging) {
+      return;
+    }
+
+    const handleMouseMove = (event: MouseEvent) => {
+      handleDragMove(event.clientY, event.clientX);
+    };
+    const handleMouseUp = () => {
+      void finalizeDrag();
+    };
+    const handleTouchMove = (event: TouchEvent) => {
+      if (event.touches[0]) {
+        event.preventDefault();
+        handleDragMove(event.touches[0].clientY, event.touches[0].clientX);
+      }
+    };
+    const handleTouchEnd = () => {
+      void finalizeDrag();
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd);
+    window.addEventListener('touchcancel', handleTouchEnd);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+      window.removeEventListener('touchcancel', handleTouchEnd);
+    };
+  }, [finalizeDrag, handleDragMove, isDragging]);
 
   return (
     <div className="space-y-6">
@@ -423,6 +723,7 @@ export default function CalendarPage() {
                         <div
                           key={event.id}
                           className="overflow-hidden rounded-md bg-accent p-1 px-1.5 text-xs text-accent-foreground sm:px-2"
+                          onClick={(e) => handleEventClick(event, e)}
                         >
                           <div className="font-semibold">{`${event.startTime}`}</div>
                           <div className="truncate">{event.title}</div>
@@ -481,7 +782,7 @@ export default function CalendarPage() {
                     </div>
                   ))}
                 </div>
-                <div className="grid grid-cols-7">
+                <div className="grid grid-cols-7" ref={weekGridRef}>
                   {days.map((day, dayIndex) => (
                     <div
                       key={dayIndex}
@@ -499,16 +800,40 @@ export default function CalendarPage() {
                         />
                       ))}
 
-                      {getEventsForDay(day).map((event) => {
-                        const top = timeToPosition(event.startTime);
+                      {(() => {
+                        const baseEvents = getEventsForDay(day).filter(
+                          (event) =>
+                            !dragPreview || dragPreview.id !== event.id
+                        );
+                        if (dragPreview && isSameDay(dragPreview.date, day)) {
+                          const previewEvent: Event = {
+                            id: dragPreview.id,
+                            date: dragPreview.date,
+                            title: dragPreview.title,
+                            startTime: dragPreview.startTime,
+                            endTime: dragPreview.endTime,
+                          };
+                          return [...baseEvents, previewEvent];
+                        }
+                        return baseEvents;
+                      })().map((event) => {
+                        const preview =
+                          dragPreview && dragPreview.id === event.id
+                            ? dragPreview
+                            : null;
+                        const startTime = preview?.startTime ?? event.startTime;
+                        const endTime = preview?.endTime ?? event.endTime;
+                        const top = timeToPosition(startTime);
                         const height =
-                          timeToPosition(event.endTime) -
-                          timeToPosition(event.startTime);
+                          timeToPosition(endTime) - timeToPosition(startTime);
 
                         return (
                           <div
                             key={event.id}
-                            className="absolute z-10 w-full cursor-default overflow-hidden rounded-md border bg-primary/80 p-1 text-xs text-primary-foreground shadow-md backdrop-blur-sm sm:p-2"
+                            className={cn(
+                              'absolute z-10 w-full cursor-grab overflow-hidden rounded-md border bg-primary/80 p-1 text-xs text-primary-foreground shadow-md backdrop-blur-sm active:cursor-grabbing sm:p-2',
+                              preview && 'opacity-90'
+                            )}
                             style={{
                               top: `${top}px`,
                               height: `${Math.max(height, 24)}px`,
@@ -516,9 +841,32 @@ export default function CalendarPage() {
                               right: '2px',
                               width: 'calc(100% - 4px)',
                             }}
+                            onClick={(e) => handleEventClick(event, e)}
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              startDrag(
+                                event,
+                                day,
+                                e.clientY,
+                                e.currentTarget
+                              );
+                            }}
+                            onTouchStart={(e) => {
+                              e.stopPropagation();
+                              const touch = e.touches[0];
+                              if (touch) {
+                                startDrag(
+                                  event,
+                                  day,
+                                  touch.clientY,
+                                  e.currentTarget
+                                );
+                              }
+                            }}
                           >
                             <p className="truncate font-semibold">{event.title}</p>
-                            <p className="truncate">{`${event.startTime} - ${event.endTime}`}</p>
+                            <p className="truncate">{`${startTime} - ${endTime}`}</p>
                           </div>
                         );
                       })}
@@ -534,7 +882,9 @@ export default function CalendarPage() {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Adaugă eveniment nou</DialogTitle>
+            <DialogTitle>
+              {editingEventId ? 'Editează eveniment' : 'Adaugă eveniment nou'}
+            </DialogTitle>
             <DialogDescription>
               {selectedDate &&
                 `Adaugă un eveniment pentru data de ${format(
