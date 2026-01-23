@@ -11,6 +11,10 @@ import java.util.UUID;
 public interface DailyReportRepository extends JpaRepository<DailyReport, UUID> {
     Optional<DailyReport> findByAgentMembershipIdAndReportDate(UUID membershipId, LocalDate reportDate);
 
+    List<DailyReport> findByAgentMembershipId(UUID membershipId);
+
+    List<DailyReport> findBySubmittedByMembershipId(UUID membershipId);
+
     List<DailyReport> findByAgentMembershipIdAndReportDateBetweenOrderByReportDateAsc(
             UUID membershipId,
             LocalDate from,
@@ -42,4 +46,6 @@ public interface DailyReportRepository extends JpaRepository<DailyReport, UUID> 
             LocalDate from,
             LocalDate to
     );
+
+    void deleteByAgentMembershipId(UUID membershipId);
 }

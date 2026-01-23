@@ -8,4 +8,6 @@ import java.util.UUID;
 
 public interface TaskBoardItemRepository extends JpaRepository<TaskBoardItem, UUID> {
     List<TaskBoardItem> findByMembershipIdOrderByCreatedAtDesc(UUID membershipId);
+
+    void deleteByMembershipId(UUID membershipId);
 }

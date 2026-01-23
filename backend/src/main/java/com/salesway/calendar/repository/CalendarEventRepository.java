@@ -16,4 +16,6 @@ public interface CalendarEventRepository extends JpaRepository<CalendarEvent, UU
     );
 
     Optional<CalendarEvent> findByIdAndMembershipId(UUID id, UUID membershipId);
+
+    void deleteByMembershipId(UUID membershipId);
 }
