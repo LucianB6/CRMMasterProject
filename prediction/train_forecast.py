@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -7,6 +8,8 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error
+
+from data_sources import ApiConfig, DbConfig, fetch_from_api, fetch_from_db, write_csv
 
 
 @dataclass
@@ -16,6 +19,10 @@ class ForecastConfig:
     output_dir: Path
     rolling_window: int
     horizons: tuple
+    refresh: bool
+    db_url: str | None
+    api_url: str | None
+    api_token: str | None
 
 
 def parse_args() -> ForecastConfig:
@@ -38,6 +45,14 @@ def parse_args() -> ForecastConfig:
         default="3,6,12",
         help="Comma-separated list of month horizons (ex: 3,6,12)",
     )
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Refresh CSV from DB/API before training (uses --db-url or --api-url).",
+    )
+    parser.add_argument("--db-url", default=os.getenv("PREDICTION_DB_URL"))
+    parser.add_argument("--api-url", default=os.getenv("PREDICTION_API_URL"))
+    parser.add_argument("--api-token", default=os.getenv("PREDICTION_API_TOKEN"))
     args = parser.parse_args()
 
     horizons = tuple(int(value) for value in args.horizons.split(",") if value.strip())
@@ -48,6 +63,10 @@ def parse_args() -> ForecastConfig:
         output_dir=Path(args.output),
         rolling_window=args.rolling_window,
         horizons=horizons,
+        refresh=args.refresh,
+        db_url=args.db_url,
+        api_url=args.api_url,
+        api_token=args.api_token,
     )
 
 
@@ -131,6 +150,17 @@ def build_future_frame(
 def main() -> None:
     config = parse_args()
     config.output_dir.mkdir(parents=True, exist_ok=True)
+
+    if config.refresh:
+        if config.db_url:
+            df_source = fetch_from_db(DbConfig(url=config.db_url))
+        elif config.api_url:
+            df_source = fetch_from_api(ApiConfig(url=config.api_url, token=config.api_token))
+        else:
+            raise ValueError(
+                "Refresh requested but no --db-url or --api-url provided."
+            )
+        write_csv(df_source, config.csv_path)
 
     df = pd.read_csv(config.csv_path, parse_dates=["report_date"])
 

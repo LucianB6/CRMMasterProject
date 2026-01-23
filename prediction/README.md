@@ -6,7 +6,7 @@ Scopul este să obținem prognoze pentru vânzările totale pe următoarele 3/6/
 
 ## Structură
 
-- `data/daily_report.csv` – dataset de antrenare (export din DB sau exemplu sintetic pentru demo).
+- `data/daily_report.csv` – dataset de antrenare (export din DB/API sau exemplu sintetic pentru demo).
 - `models/` – modele salvate (opțional, dacă doriți serializare).
 - `outputs/` – rezultate (ex: `forecast.json`, `metrics.json`).
 - `train_forecast.py` – script principal pentru antrenare + predicție.
@@ -35,13 +35,42 @@ contract_value,
 new_cash_collected
 ```
 
+Dacă folosiți API, endpoint-ul trebuie să returneze o listă de obiecte cu aceleași chei
+sau un obiect cu cheia `data` care conține lista.
+
 ## Rulare
+
+### 1. Actualizează CSV-ul din DB sau API
+
+```bash
+python build_dataset.py --db-url "postgresql://user:pass@host:5432/salesway" --csv data/daily_report.csv
+```
+
+Sau prin API:
+
+```bash
+python build_dataset.py --api-url "https://example.com/api/daily-reports" --api-token "TOKEN"
+```
+
+Variabile de mediu suportate:
+
+- `PREDICTION_DB_URL`
+- `PREDICTION_API_URL`
+- `PREDICTION_API_TOKEN`
+
+### 2. Antrenare + prognoză
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 python train_forecast.py --csv data/daily_report.csv --target new_cash_collected
+```
+
+Pentru a actualiza CSV-ul automat înainte de antrenare:
+
+```bash
+python train_forecast.py --csv data/daily_report.csv --refresh --db-url "postgresql://user:pass@host:5432/salesway"
 ```
 
 Scriptul va genera:
