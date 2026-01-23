@@ -179,6 +179,32 @@ public class ManagerTeamService {
         userRepository.delete(membership.getUser());
     }
 
+    @Transactional
+    public void deactivateAgent(UUID userId) {
+        CompanyMembership manager = managerAccessService.getManagerMembership();
+        if (manager.getUser().getId().equals(userId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot deactivate your own user");
+        }
+
+        CompanyMembership membership = manager.getRole() == MembershipRole.ADMIN
+                ? companyMembershipRepository
+                .findByCompanyIdAndUserId(manager.getCompany().getId(), userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"))
+                : companyMembershipRepository
+                .findByManagerMembershipIdAndUserId(manager.getId(), userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        if (membership.getRole() != MembershipRole.AGENT) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User is not an agent");
+        }
+
+        User user = membership.getUser();
+        user.setIsActive(false);
+        membership.setStatus(MembershipStatus.INACTIVE);
+        userRepository.save(user);
+        companyMembershipRepository.save(membership);
+    }
+
     private void validatePassword(String password, String normalizedEmail) {
         if (password == null || password.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password is required");
