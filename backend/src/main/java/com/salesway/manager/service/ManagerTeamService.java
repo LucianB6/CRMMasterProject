@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
+import java.util.UUID;
 
 @Service
 public class ManagerTeamService {
@@ -71,6 +72,29 @@ public class ManagerTeamService {
 
         CompanyMembership savedMembership = companyMembershipRepository.save(membership);
         return new ManagerAgentCreateResponse(savedMembership.getId(), savedUser.getId(), savedUser.getEmail());
+    }
+
+    @Transactional
+    public void deleteAgent(UUID userId) {
+        CompanyMembership manager = managerAccessService.getManagerMembership();
+        if (manager.getUser().getId().equals(userId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot delete your own user");
+        }
+
+        CompanyMembership membership = manager.getRole() == MembershipRole.ADMIN
+                ? companyMembershipRepository
+                .findByCompanyIdAndUserId(manager.getCompany().getId(), userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"))
+                : companyMembershipRepository
+                .findByManagerMembershipIdAndUserId(manager.getId(), userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        if (membership.getRole() != MembershipRole.AGENT) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User is not an agent");
+        }
+
+        companyMembershipRepository.delete(membership);
+        userRepository.delete(membership.getUser());
     }
 
     private void validatePassword(String password, String normalizedEmail) {

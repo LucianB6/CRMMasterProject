@@ -25,6 +25,8 @@ public interface CompanyMembershipRepository extends JpaRepository<CompanyMember
 
     Optional<CompanyMembership> findByCompanyIdAndId(UUID companyId, UUID membershipId);
 
+    Optional<CompanyMembership> findByCompanyIdAndUserId(UUID companyId, UUID userId);
+
     List<CompanyMembership> findByCompanyIdAndRoleAndStatusIn(
             UUID companyId,
             MembershipRole role,
@@ -32,6 +34,8 @@ public interface CompanyMembershipRepository extends JpaRepository<CompanyMember
     );
 
     Optional<CompanyMembership> findByIdAndManagerMembershipId(UUID membershipId, UUID managerMembershipId);
+
+    Optional<CompanyMembership> findByManagerMembershipIdAndUserId(UUID managerMembershipId, UUID userId);
 
     List<CompanyMembership> findByManagerMembershipIdAndRoleAndStatusIn(
             UUID managerMembershipId,
