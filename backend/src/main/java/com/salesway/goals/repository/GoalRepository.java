@@ -8,4 +8,6 @@ import java.util.UUID;
 
 public interface GoalRepository extends JpaRepository<Goal, UUID> {
     List<Goal> findByMembershipIdOrderByCreatedAtDesc(UUID membershipId);
+
+    void deleteByMembershipId(UUID membershipId);
 }

@@ -9,4 +9,8 @@ import java.util.UUID;
 
 public interface DailyReportAuditLogRepository extends JpaRepository<DailyReportAuditLog, UUID> {
     List<DailyReportAuditLog> findByDailyReportCompanyIdOrderByCreatedAtDesc(UUID companyId, Pageable pageable);
+
+    void deleteByActorMembershipId(UUID actorMembershipId);
+
+    void deleteByDailyReportIdIn(List<UUID> dailyReportIds);
 }
