@@ -57,6 +57,7 @@ type ForecastSummary = {
 };
 
 const HORIZON_DAYS = 30;
+const DAILY_HORIZON_DAYS = 1;
 const MODEL_NAME = 'forecast_rf';
 const MODEL_VERSION = 'v1';
 
@@ -82,12 +83,22 @@ const formatDisplayDate = (value: string) =>
     year: 'numeric',
   });
 
+const addDays = (dateValue: string, days: number) => {
+  const date = new Date(dateValue);
+  date.setDate(date.getDate() + days);
+  return formatIsoDate(date);
+};
+
 export default function ExpectedSalesPage() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isFiltering, setIsFiltering] = useState(false);
   const [models, setModels] = useState<MlModelResponse[]>([]);
-  const [predictions, setPredictions] = useState<MlPredictionResponse[]>([]);
+  const [dailyPredictions, setDailyPredictions] = useState<MlPredictionResponse[]>(
+    []
+  );
+  const [aggregatePrediction, setAggregatePrediction] =
+    useState<MlPredictionResponse | null>(null);
   const [activeModelId, setActiveModelId] = useState<string>('');
   const [trainFrom, setTrainFrom] = useState(buildDefaultTrainFrom);
   const [trainTo, setTrainTo] = useState(() => formatIsoDate(new Date()));
@@ -174,19 +185,27 @@ export default function ExpectedSalesPage() {
       }
 
       const data = (await response.json()) as MlPredictionResponse[];
-      setPredictions(data);
-      if (data.length > 0) {
-        setActiveModelId(data[0].model_id);
+      const latest = data[0] ?? null;
+      setAggregatePrediction(latest);
+      if (latest) {
+        setActiveModelId(latest.model_id);
+        const from = latest.prediction_date;
+        const to = addDays(from, HORIZON_DAYS - 1);
+        setFilterFrom(from);
+        setFilterTo(to);
       }
+      return latest;
     },
     [apiBaseUrl, buildHeaders, parseErrorMessage]
   );
 
   const fetchPredictionsForModel = useCallback(
-    async (modelId: string) => {
+    async (modelId: string, fromDate: string, toDate: string) => {
       const query = new URLSearchParams({
         model_id: modelId,
-        horizon_days: String(HORIZON_DAYS),
+        horizon_days: String(DAILY_HORIZON_DAYS),
+        from: fromDate,
+        to: toDate,
       });
 
       const response = await fetch(
@@ -199,7 +218,7 @@ export default function ExpectedSalesPage() {
       }
 
       const data = (await response.json()) as MlPredictionResponse[];
-      setPredictions(data);
+      setDailyPredictions(data);
     },
     [apiBaseUrl, buildHeaders, parseErrorMessage]
   );
@@ -236,7 +255,7 @@ export default function ExpectedSalesPage() {
     if (activeModelId) {
       query.set('model_id', activeModelId);
     }
-    query.set('horizon_days', String(HORIZON_DAYS));
+    query.set('horizon_days', String(DAILY_HORIZON_DAYS));
 
     const response = await fetch(
       `${apiBaseUrl}/ml/predictions?${query.toString()}`,
@@ -248,7 +267,7 @@ export default function ExpectedSalesPage() {
     }
 
     const data = (await response.json()) as MlPredictionResponse[];
-    setPredictions(data);
+    setDailyPredictions(data);
   }, [activeModelId, apiBaseUrl, buildHeaders, filterFrom, filterTo, parseErrorMessage]);
 
   const initializePage = useCallback(async () => {
@@ -261,10 +280,17 @@ export default function ExpectedSalesPage() {
     }
 
     try {
-      await fetchLatestPredictions();
+      const latest = await fetchLatestPredictions();
+      if (latest) {
+        const from = latest.prediction_date;
+        const to = addDays(from, HORIZON_DAYS - 1);
+        await fetchPredictionsForModel(latest.model_id, from, to);
+      } else {
+        setDailyPredictions([]);
+      }
     } catch (error) {
       setErrorMessage(normalizeErrorMessage(error));
-      setPredictions([]);
+      setDailyPredictions([]);
     } finally {
       setIsInitializing(false);
     }
@@ -315,7 +341,31 @@ export default function ExpectedSalesPage() {
           return next;
         });
         setActiveModelId(existingModel.id);
-        await fetchPredictionsForModel(existingModel.id);
+        const aggregateQuery = new URLSearchParams({
+          model_id: existingModel.id,
+          horizon_days: String(HORIZON_DAYS),
+        });
+        const aggregateResponse = await fetch(
+          `${apiBaseUrl}/ml/predictions?${aggregateQuery.toString()}`,
+          { headers: buildHeaders() }
+        );
+        if (aggregateResponse.ok) {
+          const aggregateData =
+            (await aggregateResponse.json()) as MlPredictionResponse[];
+          const latestAggregate = aggregateData.sort((a, b) =>
+            b.prediction_date.localeCompare(a.prediction_date)
+          )[0];
+          if (latestAggregate) {
+            setAggregatePrediction(latestAggregate);
+            const from = latestAggregate.prediction_date;
+            const to = addDays(from, HORIZON_DAYS - 1);
+            setFilterFrom(from);
+            setFilterTo(to);
+            await fetchPredictionsForModel(existingModel.id, from, to);
+            return;
+          }
+        }
+        await fetchFilteredPredictions();
         return;
       }
 
@@ -350,7 +400,22 @@ export default function ExpectedSalesPage() {
       }
 
       const data = (await refreshResponse.json()) as MlPredictionResponse[];
-      setPredictions(data);
+      const aggregate = data.find(
+        (item) => item.horizon_days === HORIZON_DAYS
+      );
+      const daily = data.filter(
+        (item) => item.horizon_days === DAILY_HORIZON_DAYS
+      );
+      setAggregatePrediction(aggregate ?? null);
+      if (aggregate) {
+        const from = aggregate.prediction_date;
+        const to = addDays(from, HORIZON_DAYS - 1);
+        setFilterFrom(from);
+        setFilterTo(to);
+      }
+      setDailyPredictions(
+        daily.sort((a, b) => a.prediction_date.localeCompare(b.prediction_date))
+      );
     } catch (error) {
       setErrorMessage(normalizeErrorMessage(error));
     } finally {
@@ -362,10 +427,15 @@ export default function ExpectedSalesPage() {
     setErrorMessage(null);
     setIsFiltering(true);
     try {
-      if (filterFrom || filterTo || activeModelId) {
+      if (filterFrom && filterTo && activeModelId) {
         await fetchFilteredPredictions();
       } else {
-        await fetchLatestPredictions();
+        const latest = await fetchLatestPredictions();
+        if (latest) {
+          const from = latest.prediction_date;
+          const to = addDays(from, HORIZON_DAYS - 1);
+          await fetchPredictionsForModel(latest.model_id, from, to);
+        }
       }
     } catch (error) {
       setErrorMessage(normalizeErrorMessage(error));
@@ -375,24 +445,33 @@ export default function ExpectedSalesPage() {
   };
 
   const forecast = useMemo<ForecastSummary | null>(() => {
-    if (predictions.length === 0) {
+    if (dailyPredictions.length === 0 && !aggregatePrediction) {
       return null;
     }
-    const sorted = [...predictions].sort((a, b) =>
+    const sorted = [...dailyPredictions].sort((a, b) =>
       a.prediction_date.localeCompare(b.prediction_date)
     );
-    const total = sorted.reduce(
-      (sum, item) => sum + Number(item.predicted_revenue ?? 0),
-      0
-    );
+    const total = aggregatePrediction
+      ? Number(aggregatePrediction.predicted_revenue ?? 0)
+      : sorted.reduce(
+          (sum, item) => sum + Number(item.predicted_revenue ?? 0),
+          0
+        );
     const activeModel = models.find((model) => model.id === activeModelId);
-    const from = sorted[0].prediction_date;
-    const to = sorted[sorted.length - 1].prediction_date;
+    const from = sorted[0]?.prediction_date ?? aggregatePrediction?.prediction_date;
+    const to =
+      sorted[sorted.length - 1]?.prediction_date ??
+      (aggregatePrediction
+        ? addDays(aggregatePrediction.prediction_date, HORIZON_DAYS - 1)
+        : undefined);
 
     return {
-      prediction: `Estimare totală: ${formatCurrency(total)} pentru intervalul ${formatDisplayDate(
-        from
-      )} - ${formatDisplayDate(to)}.`,
+      prediction:
+        from && to
+          ? `Estimare totală: ${formatCurrency(total)} pentru intervalul ${formatDisplayDate(
+              from
+            )} - ${formatDisplayDate(to)}.`
+          : `Estimare totală: ${formatCurrency(total)}.`,
       confidence: 'Medium',
       summary: `Modelul ${activeModel?.name ?? 'selectat'} (${
         activeModel?.version ?? 'v1'
@@ -400,17 +479,17 @@ export default function ExpectedSalesPage() {
         trainFrom
       )} și ${formatDisplayDate(trainTo)}.`,
     };
-  }, [activeModelId, models, predictions, trainFrom, trainTo]);
+  }, [activeModelId, aggregatePrediction, dailyPredictions, models, trainFrom, trainTo]);
 
   const chartData = useMemo(
     () =>
-      predictions.map((prediction) => ({
+      dailyPredictions.map((prediction) => ({
         date: formatDisplayDate(prediction.prediction_date),
         forecast: Number(prediction.predicted_revenue ?? 0),
         lower: Number(prediction.lower_bound ?? 0),
         upper: Number(prediction.upper_bound ?? 0),
       })),
-    [predictions]
+    [dailyPredictions]
   );
 
   const getConfidenceBadgeColor = (
@@ -600,7 +679,7 @@ export default function ExpectedSalesPage() {
             </CardContent>
           </Card>
 
-          {predictions.length > 0 ? (
+          {dailyPredictions.length > 0 ? (
             <>
               <Card>
                 <CardHeader>
@@ -670,7 +749,7 @@ export default function ExpectedSalesPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {predictions.map((prediction) => (
+                        {dailyPredictions.map((prediction) => (
                           <tr key={prediction.id} className="border-t">
                             <td className="py-2 pr-4">
                               {formatDisplayDate(prediction.prediction_date)}
