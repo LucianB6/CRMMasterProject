@@ -5,51 +5,48 @@ import com.salesway.ml.dto.PredictResponse;
 import com.salesway.ml.dto.TrainRequest;
 import com.salesway.ml.dto.TrainResponse;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
-import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 @Component
 public class MlFastApiClient {
-    private final WebClient webClient;
+    private final RestTemplate restTemplate;
 
-    public MlFastApiClient(WebClient.Builder webClientBuilder, @Value("${app.ml.base-url}") String baseUrl) {
-        this.webClient = webClientBuilder
-                .baseUrl(baseUrl)
+    public MlFastApiClient(RestTemplateBuilder restTemplateBuilder, @Value("${app.ml.base-url}") String baseUrl) {
+        this.restTemplate = restTemplateBuilder
+                .rootUri(baseUrl)
                 .build();
     }
 
     public TrainResponse train(TrainRequest request) {
-        TrainResponse response = webClient.post()
-                .uri("/train")
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(request)
-                .retrieve()
-                .bodyToMono(TrainResponse.class)
-                .block();
+        ResponseEntity<TrainResponse> response = restTemplate.postForEntity(
+                "/train",
+                request,
+                TrainResponse.class
+        );
 
-        if (response == null) {
+        if (response.getBody() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Empty response from ML service");
         }
 
-        return response;
+        return response.getBody();
     }
 
     public PredictResponse predict(PredictRequest request) {
-        PredictResponse response = webClient.post()
-                .uri("/predict")
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(request)
-                .retrieve()
-                .bodyToMono(PredictResponse.class)
-                .block();
+        ResponseEntity<PredictResponse> response = restTemplate.postForEntity(
+                "/predict",
+                request,
+                PredictResponse.class
+        );
 
-        if (response == null) {
+        if (response.getBody() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Empty response from ML service");
         }
 
-        return response;
+        return response.getBody();
     }
 }
