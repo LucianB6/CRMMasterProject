@@ -1,15 +1,34 @@
 import argparse
 import json
 import os
+import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 import pandas as pd
+import psycopg2
+from psycopg2.extras import execute_batch
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 from data_sources import ApiConfig, DbConfig, fetch_from_api, fetch_from_db, write_csv
+
+
+def load_config(path: str) -> dict:
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+    except FileNotFoundError:
+        return {}
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON in config file: {path}") from exc
+
+
+def default_version() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
 
 
 @dataclass
@@ -20,20 +39,28 @@ class ForecastConfig:
     rolling_window: int
     horizons: tuple
     refresh: bool
-    db_url: str | None
-    api_url: str | None
-    api_token: str | None
+    db_url: Optional[str]
+    api_url: Optional[str]
+    api_token: Optional[str]
+    company_id: Optional[str]
+    model_name: str
+    model_version: str
+    model_status: str
+    save_db: bool
+    deprecate_previous: bool
+    artifact_uri: Optional[str]
 
 
 def parse_args() -> ForecastConfig:
     parser = argparse.ArgumentParser(description="Train and forecast sales totals.")
-    parser.add_argument("--csv", dest="csv_path", required=True, help="Path to daily_report.csv")
+    parser.add_argument("--csv", dest="csv_path", default=None, help="Path to daily_report.csv")
     parser.add_argument(
         "--target",
         default="new_cash_collected",
         help="Target column to forecast (default: new_cash_collected)",
     )
     parser.add_argument("--output", default="outputs", help="Output directory for forecasts")
+    parser.add_argument("--config", default="config.json", help="Path to JSON config file")
     parser.add_argument(
         "--rolling-window",
         type=int,
@@ -53,7 +80,42 @@ def parse_args() -> ForecastConfig:
     parser.add_argument("--db-url", default=os.getenv("PREDICTION_DB_URL"))
     parser.add_argument("--api-url", default=os.getenv("PREDICTION_API_URL"))
     parser.add_argument("--api-token", default=os.getenv("PREDICTION_API_TOKEN"))
+    parser.add_argument("--company-id", default=os.getenv("PREDICTION_COMPANY_ID"))
+    parser.add_argument("--model-name", default=None)
+    parser.add_argument("--model-version", default=None)
+    parser.add_argument("--model-status", default=None)
+    parser.add_argument("--artifact-uri", default=None)
+    parser.add_argument("--save-db", action="store_true", help="Persist model and predictions to DB")
+    parser.add_argument(
+        "--deprecate-previous",
+        action="store_true",
+        help="Mark previous ACTIVE models as DEPRECATED for the same company/name",
+    )
     args = parser.parse_args()
+
+    config = load_config(args.config)
+    if args.csv_path is None:
+        args.csv_path = config.get("csv_path", "data/daily_report.csv")
+    if args.target == "new_cash_collected" and config.get("target"):
+        args.target = config["target"]
+    if args.output == "outputs" and config.get("output_dir"):
+        args.output = config["output_dir"]
+    if args.rolling_window == 30 and config.get("rolling_window"):
+        args.rolling_window = int(config["rolling_window"])
+    if args.horizons == "3,6,12" and config.get("horizons"):
+        args.horizons = config["horizons"]
+    args.db_url = args.db_url or config.get("db_url")
+    args.api_url = args.api_url or config.get("api_url")
+    args.api_token = args.api_token or config.get("api_token")
+    args.company_id = args.company_id or config.get("company_id")
+    args.model_name = args.model_name or config.get("model_name", "forecast_rf")
+    args.model_version = args.model_version or config.get("model_version", default_version())
+    args.model_status = args.model_status or config.get("model_status", "ACTIVE")
+    args.artifact_uri = args.artifact_uri or config.get("artifact_uri")
+    args.save_db = args.save_db or bool(config.get("save_db", False))
+    args.deprecate_previous = args.deprecate_previous or bool(
+        config.get("deprecate_previous", True)
+    )
 
     horizons = tuple(int(value) for value in args.horizons.split(",") if value.strip())
 
@@ -67,6 +129,13 @@ def parse_args() -> ForecastConfig:
         db_url=args.db_url,
         api_url=args.api_url,
         api_token=args.api_token,
+        company_id=args.company_id,
+        model_name=args.model_name,
+        model_version=args.model_version,
+        model_status=args.model_status,
+        save_db=args.save_db,
+        deprecate_previous=args.deprecate_previous,
+        artifact_uri=args.artifact_uri,
     )
 
 
@@ -79,29 +148,60 @@ def add_date_features(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def add_rolling_features(
+    df: pd.DataFrame,
+    feature_columns: list,
+    target: str,
+    lags: tuple = (1, 7, 30),
+    windows: tuple = (7, 30, 60),
+) -> pd.DataFrame:
+    df = df.copy()
+    numeric_columns = [
+        column
+        for column in feature_columns
+        if pd.api.types.is_numeric_dtype(df[column])
+    ]
+    if target in df.columns and target not in numeric_columns:
+        numeric_columns.append(target)
+    for column in numeric_columns:
+        for lag in lags:
+            df[f"{column}_lag_{lag}"] = df[column].shift(lag)
+        for window in windows:
+            df[f"{column}_roll_{window}"] = (
+                df[column].shift(1).rolling(window, min_periods=1).mean()
+            )
+    return df
+
+
 def prepare_data(df: pd.DataFrame, target: str) -> tuple:
     df = df.sort_values("report_date").reset_index(drop=True)
-    df = add_date_features(df)
+    df_base = add_date_features(df)
 
+    base_feature_columns = [
+        column
+        for column in df_base.columns
+        if column not in {"report_date", target}
+    ]
+    df_features = add_rolling_features(df_base, base_feature_columns, target)
     feature_columns = [
         column
-        for column in df.columns
+        for column in df_features.columns
         if column not in {"report_date", target}
     ]
 
-    X = df[feature_columns]
-    y = df[target]
+    X = df_features[feature_columns].fillna(0)
+    y = df_features[target]
 
-    split_index = max(int(len(df) * 0.8), 1)
+    split_index = max(int(len(df_features) * 0.75), 1)
     X_train, X_test = X.iloc[:split_index], X.iloc[split_index:]
     y_train, y_test = y.iloc[:split_index], y.iloc[split_index:]
 
-    return X_train, X_test, y_train, y_test, feature_columns, df
+    return X_train, X_test, y_train, y_test, feature_columns, df_base
 
 
 def train_model(X_train: pd.DataFrame, y_train: pd.Series) -> RandomForestRegressor:
     model = RandomForestRegressor(
-        n_estimators=300,
+        n_estimators=400,
         random_state=42,
         n_jobs=-1,
     )
@@ -143,8 +243,133 @@ def build_future_frame(
     for column in numeric_columns:
         future_df[column] = rolling_means[column]
 
-    future_df = add_date_features(future_df)
-    return future_df[feature_columns]
+    combined = pd.concat([df.copy(), future_df], ignore_index=True, sort=False)
+    combined = add_date_features(combined)
+    base_feature_columns = [
+        column
+        for column in combined.columns
+        if column not in {"report_date", target}
+    ]
+    combined = add_rolling_features(combined, base_feature_columns, target)
+    combined_features = combined[feature_columns].fillna(0)
+    return combined_features.tail(horizon_days)
+
+
+def save_results_to_db(config: ForecastConfig, metrics: dict, forecast: dict) -> None:
+    if not config.db_url:
+        raise ValueError("db_url is required to save results to DB.")
+    if not config.company_id:
+        raise ValueError("company_id is required to save results to DB.")
+
+    now = datetime.now(timezone.utc)
+    model_id = str(uuid.uuid4())
+    metrics_text = json.dumps(metrics)
+    artifact_uri = config.artifact_uri or str(config.output_dir.resolve())
+
+    with psycopg2.connect(config.db_url) as connection:
+        with connection.cursor() as cursor:
+            if config.deprecate_previous:
+                cursor.execute(
+                    """
+                    UPDATE ml_models
+                    SET status = 'DEPRECATED', updated_at = %s
+                    WHERE company_id = %s AND name = %s AND status = 'ACTIVE'
+                    """,
+                    (now, config.company_id, config.model_name),
+                )
+
+            cursor.execute(
+                """
+                INSERT INTO ml_models (
+                    id,
+                    created_at,
+                    updated_at,
+                    artifact_uri,
+                    metrics_json,
+                    name,
+                    status,
+                    trained_at,
+                    version,
+                    company_id
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    model_id,
+                    now,
+                    now,
+                    artifact_uri,
+                    metrics_text,
+                    config.model_name,
+                    config.model_status,
+                    now,
+                    config.model_version,
+                    config.company_id,
+                ),
+            )
+
+            prediction_rows = []
+            prediction_date = None
+            if forecast.get("daily_predictions"):
+                prediction_date = forecast["daily_predictions"][0]["date"]
+
+            for horizon in config.horizons:
+                days = horizon * 30
+                total = forecast["totals"].get(f"{horizon}_months")
+                if total is None:
+                    continue
+                prediction_rows.append(
+                    (
+                        str(uuid.uuid4()),
+                        now,
+                        now,
+                        days,
+                        None,
+                        total,
+                        prediction_date,
+                        None,
+                        config.company_id,
+                        model_id,
+                    )
+                )
+
+            for item in forecast.get("daily_predictions", []):
+                prediction_rows.append(
+                    (
+                        str(uuid.uuid4()),
+                        now,
+                        now,
+                        1,
+                        None,
+                        item["value"],
+                        item["date"],
+                        None,
+                        config.company_id,
+                        model_id,
+                    )
+                )
+
+            if prediction_rows:
+                execute_batch(
+                    cursor,
+                    """
+                    INSERT INTO ml_predictions (
+                        id,
+                        created_at,
+                        updated_at,
+                        horizon_days,
+                        lower_bound,
+                        predicted_revenue,
+                        prediction_date,
+                        upper_bound,
+                        company_id,
+                        model_id
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    prediction_rows,
+                    page_size=500,
+                )
 
 
 def main() -> None:
@@ -218,6 +443,9 @@ def main() -> None:
     (config.output_dir / "forecast.json").write_text(
         json.dumps(forecast, indent=2), encoding="utf-8"
     )
+
+    if config.save_db:
+        save_results_to_db(config, metrics, forecast)
 
     print("Metrics:")
     print(json.dumps(metrics, indent=2))

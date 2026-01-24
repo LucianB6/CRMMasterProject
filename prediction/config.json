@@ -1,0 +1,9 @@
+{
+  "db_url": "postgresql://postgres:user@localhost:5432/salesway",
+  "csv_path": "data/daily_report.csv",
+  "company_id": "de1532fe-af11-4eeb-bfa5-2f6f4bd422f9",
+  "save_db": true,
+  "model_name": "forecast_rf",
+  "model_status": "ACTIVE",
+  "deprecate_previous": true
+}

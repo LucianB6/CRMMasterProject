@@ -1,17 +1,41 @@
 import argparse
+import json
 import os
 from pathlib import Path
 
 from data_sources import ApiConfig, DbConfig, fetch_from_api, fetch_from_db, write_csv
 
 
+def load_config(path: str) -> dict:
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+    except FileNotFoundError:
+        return {}
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON in config file: {path}") from exc
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build daily_report.csv from DB or API.")
     parser.add_argument("--csv", default="data/daily_report.csv", help="Path to output CSV")
-    parser.add_argument("--db-url", default=os.getenv("PREDICTION_DB_URL"))
-    parser.add_argument("--api-url", default=os.getenv("PREDICTION_API_URL"))
-    parser.add_argument("--api-token", default=os.getenv("PREDICTION_API_TOKEN"))
-    return parser.parse_args()
+    parser.add_argument("--config", default="config.json", help="Path to JSON config file")
+    parser.add_argument("--db-url", default=None)
+    parser.add_argument("--api-url", default=None)
+    parser.add_argument("--api-token", default=None)
+    args = parser.parse_args()
+
+    config = load_config(args.config)
+    env_db_url = os.getenv("PREDICTION_DB_URL")
+    env_api_url = os.getenv("PREDICTION_API_URL")
+    env_api_token = os.getenv("PREDICTION_API_TOKEN")
+
+    if args.csv == "data/daily_report.csv" and config.get("csv_path"):
+        args.csv = config["csv_path"]
+    args.db_url = args.db_url or env_db_url or config.get("db_url")
+    args.api_url = args.api_url or env_api_url or config.get("api_url")
+    args.api_token = args.api_token or env_api_token or config.get("api_token")
+    return args
 
 
 def main() -> None:

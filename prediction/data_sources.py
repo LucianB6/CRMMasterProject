@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Dict, Iterable, Mapping, Optional
 
 import pandas as pd
 import psycopg2
@@ -32,7 +32,7 @@ COLUMNS = [
 @dataclass
 class ApiConfig:
     url: str
-    token: str | None = None
+    token: Optional[str] = None
 
 
 @dataclass
@@ -40,10 +40,61 @@ class DbConfig:
     url: str
 
 
-def _normalize_frame(df: pd.DataFrame) -> pd.DataFrame:
+def _apply_aliases(record: Mapping[str, Any]) -> Dict[str, Any]:
+    aliases = {
+        "reportDate": "report_date",
+        "date": "report_date",
+        "outboundDials": "outbound_dials",
+        "pickups": "pickups",
+        "conversations30sPlus": "conversations_30s_plus",
+        "salesCallBookedFromOutbound": "sales_call_booked_from_outbound",
+        "salesCallOnCalendar": "sales_call_on_calendar",
+        "noShow": "no_show",
+        "rescheduleRequest": "reschedule_request",
+        "cancel": "cancel",
+        "deposits": "deposits",
+        "salesOneCallClose": "sales_one_call_close",
+        "followupSales": "followup_sales",
+        "upsellConversationTaken": "upsell_conversation_taken",
+        "upsells": "upsells",
+        "contractValue": "contract_value",
+        "newCashCollected": "new_cash_collected",
+    }
+    normalized: Dict[str, Any] = {}
+    for key, value in record.items():
+        normalized_key = aliases.get(key, key)
+        normalized[normalized_key] = value
+    return normalized
+
+
+def _flatten_payload_item(item: Mapping[str, Any]) -> Dict[str, Any]:
+    flattened: Dict[str, Any] = {}
+    for key, value in item.items():
+        if isinstance(value, Mapping):
+            flattened.update(value)
+        else:
+            flattened[key] = value
+    return _apply_aliases(flattened)
+
+
+def _aggregate_by_date(df: pd.DataFrame) -> pd.DataFrame:
+    numeric_columns = [column for column in COLUMNS if column != "report_date"]
+    for column in numeric_columns:
+        if column in df.columns:
+            df[column] = pd.to_numeric(df[column], errors="coerce")
+    aggregated = df.groupby("report_date", as_index=False)[numeric_columns].sum()
+    return aggregated
+
+
+def _normalize_frame(df: pd.DataFrame, allow_missing: bool = False) -> pd.DataFrame:
     missing = [column for column in COLUMNS if column not in df.columns]
     if missing:
-        raise ValueError(f"Dataset is missing required columns: {', '.join(missing)}")
+        if allow_missing:
+            for column in missing:
+                if column != "report_date":
+                    df[column] = 0
+        else:
+            raise ValueError(f"Dataset is missing required columns: {', '.join(missing)}")
 
     df = df[COLUMNS].copy()
     df["report_date"] = pd.to_datetime(df["report_date"], errors="coerce")
@@ -66,8 +117,18 @@ def fetch_from_api(config: ApiConfig) -> pd.DataFrame:
     if not isinstance(payload, Iterable):
         raise ValueError("API response must be a list of records or a data array.")
 
-    df = pd.DataFrame(payload)
-    return _normalize_frame(df)
+    records = []
+    for item in payload:
+        if isinstance(item, Mapping):
+            records.append(_flatten_payload_item(item))
+        else:
+            raise ValueError("API response items must be objects.")
+    df = pd.DataFrame(records)
+    if "report_date" not in df.columns:
+        raise ValueError("API response must include report_date (or reportDate/date).")
+    df["report_date"] = pd.to_datetime(df["report_date"], errors="coerce")
+    df = _aggregate_by_date(df)
+    return _normalize_frame(df, allow_missing=True)
 
 
 def fetch_from_db(config: DbConfig) -> pd.DataFrame:
@@ -96,7 +157,8 @@ def fetch_from_db(config: DbConfig) -> pd.DataFrame:
     """
     with psycopg2.connect(config.url) as connection:
         df = pd.read_sql(query, connection)
-    return _normalize_frame(df)
+    df = _normalize_frame(df)
+    return _aggregate_by_date(df)
 
 
 def write_csv(df: pd.DataFrame, path: Path) -> None:
