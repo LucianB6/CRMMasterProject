@@ -19,7 +19,11 @@ public interface MlModelRepository extends JpaRepository<MlModel, UUID> {
             MlModelStatus status
     );
 
+    Optional<MlModel> findByCompanyIdAndNameAndVersion(UUID companyId, String name, String version);
+
     List<MlModel> findByCompanyIdAndNameAndStatus(UUID companyId, String name, MlModelStatus status);
+
+    Optional<MlModel> findFirstByCompanyIdAndStatusOrderByTrainedAtDesc(UUID companyId, MlModelStatus status);
 
     @Query("""
             select m from MlModel m
