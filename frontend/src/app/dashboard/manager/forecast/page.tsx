@@ -57,6 +57,8 @@ type ForecastSummary = {
 };
 
 const HORIZON_DAYS = 30;
+const MODEL_NAME = 'forecast_rf';
+const MODEL_VERSION = 'v1';
 
 const formatIsoDate = (value: Date) => value.toISOString().slice(0, 10);
 
@@ -119,7 +121,7 @@ export default function ExpectedSalesPage() {
     [getAuthToken]
   );
 
-  const parseErrorMessage = async (response: Response) => {
+  const parseErrorMessage = useCallback(async (response: Response) => {
     const message = await response.text();
     if (response.status === 404) {
       return 'Resursa nu a fost găsită (404).';
@@ -128,7 +130,7 @@ export default function ExpectedSalesPage() {
       return 'Conflict la salvare (409). Verifică dacă modelul există deja.';
     }
     return message || `Status ${response.status}`;
-  };
+  }, []);
 
   const normalizeErrorMessage = (error: unknown) => {
     if (error instanceof Error) {
@@ -152,7 +154,7 @@ export default function ExpectedSalesPage() {
     if (data.length > 0) {
       setActiveModelId((prev) => prev || data[0].id);
     }
-  }, [apiBaseUrl, buildHeaders]);
+  }, [apiBaseUrl, buildHeaders, parseErrorMessage]);
 
   const fetchLatestPredictions = useCallback(
     async (predictionDateOverride?: string) => {
@@ -177,8 +179,51 @@ export default function ExpectedSalesPage() {
         setActiveModelId(data[0].model_id);
       }
     },
-    [apiBaseUrl, buildHeaders]
+    [apiBaseUrl, buildHeaders, parseErrorMessage]
   );
+
+  const fetchPredictionsForModel = useCallback(
+    async (modelId: string) => {
+      const query = new URLSearchParams({
+        model_id: modelId,
+        horizon_days: String(HORIZON_DAYS),
+      });
+
+      const response = await fetch(
+        `${apiBaseUrl}/ml/predictions?${query.toString()}`,
+        { headers: buildHeaders() }
+      );
+
+      if (!response.ok) {
+        throw new Error(await parseErrorMessage(response));
+      }
+
+      const data = (await response.json()) as MlPredictionResponse[];
+      setPredictions(data);
+    },
+    [apiBaseUrl, buildHeaders, parseErrorMessage]
+  );
+
+  const fetchActiveModelByName = useCallback(async () => {
+    const query = new URLSearchParams({
+      status: 'ACTIVE',
+      name: MODEL_NAME,
+    });
+    const response = await fetch(`${apiBaseUrl}/ml/models?${query.toString()}`, {
+      headers: buildHeaders(),
+    });
+    if (!response.ok) {
+      throw new Error(await parseErrorMessage(response));
+    }
+    const data = (await response.json()) as MlModelResponse[];
+    if (data.length === 0) {
+      throw new Error('Nu există un model activ disponibil.');
+    }
+    const sorted = [...data].sort((a, b) =>
+      (b.trained_at ?? '').localeCompare(a.trained_at ?? '')
+    );
+    return sorted[0];
+  }, [apiBaseUrl, buildHeaders, parseErrorMessage]);
 
   const fetchFilteredPredictions = useCallback(async () => {
     const query = new URLSearchParams();
@@ -204,7 +249,7 @@ export default function ExpectedSalesPage() {
 
     const data = (await response.json()) as MlPredictionResponse[];
     setPredictions(data);
-  }, [activeModelId, apiBaseUrl, buildHeaders, filterFrom, filterTo]);
+  }, [activeModelId, apiBaseUrl, buildHeaders, filterFrom, filterTo, parseErrorMessage]);
 
   const initializePage = useCallback(async () => {
     setIsInitializing(true);
@@ -250,13 +295,29 @@ export default function ExpectedSalesPage() {
         method: 'POST',
         headers: buildHeaders(true),
         body: JSON.stringify({
-          name: 'forecast_rf',
-          version: 'v1',
+          name: MODEL_NAME,
+          version: MODEL_VERSION,
           horizon_days: HORIZON_DAYS,
           train_from: trainFrom,
           train_to: trainTo,
         }),
       });
+
+      if (trainResponse.status === 409) {
+        const existingModel = await fetchActiveModelByName();
+        setModels((prev) => {
+          const existingIndex = prev.findIndex((item) => item.id === existingModel.id);
+          if (existingIndex === -1) {
+            return [existingModel, ...prev];
+          }
+          const next = [...prev];
+          next[existingIndex] = existingModel;
+          return next;
+        });
+        setActiveModelId(existingModel.id);
+        await fetchPredictionsForModel(existingModel.id);
+        return;
+      }
 
       if (!trainResponse.ok) {
         throw new Error(await parseErrorMessage(trainResponse));
