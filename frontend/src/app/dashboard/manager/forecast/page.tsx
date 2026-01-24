@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -20,7 +20,6 @@ import {
   CardTitle,
 } from '../../../../components/ui/card';
 import { Button } from '../../../../components/ui/button';
-import { type ForecastOutput } from '../../../../ai/flows/forecast-flow';
 import { Badge } from '../../../../components/ui/badge';
 import { cn } from '../../../../lib/utils';
 import {
@@ -31,84 +30,327 @@ import {
   SelectValue,
 } from '../../../../components/ui/select';
 import { Label } from '../../../../components/ui/label';
+import { Input } from '../../../../components/ui/input';
+
+type MlModelResponse = {
+  id: string;
+  name: string;
+  version: string;
+  status: string;
+  trained_at: string | null;
+};
+
+type MlPredictionResponse = {
+  id: string;
+  model_id: string;
+  prediction_date: string;
+  horizon_days: number;
+  predicted_revenue: number;
+  lower_bound: number;
+  upper_bound: number;
+};
+
+type ForecastSummary = {
+  prediction: string;
+  confidence: 'High' | 'Medium' | 'Low';
+  summary: string;
+};
+
+const HORIZON_DAYS = 30;
+
+const formatIsoDate = (value: Date) => value.toISOString().slice(0, 10);
+
+const buildDefaultTrainFrom = () => {
+  const date = new Date();
+  date.setDate(date.getDate() - 90);
+  return formatIsoDate(date);
+};
+
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat('ro-RO', {
+    style: 'currency',
+    currency: 'RON',
+    maximumFractionDigits: 0,
+  }).format(value);
+
+const formatDisplayDate = (value: string) =>
+  new Date(value).toLocaleDateString('ro-RO', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
 
 export default function ExpectedSalesPage() {
-  const [isLoading, setIsLoading] = useState(false);
-  const [forecast, setForecast] = useState<ForecastOutput | null>(null);
-  const [chartData, setChartData] = useState<any[] | null>(null);
-  const [forecastPeriod, setForecastPeriod] = useState('3 months');
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isFiltering, setIsFiltering] = useState(false);
+  const [models, setModels] = useState<MlModelResponse[]>([]);
+  const [predictions, setPredictions] = useState<MlPredictionResponse[]>([]);
+  const [activeModelId, setActiveModelId] = useState<string>('');
+  const [trainFrom, setTrainFrom] = useState(buildDefaultTrainFrom);
+  const [trainTo, setTrainTo] = useState(() => formatIsoDate(new Date()));
+  const [predictionDate, setPredictionDate] = useState(() =>
+    formatIsoDate(new Date())
+  );
+  const [filterFrom, setFilterFrom] = useState('');
+  const [filterTo, setFilterTo] = useState('');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleGenerateForecast = () => {
-    setIsLoading(true);
-    setForecast(null);
-    setChartData(null);
+  const apiBaseUrl = useMemo(
+    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8081',
+    []
+  );
 
-    // Simulate AI response with a delay and hardcoded data
-    setTimeout(() => {
-      let periodText = '';
-      let predictionValue = '';
-      let forecastData: any[] = [];
-      const baseData = [
-        { month: 'Ian', actual: 85000 },
-        { month: 'Feb', actual: 78000 },
-        { month: 'Mar', actual: 95000 },
-        { month: 'Apr', actual: 92000 },
-        { month: 'Mai', actual: 110000 },
-        { month: 'Iun', actual: 125000 },
-      ];
+  const getAuthToken = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+    return window.localStorage.getItem('salesway_token');
+  }, []);
 
-      if (forecastPeriod === '3 months') {
-        periodText = 'urmatoarele 3 luni';
-        predictionValue = '380,000 RON';
-        forecastData = [
-          { month: 'Iul', forecast: 120000 },
-          { month: 'Aug', forecast: 125000 },
-          { month: 'Sep', forecast: 135000 },
-        ];
-      } else if (forecastPeriod === '6 months') {
-        periodText = 'urmatoarele 6 luni';
-        predictionValue = '800,000 RON';
-        forecastData = [
-          { month: 'Iul', forecast: 120000 },
-          { month: 'Aug', forecast: 125000 },
-          { month: 'Sep', forecast: 135000 },
-          { month: 'Oct', forecast: 140000 },
-          { month: 'Nov', forecast: 130000 },
-          { month: 'Dec', forecast: 150000 },
-        ];
-      } else {
-        periodText = 'urmatorul an';
-        predictionValue = '1,650,000 RON';
-        forecastData = [
-          { month: 'Iul', forecast: 120000 },
-          { month: 'Aug', forecast: 125000 },
-          { month: 'Sep', forecast: 135000 },
-          { month: 'Oct', forecast: 140000 },
-          { month: 'Nov', forecast: 130000 },
-          { month: 'Dec', forecast: 150000 },
-          { month: "Ian '25", forecast: 145000 },
-          { month: "Feb '25", forecast: 135000 },
-          { month: "Mar '25", forecast: 160000 },
-          { month: "Apr '25", forecast: 155000 },
-          { month: "Mai '25", forecast: 170000 },
-          { month: "Iun '25", forecast: 180000 },
-        ];
+  const buildHeaders = useCallback(
+    (withJson = false) => {
+      const token = getAuthToken();
+      return {
+        ...(withJson ? { 'Content-Type': 'application/json' } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+    },
+    [getAuthToken]
+  );
+
+  const parseErrorMessage = async (response: Response) => {
+    const message = await response.text();
+    if (response.status === 404) {
+      return 'Resursa nu a fost găsită (404).';
+    }
+    if (response.status === 409) {
+      return 'Conflict la salvare (409). Verifică dacă modelul există deja.';
+    }
+    return message || `Status ${response.status}`;
+  };
+
+  const normalizeErrorMessage = (error: unknown) => {
+    if (error instanceof Error) {
+      if (error.message.toLowerCase().includes('failed to fetch')) {
+        return 'Nu am putut contacta serverul ML. Verifică conexiunea și configurarea API.';
+      }
+      return error.message;
+    }
+    return 'Eroare necunoscută';
+  };
+
+  const fetchModels = useCallback(async () => {
+    const response = await fetch(`${apiBaseUrl}/ml/models`, {
+      headers: buildHeaders(),
+    });
+    if (!response.ok) {
+      throw new Error(await parseErrorMessage(response));
+    }
+    const data = (await response.json()) as MlModelResponse[];
+    setModels(data);
+    if (data.length > 0) {
+      setActiveModelId((prev) => prev || data[0].id);
+    }
+  }, [apiBaseUrl, buildHeaders]);
+
+  const fetchLatestPredictions = useCallback(
+    async (predictionDateOverride?: string) => {
+      const query = new URLSearchParams({
+        horizon_days: String(HORIZON_DAYS),
+      });
+      if (predictionDateOverride) {
+        query.set('prediction_date', predictionDateOverride);
+      }
+      const response = await fetch(
+        `${apiBaseUrl}/ml/predictions/latest?${query.toString()}`,
+        { headers: buildHeaders() }
+      );
+
+      if (!response.ok) {
+        throw new Error(await parseErrorMessage(response));
       }
 
-      const mockForecast: ForecastOutput = {
-        prediction: `Se estimeaza o crestere a valorii totale a contractelor la aproximativ ${predictionValue} in ${periodText}.`,
-        confidence: 'Medium',
-        summary:
-          'Analiza se bazeaza pe trendul ascendent din ultimele 6 luni si pe sezonalitatea specifica industriei. Performanta solida a echipei in Q2 sustine aceasta prognoza pozitiva.',
-      };
+      const data = (await response.json()) as MlPredictionResponse[];
+      setPredictions(data);
+      if (data.length > 0) {
+        setActiveModelId(data[0].model_id);
+      }
+    },
+    [apiBaseUrl, buildHeaders]
+  );
 
-      const combinedChartData = [...baseData, ...forecastData];
+  const fetchFilteredPredictions = useCallback(async () => {
+    const query = new URLSearchParams();
+    if (filterFrom) {
+      query.set('from', filterFrom);
+    }
+    if (filterTo) {
+      query.set('to', filterTo);
+    }
+    if (activeModelId) {
+      query.set('model_id', activeModelId);
+    }
+    query.set('horizon_days', String(HORIZON_DAYS));
 
-      setChartData(combinedChartData);
-      setForecast(mockForecast);
-      setIsLoading(false);
-    }, 2000);
+    const response = await fetch(
+      `${apiBaseUrl}/ml/predictions?${query.toString()}`,
+      { headers: buildHeaders() }
+    );
+
+    if (!response.ok) {
+      throw new Error(await parseErrorMessage(response));
+    }
+
+    const data = (await response.json()) as MlPredictionResponse[];
+    setPredictions(data);
+  }, [activeModelId, apiBaseUrl, buildHeaders, filterFrom, filterTo]);
+
+  const initializePage = useCallback(async () => {
+    setIsInitializing(true);
+    setErrorMessage(null);
+    try {
+      await fetchModels();
+    } catch (error) {
+      setErrorMessage(normalizeErrorMessage(error));
+    }
+
+    try {
+      await fetchLatestPredictions();
+    } catch (error) {
+      setErrorMessage(normalizeErrorMessage(error));
+      setPredictions([]);
+    } finally {
+      setIsInitializing(false);
+    }
+  }, [fetchLatestPredictions, fetchModels]);
+
+  useEffect(() => {
+    void initializePage();
+  }, [initializePage]);
+
+  const handleGenerateForecast = async () => {
+    setErrorMessage(null);
+
+    if (!trainFrom || !trainTo) {
+      setErrorMessage('Selectează intervalul de training.');
+      return;
+    }
+
+    if (new Date(trainFrom) > new Date(trainTo)) {
+      setErrorMessage('Data de început trebuie să fie înainte de data de final.');
+      return;
+    }
+
+    const resolvedPredictionDate = predictionDate || trainTo;
+
+    setIsGenerating(true);
+    try {
+      const trainResponse = await fetch(`${apiBaseUrl}/ml/models/train`, {
+        method: 'POST',
+        headers: buildHeaders(true),
+        body: JSON.stringify({
+          name: 'forecast_rf',
+          version: 'v1',
+          horizon_days: HORIZON_DAYS,
+          train_from: trainFrom,
+          train_to: trainTo,
+        }),
+      });
+
+      if (!trainResponse.ok) {
+        throw new Error(await parseErrorMessage(trainResponse));
+      }
+
+      const trainedModel = (await trainResponse.json()) as MlModelResponse;
+      setModels((prev) => {
+        const existingIndex = prev.findIndex((item) => item.id === trainedModel.id);
+        if (existingIndex === -1) {
+          return [trainedModel, ...prev];
+        }
+        const next = [...prev];
+        next[existingIndex] = trainedModel;
+        return next;
+      });
+      setActiveModelId(trainedModel.id);
+
+      const refreshResponse = await fetch(`${apiBaseUrl}/ml/predictions/refresh`, {
+        method: 'POST',
+        headers: buildHeaders(true),
+        body: JSON.stringify({
+          model_id: trainedModel.id,
+          prediction_date: resolvedPredictionDate,
+          horizon_days: HORIZON_DAYS,
+        }),
+      });
+
+      if (!refreshResponse.ok) {
+        throw new Error(await parseErrorMessage(refreshResponse));
+      }
+
+      const data = (await refreshResponse.json()) as MlPredictionResponse[];
+      setPredictions(data);
+    } catch (error) {
+      setErrorMessage(normalizeErrorMessage(error));
+    } finally {
+      setIsGenerating(false);
+    }
   };
+
+  const handleFilterPredictions = async () => {
+    setErrorMessage(null);
+    setIsFiltering(true);
+    try {
+      if (filterFrom || filterTo || activeModelId) {
+        await fetchFilteredPredictions();
+      } else {
+        await fetchLatestPredictions();
+      }
+    } catch (error) {
+      setErrorMessage(normalizeErrorMessage(error));
+    } finally {
+      setIsFiltering(false);
+    }
+  };
+
+  const forecast = useMemo<ForecastSummary | null>(() => {
+    if (predictions.length === 0) {
+      return null;
+    }
+    const sorted = [...predictions].sort((a, b) =>
+      a.prediction_date.localeCompare(b.prediction_date)
+    );
+    const total = sorted.reduce(
+      (sum, item) => sum + Number(item.predicted_revenue ?? 0),
+      0
+    );
+    const activeModel = models.find((model) => model.id === activeModelId);
+    const from = sorted[0].prediction_date;
+    const to = sorted[sorted.length - 1].prediction_date;
+
+    return {
+      prediction: `Estimare totală: ${formatCurrency(total)} pentru intervalul ${formatDisplayDate(
+        from
+      )} - ${formatDisplayDate(to)}.`,
+      confidence: 'Medium',
+      summary: `Modelul ${activeModel?.name ?? 'selectat'} (${
+        activeModel?.version ?? 'v1'
+      }) a generat prognoza pe baza datelor dintre ${formatDisplayDate(
+        trainFrom
+      )} și ${formatDisplayDate(trainTo)}.`,
+    };
+  }, [activeModelId, models, predictions, trainFrom, trainTo]);
+
+  const chartData = useMemo(
+    () =>
+      predictions.map((prediction) => ({
+        date: formatDisplayDate(prediction.prediction_date),
+        forecast: Number(prediction.predicted_revenue ?? 0),
+        lower: Number(prediction.lower_bound ?? 0),
+        upper: Number(prediction.upper_bound ?? 0),
+      })),
+    [predictions]
+  );
 
   const getConfidenceBadgeColor = (
     confidence: 'High' | 'Medium' | 'Low' | undefined
@@ -139,26 +381,40 @@ export default function ExpectedSalesPage() {
         <CardHeader>
           <CardTitle>Genereaza o noua prognoza</CardTitle>
           <CardDescription>
-            Alege perioada pentru prognoza, apoi apasa butonul pentru a analiza
-            datele agregate de vanzari ale echipei si a genera rezultatul.
+            Selecteaza intervalul de training si data de start pentru prognoza,
+            apoi apasa butonul pentru a antrena modelul.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col items-start gap-4 sm:flex-row sm:items-end">
-          <div className="grid w-full gap-1.5 sm:w-auto">
-            <Label htmlFor="forecast-period">Perioada Prognozei</Label>
-            <Select value={forecastPeriod} onValueChange={setForecastPeriod}>
-              <SelectTrigger id="forecast-period" className="w-full sm:w-[180px]">
-                <SelectValue placeholder="Selecteaza perioada" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="3 months">Urm. 3 luni</SelectItem>
-                <SelectItem value="6 months">Urm. 6 luni</SelectItem>
-                <SelectItem value="1 year">Urmatorul an</SelectItem>
-              </SelectContent>
-            </Select>
+        <CardContent className="grid gap-4 sm:grid-cols-[repeat(3,minmax(0,1fr))_auto] sm:items-end">
+          <div className="space-y-2">
+            <Label htmlFor="train-from">Training: de la</Label>
+            <Input
+              id="train-from"
+              type="date"
+              value={trainFrom}
+              onChange={(event) => setTrainFrom(event.target.value)}
+            />
           </div>
-          <Button onClick={handleGenerateForecast} disabled={isLoading}>
-            {isLoading ? (
+          <div className="space-y-2">
+            <Label htmlFor="train-to">Training: până la</Label>
+            <Input
+              id="train-to"
+              type="date"
+              value={trainTo}
+              onChange={(event) => setTrainTo(event.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="prediction-date">Data prognozei</Label>
+            <Input
+              id="prediction-date"
+              type="date"
+              value={predictionDate}
+              onChange={(event) => setPredictionDate(event.target.value)}
+            />
+          </div>
+          <Button onClick={handleGenerateForecast} disabled={isGenerating}>
+            {isGenerating ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Se genereaza...
@@ -173,18 +429,26 @@ export default function ExpectedSalesPage() {
         </CardContent>
       </Card>
 
-      {isLoading && (
+      {errorMessage && (
+        <Card className="border border-destructive/40 bg-destructive/5">
+          <CardContent className="py-4 text-sm text-destructive">
+            {errorMessage}
+          </CardContent>
+        </Card>
+      )}
+
+      {isInitializing && (
         <Card className="flex items-center justify-center py-12">
           <div className="text-center text-muted-foreground">
             <Loader2 className="mx-auto h-10 w-10 animate-spin" />
             <p className="mt-4">
-              Modelul AI analizeaza datele istorice... Va rugam asteptati.
+              Se încarcă modelele și prognozele disponibile...
             </p>
           </div>
         </Card>
       )}
 
-      {forecast && (
+      {!isInitializing && (
         <div className="space-y-6">
           <Card className="bg-gradient-to-br from-primary/5 via-background to-background">
             <CardHeader>
@@ -193,108 +457,198 @@ export default function ExpectedSalesPage() {
                 <span>Rezultate Prognoza</span>
               </CardTitle>
               <CardDescription>
-                Mai jos este prognoza generata de AI pentru{' '}
-                {forecastPeriod === '3 months'
-                  ? 'urmatoarele 3 luni'
-                  : forecastPeriod === '6 months'
-                  ? 'urmatoarele 6 luni'
-                  : 'urmatorul an'}
-                .
+                Ultimele predicții pentru orizontul de {HORIZON_DAYS} zile.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2 rounded-lg border bg-card p-4">
-                <div className="flex items-start justify-between">
-                  <h3 className="text-lg font-semibold">Prognoza Principala</h3>
-                  <Badge
-                    className={cn(
-                      'text-primary-foreground',
-                      getConfidenceBadgeColor(forecast.confidence)
-                    )}
-                  >
-                    Incredere: {forecast.confidence}
-                  </Badge>
+            <CardContent className="space-y-6">
+              <div className="grid gap-4 md:grid-cols-[1.2fr_1fr]">
+                <div className="space-y-2 rounded-lg border bg-card p-4">
+                  <div className="flex items-start justify-between">
+                    <h3 className="text-lg font-semibold">Prognoza Principală</h3>
+                    <Badge
+                      className={cn(
+                        'text-primary-foreground',
+                        getConfidenceBadgeColor(forecast?.confidence)
+                      )}
+                    >
+                      Încredere: {forecast?.confidence ?? 'Medium'}
+                    </Badge>
+                  </div>
+                  <p className="text-2xl font-bold text-primary">
+                    {forecast?.prediction ?? 'Așteptăm rezultatele.'}
+                  </p>
                 </div>
-                <p className="text-2xl font-bold text-primary">
-                  {forecast.prediction}
-                </p>
+                <div className="space-y-2 rounded-lg border bg-card p-4">
+                  <h3 className="text-lg font-semibold">Sumar Analiză</h3>
+                  <p className="text-muted-foreground">
+                    {forecast?.summary ??
+                      'Generează o prognoză pentru a vedea analiza detaliată.'}
+                  </p>
+                </div>
               </div>
 
-              <div className="space-y-2 rounded-lg border bg-card p-4">
-                <h3 className="text-lg font-semibold">Sumar Analiza</h3>
-                <p className="text-muted-foreground">{forecast.summary}</p>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="space-y-2">
+                  <Label htmlFor="filter-model">Model activ</Label>
+                  <Select
+                    value={activeModelId}
+                    onValueChange={setActiveModelId}
+                  >
+                    <SelectTrigger id="filter-model">
+                      <SelectValue placeholder="Selectează modelul" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {models.map((model) => (
+                        <SelectItem key={model.id} value={model.id}>
+                          {model.name} ({model.version})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="filter-from">De la</Label>
+                  <Input
+                    id="filter-from"
+                    type="date"
+                    value={filterFrom}
+                    onChange={(event) => setFilterFrom(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="filter-to">Până la</Label>
+                  <Input
+                    id="filter-to"
+                    type="date"
+                    value={filterTo}
+                    onChange={(event) => setFilterTo(event.target.value)}
+                  />
+                </div>
               </div>
+
+              <Button onClick={handleFilterPredictions} disabled={isFiltering}>
+                {isFiltering ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Se actualizează...
+                  </>
+                ) : (
+                  'Actualizează rezultate'
+                )}
+              </Button>
             </CardContent>
           </Card>
 
-          {chartData && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Grafic Prognoza Vanzari</CardTitle>
-                <CardDescription>
-                  Vizualizare a vanzarilor istorice si a celor prognozate.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis
-                      dataKey="month"
-                      stroke="#888888"
-                      fontSize={12}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <YAxis
-                      stroke="#888888"
-                      fontSize={12}
-                      tickLine={false}
-                      axisLine={false}
-                      tickFormatter={(value) =>
-                        `${(value as number) / 1000}k`
-                      }
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: 'hsl(var(--card))',
-                        borderColor: 'hsl(var(--border))',
-                      }}
-                      formatter={(value: number, name: string) => [
-                        `${value.toLocaleString('ro-RO')} RON`,
-                        name,
-                      ]}
-                    />
-                    <Legend wrapperStyle={{ fontSize: '0.8rem' }} />
-                    <Bar
-                      dataKey="actual"
-                      name="Vanzari Reale"
-                      fill="hsl(var(--chart-1))"
-                      radius={[4, 4, 0, 0]}
-                    />
-                    <Bar
-                      dataKey="forecast"
-                      name="Vanzari Prognozate"
-                      fill="hsl(var(--chart-2))"
-                      radius={[4, 4, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
+          {predictions.length > 0 ? (
+            <>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Grafic Prognoză Vânzări</CardTitle>
+                  <CardDescription>
+                    Vizualizare a vânzărilor prognozate pe intervalul selectat.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis
+                        dataKey="date"
+                        stroke="#888888"
+                        fontSize={12}
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <YAxis
+                        stroke="#888888"
+                        fontSize={12}
+                        tickLine={false}
+                        axisLine={false}
+                        tickFormatter={(value) =>
+                          `${(value as number) / 1000}k`
+                        }
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'hsl(var(--card))',
+                          borderColor: 'hsl(var(--border))',
+                        }}
+                        formatter={(value: number, name: string) => [
+                          `${value.toLocaleString('ro-RO')} RON`,
+                          name,
+                        ]}
+                      />
+                      <Legend wrapperStyle={{ fontSize: '0.8rem' }} />
+                      <Bar
+                        dataKey="forecast"
+                        name="Vânzări Prognozate"
+                        fill="hsl(var(--chart-2))"
+                        radius={[4, 4, 0, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Detalii prognoză</CardTitle>
+                  <CardDescription>
+                    Lista predicțiilor pentru fiecare zi din interval.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead className="text-xs uppercase text-muted-foreground">
+                        <tr>
+                          <th className="py-2 pr-4">Dată</th>
+                          <th className="py-2 pr-4">Valoare prognozată</th>
+                          <th className="py-2 pr-4">Limită inferioară</th>
+                          <th className="py-2">Limită superioară</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {predictions.map((prediction) => (
+                          <tr key={prediction.id} className="border-t">
+                            <td className="py-2 pr-4">
+                              {formatDisplayDate(prediction.prediction_date)}
+                            </td>
+                            <td className="py-2 pr-4 font-medium text-primary">
+                              {formatCurrency(
+                                Number(prediction.predicted_revenue ?? 0)
+                              )}
+                            </td>
+                            <td className="py-2 pr-4">
+                              {formatCurrency(
+                                Number(prediction.lower_bound ?? 0)
+                              )}
+                            </td>
+                            <td className="py-2">
+                              {formatCurrency(
+                                Number(prediction.upper_bound ?? 0)
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          ) : (
+            <Card className="flex flex-col items-center justify-center gap-4 py-16 text-center">
+              <TrendingUp className="h-16 w-16 text-muted-foreground" />
+              <h3 className="text-xl font-semibold">Nu există prognoze încă</h3>
+              <p className="text-muted-foreground">
+                Generează o prognoză sau ajustează filtrele pentru a vedea date.
+              </p>
             </Card>
           )}
         </div>
       )}
 
-      {!isLoading && !forecast && (
-        <Card className="flex flex-col items-center justify-center gap-4 py-16 text-center">
-          <TrendingUp className="h-16 w-16 text-muted-foreground" />
-          <h3 className="text-xl font-semibold">Nicio prognoza generata</h3>
-          <p className="text-muted-foreground">
-            Apasa pe butonul de mai sus pentru a incepe.
-          </p>
-        </Card>
-      )}
     </div>
   );
 }
