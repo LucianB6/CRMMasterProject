@@ -1,0 +1,255 @@
+package com.salesway.ml.service;
+
+import com.salesway.common.enums.MembershipStatus;
+import com.salesway.common.enums.MlModelStatus;
+import com.salesway.memberships.entity.CompanyMembership;
+import com.salesway.memberships.repository.CompanyMembershipRepository;
+import com.salesway.ml.client.MlFastApiClient;
+import com.salesway.ml.dto.MlModelResponse;
+import com.salesway.ml.dto.MlPredictionResponse;
+import com.salesway.ml.dto.PredictRequest;
+import com.salesway.ml.dto.PredictResponse;
+import com.salesway.ml.dto.TrainRequest;
+import com.salesway.ml.dto.TrainResponse;
+import com.salesway.ml.entity.MlModel;
+import com.salesway.ml.entity.MlPrediction;
+import com.salesway.ml.repository.MlModelRepository;
+import com.salesway.ml.repository.MlPredictionRepository;
+import com.salesway.security.CustomUserDetails;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+@Service
+public class MlService {
+    private final MlFastApiClient mlFastApiClient;
+    private final MlModelRepository mlModelRepository;
+    private final MlPredictionRepository mlPredictionRepository;
+    private final CompanyMembershipRepository companyMembershipRepository;
+
+    public MlService(
+            MlFastApiClient mlFastApiClient,
+            MlModelRepository mlModelRepository,
+            MlPredictionRepository mlPredictionRepository,
+            CompanyMembershipRepository companyMembershipRepository
+    ) {
+        this.mlFastApiClient = mlFastApiClient;
+        this.mlModelRepository = mlModelRepository;
+        this.mlPredictionRepository = mlPredictionRepository;
+        this.companyMembershipRepository = companyMembershipRepository;
+    }
+
+    @Transactional
+    public MlModelResponse trainModel(TrainRequest request) {
+        CompanyMembership membership = getReportingMembership(false);
+
+        mlModelRepository
+                .findByCompanyIdAndNameAndVersion(membership.getCompany().getId(), request.getName(), request.getVersion())
+                .ifPresent(model -> {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "Model version already exists");
+                });
+
+        TrainResponse trainResponse = mlFastApiClient.train(request);
+        if (trainResponse.getArtifactUri() == null || trainResponse.getArtifactUri().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "ML service did not return artifact_uri");
+        }
+
+        List<MlModel> activeModels = mlModelRepository.findByCompanyIdAndNameAndStatus(
+                membership.getCompany().getId(),
+                request.getName(),
+                MlModelStatus.ACTIVE
+        );
+
+        for (MlModel model : activeModels) {
+            model.setStatus(MlModelStatus.DEPRECATED);
+        }
+        mlModelRepository.saveAll(activeModels);
+
+        MlModel model = new MlModel();
+        model.setCompany(membership.getCompany());
+        model.setName(request.getName());
+        model.setVersion(request.getVersion());
+        model.setStatus(MlModelStatus.ACTIVE);
+        model.setTrainedAt(Instant.now());
+        model.setMetricsJsonText(trainResponse.getMetricsJson());
+        model.setArtifactUri(trainResponse.getArtifactUri());
+        if (trainResponse.getModelId() != null) {
+            model.setId(trainResponse.getModelId());
+        }
+
+        MlModel saved = mlModelRepository.save(model);
+        return toModelResponse(saved);
+    }
+
+    @Transactional
+    public List<MlPredictionResponse> refreshPredictions(PredictRequest request) {
+        CompanyMembership membership = getReportingMembership(false);
+
+        MlModel model = mlModelRepository
+                .findByIdAndCompanyId(request.getModelId(), membership.getCompany().getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Model not found"));
+
+        PredictResponse predictResponse = mlFastApiClient.predict(request);
+        List<PredictResponse.PredictionItem> items = Optional.ofNullable(predictResponse.getPredictions())
+                .orElseGet(List::of);
+
+        List<MlPrediction> predictions = new ArrayList<>();
+        for (PredictResponse.PredictionItem item : items) {
+            if (item.getDate() == null || item.getHorizonDays() == null || item.getPredictedRevenue() == null) {
+                continue;
+            }
+
+            MlPrediction prediction = mlPredictionRepository
+                    .findByCompanyIdAndModelIdAndPredictionDateAndHorizonDays(
+                            membership.getCompany().getId(),
+                            model.getId(),
+                            item.getDate(),
+                            item.getHorizonDays()
+                    )
+                    .orElseGet(MlPrediction::new);
+
+            if (prediction.getId() == null) {
+                prediction.setCompany(membership.getCompany());
+                prediction.setModel(model);
+            }
+
+            prediction.setPredictionDate(item.getDate());
+            prediction.setHorizonDays(item.getHorizonDays());
+            prediction.setPredictedRevenue(item.getPredictedRevenue());
+            prediction.setLowerBound(item.getLowerBound());
+            prediction.setUpperBound(item.getUpperBound());
+            predictions.add(prediction);
+        }
+
+        List<MlPrediction> saved = mlPredictionRepository.saveAll(predictions);
+        return saved.stream().map(this::toPredictionResponse).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<MlModelResponse> listModels(MlModelStatus status, String name) {
+        CompanyMembership membership = getReportingMembership(false);
+        return mlModelRepository
+                .findByCompanyAndFilters(membership.getCompany().getId(), status, name)
+                .stream()
+                .map(this::toModelResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public MlModelResponse getModel(UUID modelId) {
+        CompanyMembership membership = getReportingMembership(false);
+        MlModel model = mlModelRepository
+                .findByIdAndCompanyId(modelId, membership.getCompany().getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Model not found"));
+        return toModelResponse(model);
+    }
+
+    @Transactional(readOnly = true)
+    public List<MlPredictionResponse> getLatestPredictions(Integer horizonDays, LocalDate predictionDate) {
+        if (horizonDays == null || horizonDays <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "horizon_days is required");
+        }
+
+        CompanyMembership membership = getReportingMembership(false);
+        MlModel model = mlModelRepository
+                .findFirstByCompanyIdAndStatusOrderByTrainedAtDesc(
+                        membership.getCompany().getId(),
+                        MlModelStatus.ACTIVE
+                )
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Active model not found"));
+
+        LocalDate resolvedDate = predictionDate;
+        if (resolvedDate == null) {
+            resolvedDate = mlPredictionRepository
+                    .findFirstByCompanyIdAndModelIdAndHorizonDaysOrderByPredictionDateDesc(
+                            membership.getCompany().getId(),
+                            model.getId(),
+                            horizonDays
+                    )
+                    .map(MlPrediction::getPredictionDate)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Predictions not found"));
+        }
+
+        return mlPredictionRepository
+                .findByCompanyIdAndModelIdAndHorizonDaysAndPredictionDate(
+                        membership.getCompany().getId(),
+                        model.getId(),
+                        horizonDays,
+                        resolvedDate
+                )
+                .stream()
+                .map(this::toPredictionResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<MlPredictionResponse> getPredictions(
+            LocalDate from,
+            LocalDate to,
+            UUID modelId,
+            Integer horizonDays
+    ) {
+        if (from != null && to != null && from.isAfter(to)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid date range");
+        }
+
+        CompanyMembership membership = getReportingMembership(false);
+        return mlPredictionRepository
+                .findByCompanyAndFilters(membership.getCompany().getId(), modelId, horizonDays, from, to)
+                .stream()
+                .map(this::toPredictionResponse)
+                .toList();
+    }
+
+    private MlModelResponse toModelResponse(MlModel model) {
+        return new MlModelResponse(
+                model.getId(),
+                model.getCompany().getId(),
+                model.getName(),
+                model.getVersion(),
+                model.getStatus(),
+                model.getTrainedAt(),
+                model.getMetricsJsonText(),
+                model.getArtifactUri()
+        );
+    }
+
+    private MlPredictionResponse toPredictionResponse(MlPrediction prediction) {
+        return new MlPredictionResponse(
+                prediction.getId(),
+                prediction.getCompany().getId(),
+                prediction.getModel().getId(),
+                prediction.getPredictionDate(),
+                prediction.getHorizonDays(),
+                prediction.getPredictedRevenue(),
+                prediction.getLowerBound(),
+                prediction.getUpperBound()
+        );
+    }
+
+    private CompanyMembership getReportingMembership(boolean allowInvited) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof CustomUserDetails userDetails)) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing authentication");
+        }
+
+        EnumSet<MembershipStatus> eligibleStatuses = allowInvited
+                ? EnumSet.of(MembershipStatus.ACTIVE, MembershipStatus.INVITED)
+                : EnumSet.of(MembershipStatus.ACTIVE);
+
+        return companyMembershipRepository
+                .findFirstByUserIdAndStatusIn(userDetails.getUser().getId(), eligibleStatuses)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "No eligible membership found"));
+    }
+}
