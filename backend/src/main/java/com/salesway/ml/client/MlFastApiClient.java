@@ -1,16 +1,15 @@
 package com.salesway.ml.client;
 
-import com.salesway.ml.dto.PredictRequest;
-import com.salesway.ml.dto.PredictResponse;
-import com.salesway.ml.dto.TrainRequest;
-import com.salesway.ml.dto.TrainResponse;
+import com.salesway.ml.dto.ForecastResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.util.Map;
+import java.util.UUID;
 
 @Component
 public class MlFastApiClient {
@@ -22,31 +21,25 @@ public class MlFastApiClient {
                 .build();
     }
 
-    public TrainResponse train(TrainRequest request) {
-        ResponseEntity<TrainResponse> response = restTemplate.postForEntity(
-                "/train",
-                request,
-                TrainResponse.class
+    public void refreshForecast(UUID companyId) {
+        restTemplate.postForLocation(
+                "/forecast/refresh",
+                Map.of("company_id", companyId == null ? null : companyId.toString())
         );
-
-        if (response.getBody() == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Empty response from ML service");
-        }
-
-        return response.getBody();
     }
 
-    public PredictResponse predict(PredictRequest request) {
-        ResponseEntity<PredictResponse> response = restTemplate.postForEntity(
-                "/predict",
-                request,
-                PredictResponse.class
+    public ForecastResponse getForecast(int periodDays, UUID companyId) {
+        ForecastResponse response = restTemplate.getForObject(
+                "/forecast?period={period}&company_id={companyId}",
+                ForecastResponse.class,
+                periodDays,
+                companyId == null ? null : companyId.toString()
         );
 
-        if (response.getBody() == null) {
+        if (response == null) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Empty response from ML service");
         }
 
-        return response.getBody();
+        return response;
     }
 }

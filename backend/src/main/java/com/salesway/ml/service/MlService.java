@@ -5,17 +5,19 @@ import com.salesway.common.enums.MlModelStatus;
 import com.salesway.memberships.entity.CompanyMembership;
 import com.salesway.memberships.repository.CompanyMembershipRepository;
 import com.salesway.ml.client.MlFastApiClient;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.salesway.ml.dto.ForecastResponse;
 import com.salesway.ml.dto.MlModelResponse;
 import com.salesway.ml.dto.MlPredictionResponse;
 import com.salesway.ml.dto.PredictRequest;
-import com.salesway.ml.dto.PredictResponse;
 import com.salesway.ml.dto.TrainRequest;
-import com.salesway.ml.dto.TrainResponse;
 import com.salesway.ml.entity.MlModel;
 import com.salesway.ml.entity.MlPrediction;
 import com.salesway.ml.repository.MlModelRepository;
 import com.salesway.ml.repository.MlPredictionRepository;
 import com.salesway.security.CustomUserDetails;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -37,17 +39,23 @@ public class MlService {
     private final MlModelRepository mlModelRepository;
     private final MlPredictionRepository mlPredictionRepository;
     private final CompanyMembershipRepository companyMembershipRepository;
+    private final ObjectMapper objectMapper;
+    private final String mlBaseUrl;
 
     public MlService(
             MlFastApiClient mlFastApiClient,
             MlModelRepository mlModelRepository,
             MlPredictionRepository mlPredictionRepository,
-            CompanyMembershipRepository companyMembershipRepository
+            CompanyMembershipRepository companyMembershipRepository,
+            ObjectMapper objectMapper,
+            @Value("${app.ml.base-url}") String mlBaseUrl
     ) {
         this.mlFastApiClient = mlFastApiClient;
         this.mlModelRepository = mlModelRepository;
         this.mlPredictionRepository = mlPredictionRepository;
         this.companyMembershipRepository = companyMembershipRepository;
+        this.objectMapper = objectMapper;
+        this.mlBaseUrl = mlBaseUrl;
     }
 
     @Transactional
@@ -60,10 +68,11 @@ public class MlService {
                     throw new ResponseStatusException(HttpStatus.CONFLICT, "Model version already exists");
                 });
 
-        TrainResponse trainResponse = mlFastApiClient.train(request);
-        if (trainResponse.getArtifactUri() == null || trainResponse.getArtifactUri().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "ML service did not return artifact_uri");
-        }
+        mlFastApiClient.refreshForecast(membership.getCompany().getId());
+        ForecastResponse forecastResponse = mlFastApiClient.getForecast(
+                request.getHorizonDays(),
+                membership.getCompany().getId()
+        );
 
         List<MlModel> activeModels = mlModelRepository.findByCompanyIdAndNameAndStatus(
                 membership.getCompany().getId(),
@@ -81,11 +90,12 @@ public class MlService {
         model.setName(request.getName());
         model.setVersion(request.getVersion());
         model.setStatus(MlModelStatus.ACTIVE);
-        model.setTrainedAt(Instant.now());
-        model.setMetricsJsonText(trainResponse.getMetricsJson());
-        model.setArtifactUri(trainResponse.getArtifactUri());
-        if (trainResponse.getModelId() != null) {
-            model.setId(trainResponse.getModelId());
+        Instant trainedAt = forecastResponse.getTrainedAt() != null ? forecastResponse.getTrainedAt() : Instant.now();
+        model.setTrainedAt(trainedAt);
+        model.setMetricsJsonText(toMetricsJson(forecastResponse));
+        model.setArtifactUri(mlBaseUrl + "/forecast");
+        if (forecastResponse.getModelId() != null) {
+            model.setId(forecastResponse.getModelId());
         }
 
         MlModel saved = mlModelRepository.save(model);
@@ -100,13 +110,17 @@ public class MlService {
                 .findByIdAndCompanyId(request.getModelId(), membership.getCompany().getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Model not found"));
 
-        PredictResponse predictResponse = mlFastApiClient.predict(request);
-        List<PredictResponse.PredictionItem> items = Optional.ofNullable(predictResponse.getPredictions())
+        mlFastApiClient.refreshForecast(membership.getCompany().getId());
+        ForecastResponse forecastResponse = mlFastApiClient.getForecast(
+                request.getHorizonDays(),
+                membership.getCompany().getId()
+        );
+        List<ForecastResponse.DailyPrediction> items = Optional.ofNullable(forecastResponse.getDailyPredictions())
                 .orElseGet(List::of);
 
         List<MlPrediction> predictions = new ArrayList<>();
-        for (PredictResponse.PredictionItem item : items) {
-            if (item.getDate() == null || item.getHorizonDays() == null || item.getPredictedRevenue() == null) {
+        for (ForecastResponse.DailyPrediction item : items) {
+            if (item.getDate() == null || item.getValue() == null) {
                 continue;
             }
 
@@ -115,7 +129,7 @@ public class MlService {
                             membership.getCompany().getId(),
                             model.getId(),
                             item.getDate(),
-                            item.getHorizonDays()
+                            1
                     )
                     .orElseGet(MlPrediction::new);
 
@@ -125,11 +139,38 @@ public class MlService {
             }
 
             prediction.setPredictionDate(item.getDate());
-            prediction.setHorizonDays(item.getHorizonDays());
-            prediction.setPredictedRevenue(item.getPredictedRevenue());
-            prediction.setLowerBound(item.getLowerBound());
-            prediction.setUpperBound(item.getUpperBound());
+            prediction.setHorizonDays(1);
+            prediction.setPredictedRevenue(item.getValue());
+            prediction.setLowerBound(null);
+            prediction.setUpperBound(null);
             predictions.add(prediction);
+        }
+
+        LocalDate aggregateDate = request.getPredictionDate();
+        if (aggregateDate == null && !items.isEmpty()) {
+            aggregateDate = items.get(0).getDate();
+        }
+        if (forecastResponse.getTotal() != null && aggregateDate != null) {
+            MlPrediction aggregate = mlPredictionRepository
+                    .findByCompanyIdAndModelIdAndPredictionDateAndHorizonDays(
+                            membership.getCompany().getId(),
+                            model.getId(),
+                            aggregateDate,
+                            request.getHorizonDays()
+                    )
+                    .orElseGet(MlPrediction::new);
+
+            if (aggregate.getId() == null) {
+                aggregate.setCompany(membership.getCompany());
+                aggregate.setModel(model);
+            }
+
+            aggregate.setPredictionDate(aggregateDate);
+            aggregate.setHorizonDays(request.getHorizonDays());
+            aggregate.setPredictedRevenue(forecastResponse.getTotal());
+            aggregate.setLowerBound(null);
+            aggregate.setUpperBound(null);
+            predictions.add(aggregate);
         }
 
         List<MlPrediction> saved = mlPredictionRepository.saveAll(predictions);
@@ -236,6 +277,14 @@ public class MlService {
                 prediction.getLowerBound(),
                 prediction.getUpperBound()
         );
+    }
+
+    private String toMetricsJson(ForecastResponse response) {
+        try {
+            return objectMapper.writeValueAsString(response);
+        } catch (JsonProcessingException e) {
+            return null;
+        }
     }
 
     private CompanyMembership getReportingMembership(boolean allowInvited) {
