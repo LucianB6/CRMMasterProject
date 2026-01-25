@@ -146,9 +146,10 @@ def get_forecast(
                 SELECT prediction_date, predicted_revenue
                 FROM ml_predictions
                 WHERE model_id = %s AND horizon_days = 1
-                ORDER BY prediction_date ASC
+                ORDER BY prediction_date DESC
+                LIMIT %s
                 """,
-                (str(model_id),),
+                (str(model_id), days),
             )
             daily_rows = cursor.fetchall()
 
@@ -158,7 +159,7 @@ def get_forecast(
                     detail="No daily predictions found for model",
                 )
 
-            daily_rows = daily_rows[:days]
+            daily_rows.reverse()
             daily_predictions = [
                 {"date": row[0].isoformat(), "value": float(row[1])} for row in daily_rows
             ]
