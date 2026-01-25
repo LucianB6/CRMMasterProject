@@ -147,6 +147,9 @@ export default function ExpectedSalesPage() {
     if (response.status === 409) {
       return 'Conflict la salvare (409). Verifică dacă modelul există deja.';
     }
+    if (response.status >= 500) {
+      return 'Serverul a întâmpinat o eroare. Încearcă din nou mai târziu.';
+    }
     return message || `Status ${response.status}`;
   }, []);
 
@@ -514,6 +517,13 @@ export default function ExpectedSalesPage() {
       }
       if (new Date(filterFrom) > new Date(filterTo)) {
         setErrorMessage('Intervalul selectat este invalid.');
+        return;
+      }
+      const selectedDays = daysBetween(filterFrom, filterTo);
+      if (selectedDays > HORIZON_DAYS) {
+        setErrorMessage(
+          `Intervalul selectat depășește orizontul permis de ${HORIZON_DAYS} zile.`
+        );
         return;
       }
       if (!activeModelId) {
