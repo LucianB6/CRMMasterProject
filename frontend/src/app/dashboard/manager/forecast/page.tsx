@@ -89,6 +89,13 @@ const addDays = (dateValue: string, days: number) => {
   return formatIsoDate(date);
 };
 
+const daysBetween = (start: string, end: string) => {
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  const diff = endDate.getTime() - startDate.getTime();
+  return Math.floor(diff / (1000 * 60 * 60 * 24)) + 1;
+};
+
 export default function ExpectedSalesPage() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -165,6 +172,7 @@ export default function ExpectedSalesPage() {
     if (data.length > 0) {
       setActiveModelId((prev) => prev || data[0].id);
     }
+    return data;
   }, [apiBaseUrl, buildHeaders, parseErrorMessage]);
 
   const fetchLatestPredictions = useCallback(
@@ -244,6 +252,55 @@ export default function ExpectedSalesPage() {
     return sorted[0];
   }, [apiBaseUrl, buildHeaders, parseErrorMessage]);
 
+  const getLatestActiveModel = useCallback(
+    (items: MlModelResponse[]) => {
+      const active = items.filter((model) => model.status === 'ACTIVE');
+      if (active.length === 0) {
+        return null;
+      }
+      const sorted = [...active].sort((a, b) =>
+        (b.trained_at ?? '').localeCompare(a.trained_at ?? '')
+      );
+      return sorted[0];
+    },
+    []
+  );
+
+  const fetchDailyWindowForModel = useCallback(
+    async (modelId: string) => {
+      const query = new URLSearchParams({
+        model_id: modelId,
+        horizon_days: String(DAILY_HORIZON_DAYS),
+      });
+
+      const response = await fetch(
+        `${apiBaseUrl}/ml/predictions?${query.toString()}`,
+        { headers: buildHeaders() }
+      );
+
+      if (!response.ok) {
+        throw new Error(await parseErrorMessage(response));
+      }
+
+      const data = (await response.json()) as MlPredictionResponse[];
+      if (data.length === 0) {
+        setDailyPredictions([]);
+        return;
+      }
+
+      const latestDate = data
+        .map((item) => item.prediction_date)
+        .sort()
+        .slice(-1)[0];
+      const from = addDays(latestDate, -(HORIZON_DAYS - 1));
+      const to = latestDate;
+      setFilterFrom(from);
+      setFilterTo(to);
+      await fetchPredictionsForModel(modelId, from, to);
+    },
+    [apiBaseUrl, buildHeaders, fetchPredictionsForModel, parseErrorMessage]
+  );
+
   const fetchFilteredPredictions = useCallback(async () => {
     const query = new URLSearchParams();
     if (filterFrom) {
@@ -273,8 +330,9 @@ export default function ExpectedSalesPage() {
   const initializePage = useCallback(async () => {
     setIsInitializing(true);
     setErrorMessage(null);
+    let loadedModels: MlModelResponse[] = [];
     try {
-      await fetchModels();
+      loadedModels = await fetchModels();
     } catch (error) {
       setErrorMessage(normalizeErrorMessage(error));
     }
@@ -289,12 +347,35 @@ export default function ExpectedSalesPage() {
         setDailyPredictions([]);
       }
     } catch (error) {
-      setErrorMessage(normalizeErrorMessage(error));
-      setDailyPredictions([]);
+      const message = normalizeErrorMessage(error);
+      if (message.includes('(404)')) {
+        const activeModel =
+          loadedModels.length > 0 ? getLatestActiveModel(loadedModels) : null;
+        if (activeModel) {
+          setActiveModelId(activeModel.id);
+          try {
+            await fetchDailyWindowForModel(activeModel.id);
+          } catch (fetchError) {
+            setErrorMessage(normalizeErrorMessage(fetchError));
+            setDailyPredictions([]);
+          }
+        } else {
+          setDailyPredictions([]);
+        }
+      } else {
+        setErrorMessage(message);
+        setDailyPredictions([]);
+      }
     } finally {
       setIsInitializing(false);
     }
-  }, [fetchLatestPredictions, fetchModels]);
+  }, [
+    fetchDailyWindowForModel,
+    fetchLatestPredictions,
+    fetchModels,
+    fetchPredictionsForModel,
+    getLatestActiveModel,
+  ]);
 
   useEffect(() => {
     void initializePage();
@@ -427,22 +508,48 @@ export default function ExpectedSalesPage() {
     setErrorMessage(null);
     setIsFiltering(true);
     try {
-      if (filterFrom && filterTo && activeModelId) {
-        await fetchFilteredPredictions();
-      } else {
-        const latest = await fetchLatestPredictions();
-        if (latest) {
-          const from = latest.prediction_date;
-          const to = addDays(from, HORIZON_DAYS - 1);
-          await fetchPredictionsForModel(latest.model_id, from, to);
+      if (!filterFrom || !filterTo) {
+        setErrorMessage('Selectează un interval complet pentru actualizare.');
+        return;
+      }
+      if (new Date(filterFrom) > new Date(filterTo)) {
+        setErrorMessage('Intervalul selectat este invalid.');
+        return;
+      }
+      if (!activeModelId) {
+        setErrorMessage('Selectează un model activ.');
+        return;
+      }
+      if (aggregatePrediction) {
+        const allowedFrom = aggregatePrediction.prediction_date;
+        const allowedTo = addDays(allowedFrom, HORIZON_DAYS - 1);
+        if (filterFrom < allowedFrom || filterTo > allowedTo) {
+          setErrorMessage(
+            'Intervalul selectat depășește perioada disponibilă pentru model.'
+          );
+          return;
         }
       }
+      await fetchFilteredPredictions();
     } catch (error) {
       setErrorMessage(normalizeErrorMessage(error));
     } finally {
       setIsFiltering(false);
     }
   };
+
+  const horizonLabelDays = useMemo(() => {
+    if (filterFrom && filterTo) {
+      return daysBetween(filterFrom, filterTo);
+    }
+    if (aggregatePrediction?.horizon_days) {
+      return aggregatePrediction.horizon_days;
+    }
+    if (dailyPredictions.length > 0) {
+      return dailyPredictions.length;
+    }
+    return HORIZON_DAYS;
+  }, [aggregatePrediction?.horizon_days, dailyPredictions.length, filterFrom, filterTo]);
 
   const forecast = useMemo<ForecastSummary | null>(() => {
     if (dailyPredictions.length === 0 && !aggregatePrediction) {
@@ -597,7 +704,7 @@ export default function ExpectedSalesPage() {
                 <span>Rezultate Prognoza</span>
               </CardTitle>
               <CardDescription>
-                Ultimele predicții pentru orizontul de {HORIZON_DAYS} zile.
+                Ultimele predicții pentru orizontul de {horizonLabelDays} zile.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
