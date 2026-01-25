@@ -31,6 +31,7 @@ import {
 } from '../../../../components/ui/select';
 import { Label } from '../../../../components/ui/label';
 import { Input } from '../../../../components/ui/input';
+import { ApiError, apiFetch } from '../../../../lib/api';
 
 type MlModelResponse = {
   id: string;
@@ -126,11 +127,6 @@ export default function ExpectedSalesPage() {
   const [filterTo, setFilterTo] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const apiBaseUrl = useMemo(
-    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8081',
-    []
-  );
-
   const getAuthToken = useCallback(() => {
     if (typeof window === 'undefined') {
       return null;
@@ -149,27 +145,25 @@ export default function ExpectedSalesPage() {
     [getAuthToken]
   );
 
-  const parseErrorMessage = useCallback(async (response: Response) => {
-    const message = await response.text();
-    if (response.status === 404) {
-      return 'Resursa nu a fost găsită (404).';
-    }
-    if (response.status === 403) {
-      if (message.toLowerCase().includes('no eligible membership')) {
-        return 'Nu există un membership activ pentru companie. Contactează administratorul.';
-      }
-      return 'Acces interzis (403). Verifică autentificarea.';
-    }
-    if (response.status === 409) {
-      return 'Conflict la salvare (409). Verifică dacă modelul există deja.';
-    }
-    if (response.status >= 500) {
-      return 'Serverul a întâmpinat o eroare. Încearcă din nou mai târziu.';
-    }
-    return message || `Status ${response.status}`;
-  }, []);
-
   const normalizeErrorMessage = (error: unknown) => {
+    if (error instanceof ApiError) {
+      if (error.status === 404) {
+        return 'Resursa nu a fost găsită (404).';
+      }
+      if (error.status === 403) {
+        if ((error.body ?? '').toLowerCase().includes('no eligible membership')) {
+          return 'Nu există un membership activ pentru companie. Contactează administratorul.';
+        }
+        return 'Acces interzis (403). Verifică autentificarea.';
+      }
+      if (error.status === 409) {
+        return 'Conflict la salvare (409). Verifică dacă modelul există deja.';
+      }
+      if (error.status >= 500) {
+        return 'Serverul a întâmpinat o eroare. Încearcă din nou mai târziu.';
+      }
+      return error.message;
+    }
     if (error instanceof Error) {
       if (error.message.toLowerCase().includes('failed to fetch')) {
         return 'Nu am putut contacta serverul ML. Verifică conexiunea și configurarea API.';
@@ -180,19 +174,15 @@ export default function ExpectedSalesPage() {
   };
 
   const fetchModels = useCallback(async () => {
-    const response = await fetch(`${apiBaseUrl}/ml/models`, {
+    const data = await apiFetch<MlModelResponse[]>('/ml/models', {
       headers: buildHeaders(),
     });
-    if (!response.ok) {
-      throw new Error(await parseErrorMessage(response));
-    }
-    const data = (await response.json()) as MlModelResponse[];
     setModels(data);
     if (data.length > 0) {
       setActiveModelId((prev) => prev || data[0].id);
     }
     return data;
-  }, [apiBaseUrl, buildHeaders, parseErrorMessage]);
+  }, [buildHeaders]);
 
   const fetchLatestPredictions = useCallback(
     async (predictionDateOverride?: string) => {
@@ -202,16 +192,10 @@ export default function ExpectedSalesPage() {
       if (predictionDateOverride) {
         query.set('prediction_date', predictionDateOverride);
       }
-      const response = await fetch(
-        `${apiBaseUrl}/ml/predictions/latest?${query.toString()}`,
+      const data = await apiFetch<MlPredictionResponse[]>(
+        `/ml/predictions/latest?${query.toString()}`,
         { headers: buildHeaders() }
       );
-
-      if (!response.ok) {
-        throw new Error(await parseErrorMessage(response));
-      }
-
-      const data = (await response.json()) as MlPredictionResponse[];
       const latest = data[0] ?? null;
       setAggregatePrediction(latest);
       if (latest) {
@@ -223,7 +207,7 @@ export default function ExpectedSalesPage() {
       }
       return latest;
     },
-    [apiBaseUrl, buildHeaders, parseErrorMessage]
+    [buildHeaders]
   );
 
   const fetchPredictionsForModel = useCallback(
@@ -235,19 +219,13 @@ export default function ExpectedSalesPage() {
         to: toDate,
       });
 
-      const response = await fetch(
-        `${apiBaseUrl}/ml/predictions?${query.toString()}`,
+      const data = await apiFetch<MlPredictionResponse[]>(
+        `/ml/predictions?${query.toString()}`,
         { headers: buildHeaders() }
       );
-
-      if (!response.ok) {
-        throw new Error(await parseErrorMessage(response));
-      }
-
-      const data = (await response.json()) as MlPredictionResponse[];
       setDailyPredictions(data);
     },
-    [apiBaseUrl, buildHeaders, parseErrorMessage]
+    [buildHeaders]
   );
 
   const fetchActiveModelByName = useCallback(async () => {
@@ -255,13 +233,9 @@ export default function ExpectedSalesPage() {
       status: 'ACTIVE',
       name: MODEL_NAME,
     });
-    const response = await fetch(`${apiBaseUrl}/ml/models?${query.toString()}`, {
+    const data = await apiFetch<MlModelResponse[]>(`/ml/models?${query.toString()}`, {
       headers: buildHeaders(),
     });
-    if (!response.ok) {
-      throw new Error(await parseErrorMessage(response));
-    }
-    const data = (await response.json()) as MlModelResponse[];
     if (data.length === 0) {
       throw new Error('Nu există un model activ disponibil.');
     }
@@ -269,7 +243,7 @@ export default function ExpectedSalesPage() {
       (b.trained_at ?? '').localeCompare(a.trained_at ?? '')
     );
     return sorted[0];
-  }, [apiBaseUrl, buildHeaders, parseErrorMessage]);
+  }, [buildHeaders]);
 
   const getLatestActiveModel = useCallback(
     (items: MlModelResponse[]) => {
@@ -315,24 +289,16 @@ export default function ExpectedSalesPage() {
     }
     query.set('horizon_days', String(DAILY_HORIZON_DAYS));
 
-    const response = await fetch(
-      `${apiBaseUrl}/ml/predictions?${query.toString()}`,
+    const data = await apiFetch<MlPredictionResponse[]>(
+      `/ml/predictions?${query.toString()}`,
       { headers: buildHeaders() }
     );
-
-    if (!response.ok) {
-      throw new Error(await parseErrorMessage(response));
-    }
-
-    const data = (await response.json()) as MlPredictionResponse[];
     setDailyPredictions(data);
   }, [
     activeModelId,
-    apiBaseUrl,
     buildHeaders,
     filterFrom,
     filterTo,
-    parseErrorMessage,
   ]);
 
   const initializePage = useCallback(async () => {
@@ -418,75 +384,73 @@ export default function ExpectedSalesPage() {
 
     setIsGenerating(true);
     try {
-      const trainResponse = await fetch(`${apiBaseUrl}/ml/models/train`, {
-        method: 'POST',
-        headers: {
-          ...buildHeaders(true),
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          name: MODEL_NAME,
-          version: MODEL_VERSION,
-          horizon_days: HORIZON_DAYS,
-          train_from: trainFrom,
-          train_to: trainTo,
-        }),
-      });
-
-      if (trainResponse.status === 409) {
-        const existingModel = await fetchActiveModelByName();
-        setModels((prev) => {
-          const existingIndex = prev.findIndex((item) => item.id === existingModel.id);
-          if (existingIndex === -1) {
-            return [existingModel, ...prev];
-          }
-          const next = [...prev];
-          next[existingIndex] = existingModel;
-          return next;
-        });
-        setActiveModelId(existingModel.id);
-        const refreshResponse = await fetch(`${apiBaseUrl}/ml/predictions/refresh`, {
+      let trainedModel: MlModelResponse;
+      try {
+        trainedModel = await apiFetch<MlModelResponse>('/ml/models/train', {
           method: 'POST',
           headers: {
             ...buildHeaders(true),
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            model_id: existingModel.id,
-            prediction_date: resolvedPredictionDate,
+            name: MODEL_NAME,
+            version: MODEL_VERSION,
             horizon_days: HORIZON_DAYS,
+            train_from: trainFrom,
+            train_to: trainTo,
           }),
         });
-
-        if (!refreshResponse.ok) {
-          throw new Error(await parseErrorMessage(refreshResponse));
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 409) {
+          const existingModel = await fetchActiveModelByName();
+          setModels((prev) => {
+            const existingIndex = prev.findIndex((item) => item.id === existingModel.id);
+            if (existingIndex === -1) {
+              return [existingModel, ...prev];
+            }
+            const next = [...prev];
+            next[existingIndex] = existingModel;
+            return next;
+          });
+          setActiveModelId(existingModel.id);
+          const data = await apiFetch<MlPredictionResponse[]>(
+            '/ml/predictions/refresh',
+            {
+              method: 'POST',
+              headers: {
+                ...buildHeaders(true),
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                model_id: existingModel.id,
+                prediction_date: resolvedPredictionDate,
+                horizon_days: HORIZON_DAYS,
+              }),
+            }
+          );
+          const aggregate = data.find(
+            (item) => item.horizon_days === HORIZON_DAYS
+          );
+          const daily = data.filter(
+            (item) => item.horizon_days === DAILY_HORIZON_DAYS
+          );
+          setAggregatePrediction(aggregate ?? null);
+          if (aggregate) {
+            const from = aggregate.prediction_date;
+            const to = addDays(from, HORIZON_DAYS - 1);
+            setFilterFrom(from);
+            setFilterTo(to);
+          }
+          setDailyPredictions(
+            daily.sort((a, b) =>
+              a.prediction_date.localeCompare(b.prediction_date)
+            )
+          );
+          return;
         }
-
-        const data = (await refreshResponse.json()) as MlPredictionResponse[];
-        const aggregate = data.find(
-          (item) => item.horizon_days === HORIZON_DAYS
-        );
-        const daily = data.filter(
-          (item) => item.horizon_days === DAILY_HORIZON_DAYS
-        );
-        setAggregatePrediction(aggregate ?? null);
-        if (aggregate) {
-          const from = aggregate.prediction_date;
-          const to = addDays(from, HORIZON_DAYS - 1);
-          setFilterFrom(from);
-          setFilterTo(to);
-        }
-        setDailyPredictions(
-          daily.sort((a, b) => a.prediction_date.localeCompare(b.prediction_date))
-        );
-        return;
+        throw error;
       }
 
-      if (!trainResponse.ok) {
-        throw new Error(await parseErrorMessage(trainResponse));
-      }
-
-      const trainedModel = (await trainResponse.json()) as MlModelResponse;
       setModels((prev) => {
         const existingIndex = prev.findIndex((item) => item.id === trainedModel.id);
         if (existingIndex === -1) {
@@ -498,24 +462,21 @@ export default function ExpectedSalesPage() {
       });
       setActiveModelId(trainedModel.id);
 
-      const refreshResponse = await fetch(`${apiBaseUrl}/ml/predictions/refresh`, {
-        method: 'POST',
-        headers: {
-          ...buildHeaders(true),
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          model_id: trainedModel.id,
-          prediction_date: resolvedPredictionDate,
-          horizon_days: HORIZON_DAYS,
-        }),
-      });
-
-      if (!refreshResponse.ok) {
-        throw new Error(await parseErrorMessage(refreshResponse));
-      }
-
-      const data = (await refreshResponse.json()) as MlPredictionResponse[];
+      const data = await apiFetch<MlPredictionResponse[]>(
+        '/ml/predictions/refresh',
+        {
+          method: 'POST',
+          headers: {
+            ...buildHeaders(true),
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            model_id: trainedModel.id,
+            prediction_date: resolvedPredictionDate,
+            horizon_days: HORIZON_DAYS,
+          }),
+        }
+      );
       const aggregate = data.find(
         (item) => item.horizon_days === HORIZON_DAYS
       );

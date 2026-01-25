@@ -3,7 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { CheckCircle, Clock, Lock } from 'lucide-react';
 
 import { Button } from '../../../../components/ui/button';
@@ -26,6 +26,7 @@ import { Input } from '../../../../components/ui/input';
 import { Textarea } from '../../../../components/ui/textarea';
 import { cn } from '../../../../lib/utils';
 import { useToast } from '../../../../hooks/use-toast';
+import { apiFetch } from '../../../../lib/api';
 import {
   Select,
   SelectContent,
@@ -151,11 +152,6 @@ export default function ManagerReportsPage() {
     defaultValues: baseReportValues,
   });
 
-  const apiBaseUrl = useMemo(
-    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8081',
-    []
-  );
-
   const getAuthToken = useCallback(() => {
     if (typeof window === 'undefined') {
       return null;
@@ -196,13 +192,9 @@ export default function ManagerReportsPage() {
     const fetchAgents = async () => {
       try {
         const token = getAuthToken();
-        const response = await fetch(`${apiBaseUrl}/manager/overview/agents`, {
+        const data = await apiFetch<ManagerAgent[]>('/manager/overview/agents', {
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         });
-        if (!response.ok) {
-          throw new Error('Nu am putut încărca agenții.');
-        }
-        const data = (await response.json()) as ManagerAgent[];
         setAgents(data);
         if (data.length > 0) {
           setSelectedAgentId((prev) => prev || data[0].membership_id);
@@ -220,7 +212,7 @@ export default function ManagerReportsPage() {
     };
 
     fetchAgents();
-  }, [apiBaseUrl, getAuthToken, toast]);
+  }, [getAuthToken, toast]);
 
   useEffect(() => {
     const fetchReport = async () => {
@@ -235,14 +227,10 @@ export default function ManagerReportsPage() {
         const today = new Date();
         const from = formatDateKey(today);
         const to = formatDateKey(today);
-        const response = await fetch(
-          `${apiBaseUrl}/manager/reports?from=${from}&to=${to}&agent_membership_id=${selectedAgentId}`,
+        const data = await apiFetch<ManagerReportResponse[]>(
+          `/manager/reports?from=${from}&to=${to}&agent_membership_id=${selectedAgentId}`,
           { headers }
         );
-        if (!response.ok) {
-          throw new Error('Nu am putut încărca raportul agentului.');
-        }
-        const data = (await response.json()) as ManagerReportResponse[];
         const sorted = [...data].sort((a, b) =>
           a.report_date < b.report_date ? 1 : -1
         );
@@ -266,7 +254,7 @@ export default function ManagerReportsPage() {
     };
 
     fetchReport();
-  }, [apiBaseUrl, form, formatDateKey, getAuthToken, normalizeInputs, selectedAgentId, toast]);
+  }, [form, formatDateKey, getAuthToken, normalizeInputs, selectedAgentId, toast]);
 
   const submitReport = useCallback(
     async (values: z.infer<typeof reportSchema>, status: ManagerReportStatus) => {
@@ -282,8 +270,8 @@ export default function ManagerReportsPage() {
         setIsSaving(true);
         const token = getAuthToken();
         const { observations, ...payload } = values;
-        const response = await fetch(
-          `${apiBaseUrl}/manager/reports/${currentReport.id}`,
+        const updated = await apiFetch<ManagerReportResponse>(
+          `/manager/reports/${currentReport.id}`,
           {
             method: 'PUT',
             headers: {
@@ -296,13 +284,6 @@ export default function ManagerReportsPage() {
             }),
           }
         );
-        if (!response.ok) {
-          const message = await response.text();
-          throw new Error(
-            message || `Nu am putut salva raportul (status ${response.status}).`
-          );
-        }
-        const updated = (await response.json()) as ManagerReportResponse;
         setCurrentReport(updated);
         form.reset(normalizeInputs(updated));
         toast({
@@ -322,7 +303,7 @@ export default function ManagerReportsPage() {
         setIsSaving(false);
       }
     },
-    [apiBaseUrl, currentReport, form, getAuthToken, normalizeInputs, toast]
+    [currentReport, form, getAuthToken, normalizeInputs, toast]
   );
 
   const currentStatusInfo =

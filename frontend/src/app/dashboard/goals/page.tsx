@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -42,6 +42,7 @@ import {
 import { Input } from '../../../components/ui/input';
 import { Plus, Target, Trash2 } from 'lucide-react';
 import { useToast } from '../../../hooks/use-toast';
+import { apiFetch } from '../../../lib/api';
 
 const availableMetrics = [
   { key: 'outbound_dials', label: 'Apeluri outbound efectuate' },
@@ -141,11 +142,6 @@ export default function GoalsPage() {
   const [reportInputs, setReportInputs] = useState<ReportInputs>(emptyInputs);
   const [isReportLoading, setIsReportLoading] = useState(true);
 
-  const apiBaseUrl = useMemo(
-    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8081',
-    []
-  );
-
   const form = useForm<z.infer<typeof goalSchema>>({
     resolver: zodResolver(goalSchema),
     defaultValues: {
@@ -176,16 +172,9 @@ export default function GoalsPage() {
     try {
       setIsGoalsLoading(true);
       const token = getAuthToken();
-      const response = await fetch(`${apiBaseUrl}/goals`, {
+      const data = await apiFetch<ApiGoal[]>('/goals', {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
-
-      if (!response.ok) {
-        const message = await response.text();
-        throw new Error(message || `Status ${response.status}`);
-      }
-
-      const data = (await response.json()) as ApiGoal[];
       setGoals(data.map(normalizeGoal));
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Eroare necunoscută';
@@ -197,7 +186,7 @@ export default function GoalsPage() {
     } finally {
       setIsGoalsLoading(false);
     }
-  }, [apiBaseUrl, getAuthToken, normalizeGoal, toast]);
+  }, [getAuthToken, normalizeGoal, toast]);
 
   useEffect(() => {
     const fetchReport = async () => {
@@ -209,15 +198,14 @@ export default function GoalsPage() {
       }
 
       try {
-        const response = await fetch(`${apiBaseUrl}/reports/daily/today`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        if (!response.ok) {
-          throw new Error('Failed to fetch report');
-        }
-        const data = (await response.json()) as { inputs?: Partial<ReportInputs> };
+        const data = await apiFetch<{ inputs?: Partial<ReportInputs> }>(
+          '/reports/daily/today',
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
         setReportInputs({
           ...emptyInputs,
           ...(data.inputs ?? {}),
@@ -235,7 +223,7 @@ export default function GoalsPage() {
     };
 
     void fetchReport();
-  }, [apiBaseUrl, toast]);
+  }, [toast]);
 
   async function handleAddGoal(values: z.infer<typeof goalSchema>) {
     const metric = availableMetrics.find((m) => m.key === values.metricKey);
@@ -243,7 +231,7 @@ export default function GoalsPage() {
 
     try {
       const token = getAuthToken();
-      const response = await fetch(`${apiBaseUrl}/goals`, {
+      const savedGoal = normalizeGoal(await apiFetch<ApiGoal>('/goals', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -256,14 +244,7 @@ export default function GoalsPage() {
           dateFrom: format(values.dateFrom, 'yyyy-MM-dd'),
           dateTo: format(values.dateTo, 'yyyy-MM-dd'),
         }),
-      });
-
-      if (!response.ok) {
-        const message = await response.text();
-        throw new Error(message || `Status ${response.status}`);
-      }
-
-      const savedGoal = normalizeGoal((await response.json()) as ApiGoal);
+      }));
       setGoals((prev) => [savedGoal, ...prev]);
       setIsAddGoalDialogOpen(false);
       form.reset();
@@ -284,15 +265,10 @@ export default function GoalsPage() {
   async function handleDeleteGoal(goalId: string) {
     try {
       const token = getAuthToken();
-      const response = await fetch(`${apiBaseUrl}/goals/${goalId}`, {
+      await apiFetch<unknown>(`/goals/${goalId}`, {
         method: 'DELETE',
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
-
-      if (!response.ok) {
-        const message = await response.text();
-        throw new Error(message || `Status ${response.status}`);
-      }
 
       setGoals((prev) => prev.filter((g) => g.id !== goalId));
       toast({

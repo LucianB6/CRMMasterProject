@@ -37,6 +37,7 @@ import { Button } from '../../components/ui/button';
 import { Separator } from '../../components/ui/separator';
 import { Skeleton } from '../../components/ui/skeleton';
 import { useToast } from '../../hooks/use-toast';
+import { apiFetch } from '../../lib/api';
 import { cn } from '../../lib/utils';
 
 type ReportStatus = 'unfilled' | 'draft' | 'submitted' | 'locked';
@@ -190,11 +191,6 @@ export default function DashboardPage() {
   const [deadline] = useState(new Date(new Date().setHours(19, 0, 0, 0)));
   const [countdown, setCountdown] = useState('');
 
-  const apiBaseUrl = useMemo(
-    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8081',
-    []
-  );
-
   const getAuthToken = useCallback(() => {
     if (typeof window === 'undefined') {
       return null;
@@ -327,16 +323,9 @@ export default function DashboardPage() {
     const fetchDashboardReport = async () => {
       try {
         const token = getAuthToken();
-        const response = await fetch(`${apiBaseUrl}/reports/daily/today`, {
+        const data = await apiFetch<ApiReportResponse>('/reports/daily/today', {
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         });
-
-        if (!response.ok) {
-          const message = await response.text();
-          throw new Error(message || `Status ${response.status}`);
-        }
-
-        const data = (await response.json()) as ApiReportResponse;
         const normalized = normalizeReport(data);
         setReport(normalized);
         setReportStatus(resolveStatus(data.status, data.id));
@@ -354,30 +343,17 @@ export default function DashboardPage() {
     };
 
     void fetchDashboardReport();
-  }, [apiBaseUrl, getAuthToken, normalizeReport, resolveStatus, toast]);
+  }, [getAuthToken, normalizeReport, resolveStatus, toast]);
 
   useEffect(() => {
     const fetchChartHistory = async () => {
       try {
         const token = getAuthToken();
         const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
-        const [recentResponse, monthResponse] = await Promise.all([
-          fetch(`${apiBaseUrl}/reports/daily/recent?days=7`, { headers }),
-          fetch(`${apiBaseUrl}/reports/daily/current-month`, { headers }),
+        const [recentData, monthData] = await Promise.all([
+          apiFetch<ApiReportResponse[]>('/reports/daily/recent?days=7', { headers }),
+          apiFetch<ApiReportResponse[]>('/reports/daily/current-month', { headers }),
         ]);
-
-        if (!recentResponse.ok) {
-          const message = await recentResponse.text();
-          throw new Error(message || `Status ${recentResponse.status}`);
-        }
-
-        if (!monthResponse.ok) {
-          const message = await monthResponse.text();
-          throw new Error(message || `Status ${monthResponse.status}`);
-        }
-
-        const recentData = (await recentResponse.json()) as ApiReportResponse[];
-        const monthData = (await monthResponse.json()) as ApiReportResponse[];
         const todayUtc = getUtcStartOfDay(new Date());
         const recentStart = addUtcDays(todayUtc, -6);
         const monthStart = new Date(
@@ -408,7 +384,7 @@ export default function DashboardPage() {
     };
 
     void fetchChartHistory();
-  }, [apiBaseUrl, buildHistorySeries, getAuthToken, toast]);
+  }, [buildHistorySeries, getAuthToken, toast]);
 
   const currentStatus = statusConfig[reportStatus];
   const Icon = currentStatus.icon;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -47,6 +47,7 @@ import {
   SelectValue,
 } from '../../../../components/ui/select';
 import { useToast } from '../../../../hooks/use-toast';
+import { apiFetch } from '../../../../lib/api';
 import {
   DollarSign,
   ShoppingCart,
@@ -164,11 +165,6 @@ export default function ManagerHistoryPage() {
     previousYear: [],
   });
   const [isLoading, setIsLoading] = useState(true);
-
-  const apiBaseUrl = useMemo(
-    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8081',
-    []
-  );
 
   const getAuthToken = useCallback(() => {
     if (typeof window === 'undefined') {
@@ -372,13 +368,9 @@ export default function ManagerHistoryPage() {
   const fetchAgents = useCallback(async () => {
     try {
       const token = getAuthToken();
-      const response = await fetch(`${apiBaseUrl}/manager/overview/agents`, {
+      const data = await apiFetch<ManagerAgent[]>('/manager/overview/agents', {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
-      if (!response.ok) {
-        throw new Error('Nu am putut incarca agentii.');
-      }
-      const data = (await response.json()) as ManagerAgent[];
       setAgents(data);
     } catch (error) {
       const message =
@@ -389,7 +381,7 @@ export default function ManagerHistoryPage() {
         variant: 'destructive',
       });
     }
-  }, [apiBaseUrl, getAuthToken, toast]);
+  }, [getAuthToken, toast]);
 
   const fetchReports = useCallback(
     async (from: Date, to: Date, agentId: string | null) => {
@@ -400,17 +392,15 @@ export default function ManagerHistoryPage() {
       if (agentId) {
         query.set('agent_membership_id', agentId);
       }
-      const response = await fetch(
-        `${apiBaseUrl}/manager/reports?${query.toString()}`,
-        { headers }
+      const data = await apiFetch<ManagerReportResponse[]>(
+        `/manager/reports?${query.toString()}`,
+        {
+          headers,
+        }
       );
-      if (!response.ok) {
-        const message = await response.text();
-        throw new Error(message || 'Nu am putut incarca rapoartele.');
-      }
-      return (await response.json()) as ManagerReportResponse[];
+      return data;
     },
-    [apiBaseUrl, formatRangeQuery, getAuthToken]
+    [formatRangeQuery, getAuthToken]
   );
 
   useEffect(() => {

@@ -1,4 +1,3 @@
-import json
 import os
 import subprocess
 import sys
@@ -10,31 +9,12 @@ from fastapi import FastAPI, Header, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from config import get_allowed_origins_list, get_database_url, settings
+
 
 BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_CONFIG_PATH = BASE_DIR / "config.json"
 
 app = FastAPI(title="Prediction Service")
-
-
-def load_config(path: Path) -> dict:
-    try:
-        with path.open("r", encoding="utf-8") as handle:
-            return json.load(handle)
-    except FileNotFoundError:
-        return {}
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"Invalid JSON in config file: {path}") from exc
-
-
-def get_config() -> dict:
-    config_path = Path(os.getenv("PREDICTION_CONFIG_PATH", DEFAULT_CONFIG_PATH))
-    return load_config(config_path)
-
-
-def get_db_url(config: dict) -> Optional[str]:
-    return os.getenv("PREDICTION_DB_URL") or config.get("db_url")
-
 
 def require_api_key(x_api_key: Optional[str]) -> None:
     expected = os.getenv("PREDICTION_API_KEY")
@@ -48,6 +28,9 @@ class RefreshRequest(BaseModel):
 
 def run_pipeline(company_id: Optional[str]) -> None:
     env = os.environ.copy()
+    database_url = get_database_url(settings)
+    if database_url and not env.get("PREDICTION_DB_URL"):
+        env["PREDICTION_DB_URL"] = database_url
     if company_id:
         env["PREDICTION_COMPANY_ID"] = company_id
 
@@ -75,15 +58,19 @@ def period_to_days(period: int) -> int:
     return period
 
 
-config = get_config()
-origins = config.get("cors_origins") or ["*"]
+origins = get_allowed_origins_list(settings.allowed_origins)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/health")
+def health() -> dict:
+    return {"status": "ok"}
 
 
 @app.post("/forecast/refresh")
@@ -109,16 +96,14 @@ def get_forecast(
     x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
 ) -> dict:
     require_api_key(x_api_key)
-    config = get_config()
-    company_id = company_id or config.get("company_id")
     if not company_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="company_id required")
 
-    db_url = get_db_url(config)
+    db_url = get_database_url(settings) or os.getenv("PREDICTION_DB_URL")
     if not db_url:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="db_url missing")
 
-    model_name = config.get("model_name", "forecast_rf")
+    model_name = "forecast_rf"
     days = period_to_days(period)
 
     with psycopg2.connect(db_url) as connection:

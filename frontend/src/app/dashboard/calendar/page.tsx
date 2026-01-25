@@ -49,6 +49,7 @@ import {
 import { Input } from '../../../components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '../../../components/ui/tabs';
 import { useToast } from '../../../hooks/use-toast';
+import { apiFetch } from '../../../lib/api';
 import { cn } from '../../../lib/utils';
 
 const eventSchema = z
@@ -129,10 +130,6 @@ export default function CalendarPage() {
   } | null>(null);
 
   const [hourHeight, setHourHeight] = useState(64);
-  const apiBaseUrl = useMemo(
-    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8081',
-    []
-  );
   const weekGridRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef<{
     event: Event;
@@ -300,19 +297,10 @@ export default function CalendarPage() {
         setIsLoadingEvents(true);
         const token = getAuthToken();
         const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
-        const response = await fetch(
-          `${apiBaseUrl}/calendar/events?from=${formatIsoDate(
-            from
-          )}&to=${formatIsoDate(to)}`,
+        const data = await apiFetch<ApiCalendarEvent[]>(
+          `/calendar/events?from=${formatIsoDate(from)}&to=${formatIsoDate(to)}`,
           { headers }
         );
-
-        if (!response.ok) {
-          const message = await response.text();
-          throw new Error(message || `Status ${response.status}`);
-        }
-
-        const data = (await response.json()) as ApiCalendarEvent[];
         setEvents(data.map(normalizeEvent));
       } catch (error) {
         const message =
@@ -326,7 +314,7 @@ export default function CalendarPage() {
         setIsLoadingEvents(false);
       }
     },
-    [apiBaseUrl, formatIsoDate, getAuthToken, normalizeEvent, toast]
+    [formatIsoDate, getAuthToken, normalizeEvent, toast]
   );
 
   const upsertEvent = useCallback((event: Event) => {
@@ -356,16 +344,16 @@ export default function CalendarPage() {
     try {
       const token = getAuthToken();
       const isEditing = Boolean(editingEventId);
-      const response = await fetch(
+      const createdEvent = normalizeEvent(await apiFetch<ApiCalendarEvent>(
         isEditing
-          ? `${apiBaseUrl}/calendar/events/${editingEventId}`
-          : `${apiBaseUrl}/calendar/events`,
+          ? `/calendar/events/${editingEventId}`
+          : '/calendar/events',
         {
-        method: isEditing ? 'PUT' : 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+          method: isEditing ? 'PUT' : 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
         body: JSON.stringify({
           ...(isEditing ? { id: editingEventId } : {}),
           title: values.title,
@@ -373,17 +361,8 @@ export default function CalendarPage() {
           start_time: normalizeTimeForInput(values.startTime),
           end_time: normalizeTimeForInput(values.endTime),
         }),
-      }
-      );
-
-      if (!response.ok) {
-        const message = await response.text();
-        throw new Error(message || `Status ${response.status}`);
-      }
-
-      const createdEvent = normalizeEvent(
-        (await response.json()) as ApiCalendarEvent
-      );
+        }
+      ));
       upsertEvent(createdEvent);
       toast({
         title: isEditing ? 'Eveniment actualizat' : 'Eveniment adăugat',
@@ -547,8 +526,8 @@ export default function CalendarPage() {
 
     try {
       const token = getAuthToken();
-      const response = await fetch(
-        `${apiBaseUrl}/calendar/events/${updatedEvent.id}`,
+      const savedEvent = normalizeEvent(await apiFetch<ApiCalendarEvent>(
+        `/calendar/events/${updatedEvent.id}`,
         {
           method: 'PUT',
           headers: {
@@ -563,16 +542,7 @@ export default function CalendarPage() {
             end_time: normalizeTimeForInput(updatedEvent.endTime),
           }),
         }
-      );
-
-      if (!response.ok) {
-        const message = await response.text();
-        throw new Error(message || `Status ${response.status}`);
-      }
-
-      const savedEvent = normalizeEvent(
-        (await response.json()) as ApiCalendarEvent
-      );
+      ));
       upsertEvent(savedEvent);
       toast({
         title: 'Eveniment actualizat',
@@ -588,14 +558,7 @@ export default function CalendarPage() {
         variant: 'destructive',
       });
     }
-  }, [
-    apiBaseUrl,
-    formatIsoDate,
-    getAuthToken,
-    normalizeEvent,
-    toast,
-    upsertEvent,
-  ]);
+  }, [formatIsoDate, getAuthToken, normalizeEvent, toast, upsertEvent]);
 
   const getEventsForDay = (day: Date) =>
     events

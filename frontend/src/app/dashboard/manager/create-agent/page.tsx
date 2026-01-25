@@ -3,7 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Button } from '../../../../components/ui/button';
 import {
   Card,
@@ -29,6 +29,7 @@ import {
 } from '../../../../components/ui/form';
 import { Input } from '../../../../components/ui/input';
 import { useToast } from '../../../../hooks/use-toast';
+import { apiFetch } from '../../../../lib/api';
 
 const createAgentSchema = z
   .object({
@@ -69,11 +70,6 @@ export default function CreateAgentPage() {
     },
   });
 
-  const apiBaseUrl = useMemo(
-    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8081',
-    []
-  );
-
   const getAuthToken = useCallback(() => {
     if (typeof window === 'undefined') {
       return null;
@@ -86,7 +82,7 @@ export default function CreateAgentPage() {
       try {
         setIsSubmitting(true);
         const token = getAuthToken();
-        const response = await fetch(`${apiBaseUrl}/manager/agents`, {
+        const data = await apiFetch<{ email: string }>('/manager/agents', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -101,13 +97,6 @@ export default function CreateAgentPage() {
             role: values.role,
           }),
         });
-        if (!response.ok) {
-          const message = await response.text();
-          throw new Error(
-            message || `Nu am putut crea agentul (status ${response.status}).`
-          );
-        }
-        const data = (await response.json()) as { email: string };
         toast({
           title: 'Cont creat cu succes!',
           description: `Contul pentru ${data.email} a fost creat.`,
@@ -126,7 +115,7 @@ export default function CreateAgentPage() {
         setIsSubmitting(false);
       }
     },
-    [apiBaseUrl, form, getAuthToken, toast]
+    [form, getAuthToken, toast]
   );
 
   return (

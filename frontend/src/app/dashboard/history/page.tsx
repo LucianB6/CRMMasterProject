@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -28,6 +28,7 @@ import {
 } from '../../../components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../components/ui/tabs';
 import { useToast } from '../../../hooks/use-toast';
+import { apiFetch } from '../../../lib/api';
 import {
   DollarSign,
   ShoppingCart,
@@ -315,11 +316,6 @@ export default function HistoryPage() {
   const [historyData, setHistoryData] = useState<HistoryPayload>(defaultHistory);
   const [isLoading, setIsLoading] = useState(true);
 
-  const apiBaseUrl = useMemo(
-    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8081',
-    []
-  );
-
   const getAuthToken = useCallback(() => {
     if (typeof window === 'undefined') {
       return null;
@@ -343,43 +339,27 @@ export default function HistoryPage() {
         Date.UTC(today.getUTCFullYear() - 1, 11, 31)
       );
 
-      const [recentResponse, monthResponse, currentYearResponse, previousYearResponse] =
-        await Promise.all([
-          fetch(`${apiBaseUrl}/reports/daily/recent?days=7`, { headers }),
-          fetch(`${apiBaseUrl}/reports/daily/current-month`, { headers }),
-          fetch(
-            `${apiBaseUrl}/reports/daily?from=${formatIsoDate(
-              currentYearStart
-            )}&to=${formatIsoDate(today)}`,
-            { headers }
-          ),
-          fetch(
-            `${apiBaseUrl}/reports/daily?from=${formatIsoDate(
-              previousYearStart
-            )}&to=${formatIsoDate(previousYearEnd)}`,
-            { headers }
-          ),
-        ]);
-
-      const responses = [
-        recentResponse,
-        monthResponse,
-        currentYearResponse,
-        previousYearResponse,
-      ];
-      for (const response of responses) {
-        if (!response.ok) {
-          const message = await response.text();
-          throw new Error(message || `Status ${response.status}`);
-        }
-      }
-
-      const recentReports = (await recentResponse.json()) as ApiReportResponse[];
-      const monthReports = (await monthResponse.json()) as ApiReportResponse[];
-      const currentYearReports =
-        (await currentYearResponse.json()) as ApiReportResponse[];
-      const previousYearReports =
-        (await previousYearResponse.json()) as ApiReportResponse[];
+      const [
+        recentReports,
+        monthReports,
+        currentYearReports,
+        previousYearReports,
+      ] = await Promise.all([
+        apiFetch<ApiReportResponse[]>('/reports/daily/recent?days=7', { headers }),
+        apiFetch<ApiReportResponse[]>('/reports/daily/current-month', { headers }),
+        apiFetch<ApiReportResponse[]>(
+          `/reports/daily?from=${formatIsoDate(
+            currentYearStart
+          )}&to=${formatIsoDate(today)}`,
+          { headers }
+        ),
+        apiFetch<ApiReportResponse[]>(
+          `/reports/daily?from=${formatIsoDate(
+            previousYearStart
+          )}&to=${formatIsoDate(previousYearEnd)}`,
+          { headers }
+        ),
+      ]);
 
       const last7Start = addUtcDays(today, -6);
       const monthStart = new Date(
@@ -409,7 +389,7 @@ export default function HistoryPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [apiBaseUrl, getAuthToken, toast]);
+  }, [getAuthToken, toast]);
 
   useEffect(() => {
     void fetchHistory();

@@ -28,6 +28,7 @@ import {
 } from '../../../../components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../../components/ui/tabs';
 import { useToast } from '../../../../hooks/use-toast';
+import { apiFetch } from '../../../../lib/api';
 
 type ManagerAgent = {
   membership_id: string;
@@ -73,11 +74,6 @@ export default function ManagerOverviewPage() {
   const [teamPerformance, setTeamPerformance] = useState<ChartPoint[]>([]);
   const [agentPerformance, setAgentPerformance] = useState<ChartPoint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-
-  const apiBaseUrl = useMemo(
-    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8081',
-    []
-  );
 
   const getAuthToken = useCallback(() => {
     if (typeof window === 'undefined') {
@@ -136,13 +132,9 @@ export default function ManagerOverviewPage() {
     const fetchAgents = async () => {
       try {
         const token = getAuthToken();
-        const response = await fetch(`${apiBaseUrl}/manager/overview/agents`, {
+        const data = await apiFetch<ManagerAgent[]>('/manager/overview/agents', {
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         });
-        if (!response.ok) {
-          throw new Error('Nu am putut încărca agenții.');
-        }
-        const data = (await response.json()) as ManagerAgent[];
         setAgents(data);
       } catch (error) {
         toast({
@@ -157,7 +149,7 @@ export default function ManagerOverviewPage() {
     };
 
     fetchAgents();
-  }, [apiBaseUrl, getAuthToken, toast]);
+  }, [getAuthToken, toast]);
 
   useEffect(() => {
     const fetchOverview = async () => {
@@ -167,27 +159,21 @@ export default function ManagerOverviewPage() {
         const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
         const { from, to } = buildDateRange(rangePreset);
 
-        const summaryUrl =
+        const summaryPath =
           selectedAgentId === 'all'
-            ? `${apiBaseUrl}/manager/overview/summary?from=${from}&to=${to}`
-            : `${apiBaseUrl}/manager/overview/agents/${selectedAgentId}/summary?from=${from}&to=${to}`;
+            ? `/manager/overview/summary?from=${from}&to=${to}`
+            : `/manager/overview/agents/${selectedAgentId}/summary?from=${from}&to=${to}`;
 
-        const summaryResponse = await fetch(summaryUrl, { headers });
-        if (!summaryResponse.ok) {
-          throw new Error('Nu am putut încărca sumarul.');
-        }
-        const summaryData = (await summaryResponse.json()) as DailySummaryResponse;
+        const summaryData = await apiFetch<DailySummaryResponse>(summaryPath, {
+          headers,
+        });
         setSummary(summaryData);
 
         if (selectedAgentId === 'all') {
-          const performanceResponse = await fetch(
-            `${apiBaseUrl}/manager/overview/team-performance?from=${from}&to=${to}`,
+          const performanceData = await apiFetch<TeamPerformancePoint[]>(
+            `/manager/overview/team-performance?from=${from}&to=${to}`,
             { headers }
           );
-          if (!performanceResponse.ok) {
-            throw new Error('Nu am putut încărca performanța echipei.');
-          }
-          const performanceData = (await performanceResponse.json()) as TeamPerformancePoint[];
           const mapped = performanceData.map((point) => ({
             day: formatDayLabel(point.report_date),
             calls: point.outbound_dials ?? 0,
@@ -195,14 +181,10 @@ export default function ManagerOverviewPage() {
           }));
           setTeamPerformance(mapped);
         } else {
-          const reportsResponse = await fetch(
-            `${apiBaseUrl}/manager/reports?from=${from}&to=${to}&agent_membership_id=${selectedAgentId}`,
+          const reports = await apiFetch<ManagerReportResponse[]>(
+            `/manager/reports?from=${from}&to=${to}&agent_membership_id=${selectedAgentId}`,
             { headers }
           );
-          if (!reportsResponse.ok) {
-            throw new Error('Nu am putut încărca rapoartele agentului.');
-          }
-          const reports = (await reportsResponse.json()) as ManagerReportResponse[];
           const mapped = reports.map((report) => {
             const totalSales =
               (report.inputs.sales_one_call_close ?? 0) +
@@ -231,15 +213,7 @@ export default function ManagerOverviewPage() {
     };
 
     fetchOverview();
-  }, [
-    apiBaseUrl,
-    buildDateRange,
-    formatDayLabel,
-    getAuthToken,
-    rangePreset,
-    selectedAgentId,
-    toast,
-  ]);
+  }, [buildDateRange, formatDayLabel, getAuthToken, rangePreset, selectedAgentId, toast]);
 
   return (
     <div className="space-y-6">

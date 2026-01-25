@@ -31,6 +31,7 @@ import { DashboardHeader } from '../../components/dashboard/header';
 import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar';
 import { PlaceHolderImages } from '../../lib/placeholder-images';
 import { Skeleton } from '../../components/ui/skeleton';
+import { apiFetch } from '../../lib/api';
 
 const managerAvatar = PlaceHolderImages.find((img) => img.id === 'avatar-4');
 
@@ -105,10 +106,8 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
   const [userRole, setUserRole] = React.useState<string | null>(null);
-  const [displayName, setDisplayName] = React.useState("Cont");
-  const [initials, setInitials] = React.useState("?");
-  const apiBaseUrl =
-    process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8081";
+  const [displayName, setDisplayName] = React.useState('Cont');
+  const [initials, setInitials] = React.useState('?');
 
   React.useEffect(() => {
     const role = localStorage.getItem('userRole');
@@ -122,21 +121,15 @@ export default function DashboardLayout({
       if (!token) return;
 
       try {
-        const response = await fetch(`${apiBaseUrl}/auth/me`, {
+        const data = await apiFetch<{
+          firstName?: string | null;
+          lastName?: string | null;
+          email?: string | null;
+        }>('/auth/me', {
           headers: {
             Authorization: `Bearer ${token}`,
           },
         });
-
-        if (!response.ok) {
-          return;
-        }
-
-        const data = (await response.json()) as {
-          firstName?: string | null;
-          lastName?: string | null;
-          email?: string | null;
-        };
         const fullName = [data.firstName, data.lastName]
           .filter(Boolean)
           .join(' ')
@@ -157,7 +150,7 @@ export default function DashboardLayout({
     };
 
     void fetchUser();
-  }, [apiBaseUrl]);
+  }, []);
 
   if (!userRole) {
     return <DashboardSkeleton />;

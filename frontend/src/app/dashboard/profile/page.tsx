@@ -26,6 +26,7 @@ import { useToast } from '../../../hooks/use-toast';
 import { Separator } from '../../../components/ui/separator';
 import { Avatar, AvatarFallback } from '../../../components/ui/avatar';
 import { Camera, User } from 'lucide-react';
+import { apiFetch } from '../../../lib/api';
 
 const profileSchema = z.object({
   firstName: z.string().min(1, 'Prenumele este obligatoriu.'),
@@ -49,8 +50,6 @@ const passwordSchema = z
 export default function ProfilePage() {
   const { toast } = useToast();
   const [initials, setInitials] = React.useState('??');
-  const apiBaseUrl =
-    process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8081';
 
   const profileForm = useForm<z.infer<typeof profileSchema>>({
     resolver: zodResolver(profileSchema),
@@ -85,21 +84,15 @@ export default function ProfilePage() {
       if (!token) return;
 
       try {
-        const response = await fetch(`${apiBaseUrl}/auth/me`, {
+        const data = await apiFetch<{
+          firstName?: string | null;
+          lastName?: string | null;
+          email?: string | null;
+        }>('/auth/me', {
           headers: {
             Authorization: `Bearer ${token}`,
           },
         });
-
-        if (!response.ok) {
-          return;
-        }
-
-        const data = (await response.json()) as {
-          firstName?: string | null;
-          lastName?: string | null;
-          email?: string | null;
-        };
         const firstName = data.firstName ?? '';
         const lastName = data.lastName ?? '';
         const email = data.email ?? '';
@@ -120,7 +113,7 @@ export default function ProfilePage() {
     };
 
     void fetchProfile();
-  }, [apiBaseUrl, profileForm]);
+  }, [profileForm]);
 
   function onPasswordSubmit(values: z.infer<typeof passwordSchema>) {
     console.log('Changing password');

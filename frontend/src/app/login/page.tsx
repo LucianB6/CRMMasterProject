@@ -8,6 +8,7 @@ import { useForm } from "react-hook-form";
 import * as z from "zod";
 
 import { Logo } from "../../components/logo";
+import { ApiError, apiFetch } from "../../lib/api";
 import { Button } from "../../components/ui/button";
 import {
   Card,
@@ -60,9 +61,6 @@ export default function LoginPage() {
   const { toast } = useToast();
   const [isRequestAccessOpen, setIsRequestAccessOpen] = React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
-  const apiBaseUrl =
-    process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8081";
-
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -82,20 +80,18 @@ export default function LoginPage() {
 
   const resolveLandingRoute = async (token: string) => {
     try {
-      const response = await fetch(`${apiBaseUrl}/manager/overview/agents`, {
+      await apiFetch("/manager/overview/agents", {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`
         },
         cache: "no-store"
       });
-      if (response.ok) {
-        return { route: "/dashboard/manager/overview", role: "manager" };
-      }
-      if (response.status === 401 || response.status === 403) {
+      return { route: "/dashboard/manager/overview", role: "manager" };
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
         return { route: "/dashboard", role: "agent" };
       }
-    } catch {
       // Swallow probe errors to avoid leaking role information.
     }
     return { route: "/dashboard", role: "agent" };
@@ -105,7 +101,7 @@ export default function LoginPage() {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/auth/login`, {
+      const payload = await apiFetch<{ token: string }>("/auth/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -116,11 +112,6 @@ export default function LoginPage() {
         })
       });
 
-      if (!response.ok) {
-        throw new Error("Invalid credentials");
-      }
-
-      const payload = (await response.json()) as { token: string };
       localStorage.setItem("salesway_token", payload.token);
       const { route: landingRoute, role } = await resolveLandingRoute(
         payload.token

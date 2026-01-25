@@ -22,13 +22,12 @@ import {
 } from "../ui/dropdown-menu";
 import { SidebarTrigger } from "../ui/sidebar";
 import { PlaceHolderImages } from "../../lib/placeholder-images";
+import { apiFetch } from "../../lib/api";
 const managerAvatar = PlaceHolderImages.find((img) => img.id === "avatar-4");
 
 export function DashboardHeader() {
   const [displayName, setDisplayName] = React.useState("Cont");
   const [initials, setInitials] = React.useState("?");
-  const apiBaseUrl =
-    process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8081";
 
   React.useEffect(() => {
     const fetchUser = async () => {
@@ -37,21 +36,15 @@ export function DashboardHeader() {
       if (!token) return;
 
       try {
-        const response = await fetch(`${apiBaseUrl}/auth/me`, {
+        const data = await apiFetch<{
+          firstName?: string | null;
+          lastName?: string | null;
+          email?: string | null;
+        }>("/auth/me", {
           headers: {
             Authorization: `Bearer ${token}`
           }
         });
-
-        if (!response.ok) {
-          return;
-        }
-
-        const data = (await response.json()) as {
-          firstName?: string | null;
-          lastName?: string | null;
-          email?: string | null;
-        };
         const fullName = [data.firstName, data.lastName]
           .filter(Boolean)
           .join(" ")
@@ -72,7 +65,7 @@ export function DashboardHeader() {
     };
 
     void fetchUser();
-  }, [apiBaseUrl]);
+  }, []);
 
   return (
     <header className="sticky top-0 z-10 flex h-16 items-center justify-between gap-4 border-b bg-background px-4 md:px-6">

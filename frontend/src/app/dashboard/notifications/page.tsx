@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Card,
   CardContent,
@@ -12,6 +12,7 @@ import { Avatar, AvatarFallback } from './../../../components/ui/avatar';
 import { Separator } from './../../../components/ui/separator';
 import { cn } from './../../../lib/utils';
 import { useToast } from './../../../hooks/use-toast';
+import { apiFetch } from './../../../lib/api';
 
 type ManagerNotification = {
   id: string;
@@ -26,11 +27,6 @@ export default function NotificationsPage() {
   const { toast } = useToast();
   const [notifications, setNotifications] = useState<ManagerNotification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-
-  const apiBaseUrl = useMemo(
-    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8081',
-    []
-  );
 
   const getAuthToken = useCallback(() => {
     if (typeof window === 'undefined') {
@@ -85,13 +81,9 @@ export default function NotificationsPage() {
       try {
         setIsLoading(true);
         const token = getAuthToken();
-        const response = await fetch(`${apiBaseUrl}/manager/notifications`, {
+        const data = await apiFetch<ManagerNotification[]>('/manager/notifications', {
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         });
-        if (!response.ok) {
-          throw new Error('Nu am putut încărca notificările.');
-        }
-        const data = (await response.json()) as ManagerNotification[];
         setNotifications(data);
       } catch (error) {
         toast({
@@ -108,7 +100,7 @@ export default function NotificationsPage() {
     };
 
     fetchNotifications();
-  }, [apiBaseUrl, getAuthToken, toast]);
+  }, [getAuthToken, toast]);
 
   return (
     <div className="space-y-6">

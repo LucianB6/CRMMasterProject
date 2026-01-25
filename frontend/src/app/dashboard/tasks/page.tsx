@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Plus, Calendar as CalendarIcon, MoreHorizontal } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -43,6 +43,7 @@ import {
 } from '../../../components/ui/select';
 import { Badge } from '../../../components/ui/badge';
 import { useToast } from '../../../hooks/use-toast';
+import { apiFetch } from '../../../lib/api';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -84,11 +85,6 @@ export default function TasksPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [dragTaskId, setDragTaskId] = useState<string | null>(null);
   const [dragOverStatus, setDragOverStatus] = useState<TaskStatus | null>(null);
-
-  const apiBaseUrl = useMemo(
-    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8081',
-    []
-  );
 
   const getAuthToken = useCallback(() => {
     if (typeof window === 'undefined') {
@@ -139,14 +135,7 @@ export default function TasksPage() {
       setIsLoading(true);
       const token = getAuthToken();
       const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
-      const response = await fetch(`${apiBaseUrl}/tasks/board`, { headers });
-
-      if (!response.ok) {
-        const message = await response.text();
-        throw new Error(message || `Status ${response.status}`);
-      }
-
-      const data = (await response.json()) as ApiTask[];
+      const data = await apiFetch<ApiTask[]>('/tasks/board', { headers });
       setTasks(data.map(normalizeTask));
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Eroare necunoscută';
@@ -158,13 +147,13 @@ export default function TasksPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [apiBaseUrl, getAuthToken, normalizeTask, toast]);
+  }, [getAuthToken, normalizeTask, toast]);
 
   async function onSubmit(values: z.infer<typeof taskSchema>) {
     try {
       const token = getAuthToken();
-      const response = await fetch(
-        `${apiBaseUrl}/tasks/board${editingTask ? `/${editingTask.id}` : ''}`,
+      const savedTask = normalizeTask(await apiFetch<ApiTask>(
+        `/tasks/board${editingTask ? `/${editingTask.id}` : ''}`,
         {
           method: editingTask ? 'PUT' : 'POST',
           headers: {
@@ -178,14 +167,7 @@ export default function TasksPage() {
             status: values.status,
           }),
         }
-      );
-
-      if (!response.ok) {
-        const message = await response.text();
-        throw new Error(message || `Status ${response.status}`);
-      }
-
-      const savedTask = normalizeTask((await response.json()) as ApiTask);
+      ));
       setTasks((prev) => {
         const existingIndex = prev.findIndex((task) => task.id === savedTask.id);
         if (existingIndex === -1) {
@@ -219,7 +201,7 @@ export default function TasksPage() {
     async (task: Task, nextStatus: TaskStatus, previousTask: Task) => {
       try {
         const token = getAuthToken();
-        const response = await fetch(`${apiBaseUrl}/tasks/board/${task.id}`, {
+        const savedTask = normalizeTask(await apiFetch<ApiTask>(`/tasks/board/${task.id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -233,14 +215,7 @@ export default function TasksPage() {
               : null,
             status: nextStatus,
           }),
-        });
-
-        if (!response.ok) {
-          const message = await response.text();
-          throw new Error(message || `Status ${response.status}`);
-        }
-
-        const savedTask = normalizeTask((await response.json()) as ApiTask);
+        }));
         setTasks((prev) =>
           prev.map((item) => (item.id === savedTask.id ? savedTask : item))
         );
@@ -257,21 +232,16 @@ export default function TasksPage() {
         });
       }
     },
-    [apiBaseUrl, getAuthToken, normalizeTask, toast]
+    [getAuthToken, normalizeTask, toast]
   );
 
   const deleteTask = async (taskId: string) => {
     try {
       const token = getAuthToken();
-      const response = await fetch(`${apiBaseUrl}/tasks/board/${taskId}`, {
+      await apiFetch<unknown>(`/tasks/board/${taskId}`, {
         method: 'DELETE',
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
-
-      if (!response.ok) {
-        const message = await response.text();
-        throw new Error(message || `Status ${response.status}`);
-      }
 
       setTasks((prev) => prev.filter((t) => t.id !== taskId));
       toast({ title: 'Task șters.' });

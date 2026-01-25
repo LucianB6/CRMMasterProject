@@ -7,7 +7,7 @@ import {
   Lock,
   Pencil
 } from "lucide-react";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 
@@ -32,6 +32,7 @@ import {
 import { Input } from "../../components/ui/input";
 import { Textarea } from "../../components/ui/textarea";
 import { useToast } from "../../hooks/use-toast";
+import { apiFetch } from "../../lib/api";
 import { cn } from "../../lib/utils";
 
 
@@ -156,11 +157,6 @@ export default function DailyReportPage() {
     }
   });
 
-  const apiBaseUrl = useMemo(
-    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8081",
-    []
-  );
-
   const resolveStatus = useCallback((apiStatus: ApiReportStatus) => {
     if (apiStatus === "SUBMITTED" || apiStatus === "AUTO_SUBMITTED") {
       return "submitted";
@@ -175,30 +171,13 @@ export default function DailyReportPage() {
     return window.localStorage.getItem("salesway_token");
   }, []);
 
-  const handleApiResponse = useCallback(
-    async (response: Response, errorTitle: string) => {
-      if (!response.ok) {
-        const message = await response.text();
-        throw new Error(
-          message || `${errorTitle} (status ${response.status})`
-        );
-      }
-      return (await response.json()) as ApiReportResponse;
-    },
-    []
-  );
-
   const fetchTodayReport = useCallback(async () => {
     try {
       setIsLoading(true);
       const token = getAuthToken();
-      const response = await fetch(`${apiBaseUrl}/reports/daily/today`, {
+      const data = await apiFetch<ApiReportResponse>("/reports/daily/today", {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined
       });
-      const data = await handleApiResponse(
-        response,
-        "Nu am putut încărca raportul de azi"
-      );
       const nextValues: ReportFormValues = {
         ...baseReportValues,
         ...data.inputs
@@ -216,7 +195,7 @@ export default function DailyReportPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [apiBaseUrl, form, getAuthToken, handleApiResponse, resolveStatus, toast]);
+  }, [form, getAuthToken, resolveStatus, toast]);
 
   useEffect(() => {
     void fetchTodayReport();
@@ -228,21 +207,14 @@ export default function DailyReportPage() {
       try {
         const token = getAuthToken();
         const { confirmation, observations, ...payload } = values;
-        const response = await fetch(
-          `${apiBaseUrl}/reports/daily/${endpoint}`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(token ? { Authorization: `Bearer ${token}` } : {})
-            },
-            body: JSON.stringify(payload)
-          }
-        );
-        const data = await handleApiResponse(
-          response,
-          "Nu am putut salva raportul"
-        );
+        const data = await apiFetch<ApiReportResponse>(`/reports/daily/${endpoint}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify(payload)
+        });
         form.reset({ ...values, confirmation, observations });
         setStatus(resolveStatus(data.status));
         toast({
@@ -267,7 +239,7 @@ export default function DailyReportPage() {
         setIsSaving(false);
       }
     },
-    [apiBaseUrl, form, getAuthToken, handleApiResponse, resolveStatus, toast]
+    [form, getAuthToken, handleApiResponse, resolveStatus, toast]
   );
 
   function onSubmit(values: ReportFormValues) {
