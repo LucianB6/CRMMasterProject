@@ -146,10 +146,11 @@ public class MlService {
             predictions.add(prediction);
         }
 
-        LocalDate aggregateDate = request.getPredictionDate();
-        if (aggregateDate == null && !items.isEmpty()) {
-            aggregateDate = items.get(0).getDate();
-        }
+        LocalDate aggregateDate = items.stream()
+                .map(ForecastResponse.DailyPrediction::getDate)
+                .filter(date -> date != null)
+                .min(LocalDate::compareTo)
+                .orElse(request.getPredictionDate());
         if (forecastResponse.getTotal() != null && aggregateDate != null) {
             MlPrediction aggregate = mlPredictionRepository
                     .findByCompanyIdAndModelIdAndPredictionDateAndHorizonDays(
