@@ -1,40 +1,37 @@
 package com.salesway.ml.client;
 
 import com.salesway.ml.dto.ForecastResponse;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.util.Map;
 import java.util.UUID;
 
 @Component
 public class MlFastApiClient {
-    private final RestTemplate restTemplate;
+    private final PredictionClientService predictionClientService;
 
-    public MlFastApiClient(RestTemplateBuilder restTemplateBuilder, @Value("${app.ml.base-url}") String baseUrl) {
-        this.restTemplate = restTemplateBuilder
-                .rootUri(baseUrl)
-                .build();
+    public MlFastApiClient(PredictionClientService predictionClientService) {
+        this.predictionClientService = predictionClientService;
     }
 
     public void refreshForecast(UUID companyId) {
-        restTemplate.postForLocation(
-                "/forecast/refresh",
-                Map.of("company_id", companyId == null ? null : companyId.toString())
-        );
+        predictionClientService.post(
+                        "/forecast/refresh",
+                        Map.of("company_id", companyId == null ? null : companyId.toString())
+                )
+                .block();
     }
 
     public ForecastResponse getForecast(int periodDays, UUID companyId) {
-        ForecastResponse response = restTemplate.getForObject(
-                "/forecast?period={period}&company_id={companyId}",
-                ForecastResponse.class,
-                periodDays,
-                companyId == null ? null : companyId.toString()
-        );
+        String path = UriComponentsBuilder.fromPath("/forecast")
+                .queryParam("period", periodDays)
+                .queryParam("company_id", companyId == null ? null : companyId.toString())
+                .build()
+                .toUriString();
+        ForecastResponse response = predictionClientService.get(path, ForecastResponse.class).block();
 
         if (response == null) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Empty response from ML service");

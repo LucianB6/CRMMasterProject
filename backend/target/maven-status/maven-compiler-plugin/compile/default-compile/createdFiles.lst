@@ -4,9 +4,14 @@ com/salesway/ml/dto/ForecastResponse$DailyPrediction.class
 com/salesway/ml/dto/PredictResponse$PredictionItem.class
 com/salesway/ml/dto/MlPredictionResponse.class
 com/salesway/ml/dto/PredictRequest.class
+com/salesway/config/AppProperties.class
 com/salesway/ml/dto/TrainResponse.class
+com/salesway/config/AppProperties$Prediction.class
 com/salesway/ml/dto/ForecastResponse.class
 com/salesway/ml/dto/MlModelResponse.class
 com/salesway/ml/dto/TrainRequest.class
 com/salesway/ml/dto/PredictResponse.class
+com/salesway/config/AppProperties$Cors.class
+com/salesway/ml/client/PredictionClientService.class
+com/salesway/config/PredictionClientConfig.class
 com/salesway/ml/client/MlFastApiClient.class

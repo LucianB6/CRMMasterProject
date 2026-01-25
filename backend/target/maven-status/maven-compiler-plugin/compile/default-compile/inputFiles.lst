@@ -5,6 +5,7 @@
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/auth/dto/LoginResponse.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/auth/dto/SignupRequest.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/auth/dto/SignupResponse.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/auth/dto/UpdateProfileRequest.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/auth/entity/User.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/auth/repository/UserRepository.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/auth/service/AuthService.java
@@ -42,7 +43,9 @@
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/common/utils/SecureController.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/companies/entity/Company.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/companies/repository/CompanyRepository.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/config/AppProperties.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/config/JpaAuditingConfig.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/config/PredictionClientConfig.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/config/SchedulingConfig.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/goals/controller/GoalController.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/goals/dto/GoalRequest.java
@@ -69,6 +72,7 @@
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/memberships/entity/CompanyMembership.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/memberships/repository/CompanyMembershipRepository.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/ml/client/MlFastApiClient.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/ml/client/PredictionClientService.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/ml/controller/MlController.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/ml/dto/ForecastResponse.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/ml/dto/MlModelResponse.java

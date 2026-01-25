@@ -14,11 +14,11 @@ import com.salesway.ml.dto.PredictRequest;
 import com.salesway.ml.dto.TrainRequest;
 import com.salesway.ml.entity.MlModel;
 import com.salesway.ml.entity.MlPrediction;
+import com.salesway.config.AppProperties;
 import com.salesway.ml.repository.MlModelRepository;
 import com.salesway.ml.repository.MlPredictionRepository;
 import com.salesway.security.CustomUserDetails;
 import jakarta.persistence.criteria.Predicate;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.core.Authentication;
@@ -42,7 +42,7 @@ public class MlService {
     private final MlPredictionRepository mlPredictionRepository;
     private final CompanyMembershipRepository companyMembershipRepository;
     private final ObjectMapper objectMapper;
-    private final String mlBaseUrl;
+    private final AppProperties appProperties;
 
     public MlService(
             MlFastApiClient mlFastApiClient,
@@ -50,14 +50,14 @@ public class MlService {
             MlPredictionRepository mlPredictionRepository,
             CompanyMembershipRepository companyMembershipRepository,
             ObjectMapper objectMapper,
-            @Value("${app.ml.base-url}") String mlBaseUrl
+            AppProperties appProperties
     ) {
         this.mlFastApiClient = mlFastApiClient;
         this.mlModelRepository = mlModelRepository;
         this.mlPredictionRepository = mlPredictionRepository;
         this.companyMembershipRepository = companyMembershipRepository;
         this.objectMapper = objectMapper;
-        this.mlBaseUrl = mlBaseUrl;
+        this.appProperties = appProperties;
     }
 
     @Transactional
@@ -95,7 +95,7 @@ public class MlService {
         Instant trainedAt = forecastResponse.getTrainedAt() != null ? forecastResponse.getTrainedAt() : Instant.now();
         model.setTrainedAt(trainedAt);
         model.setMetricsJsonText(toMetricsJson(forecastResponse));
-        model.setArtifactUri(mlBaseUrl + "/forecast");
+        model.setArtifactUri(appProperties.getPrediction().getBaseUrl() + "/forecast");
         if (forecastResponse.getModelId() != null) {
             model.setId(forecastResponse.getModelId());
         }
