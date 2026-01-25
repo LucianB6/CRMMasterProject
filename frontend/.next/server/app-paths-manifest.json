@@ -1,9 +1,9 @@
 {
-  "/dashboard/manager/history/page": "app/dashboard/manager/history/page.js",
-  "/dashboard/profile/page": "app/dashboard/profile/page.js",
+  "/login/page": "app/login/page.js",
   "/dashboard/manager/overview/page": "app/dashboard/manager/overview/page.js",
-  "/dashboard/history/page": "app/dashboard/history/page.js",
   "/dashboard/manager/forecast/page": "app/dashboard/manager/forecast/page.js",
   "/dashboard/manager/reports/page": "app/dashboard/manager/reports/page.js",
-  "/dashboard/notifications/page": "app/dashboard/notifications/page.js"
+  "/dashboard/manager/history/page": "app/dashboard/manager/history/page.js",
+  "/dashboard/manager/create-agent/page": "app/dashboard/manager/create-agent/page.js",
+  "/dashboard/profile/page": "app/dashboard/profile/page.js"
 }

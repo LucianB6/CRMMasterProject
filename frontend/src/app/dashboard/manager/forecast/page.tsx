@@ -89,6 +89,8 @@ const addDays = (dateValue: string, days: number) => {
   return formatIsoDate(date);
 };
 
+const getTodayIso = () => formatIsoDate(new Date());
+
 const daysBetween = (start: string, end: string) => {
   const startDate = new Date(start);
   const endDate = new Date(end);
@@ -96,8 +98,8 @@ const daysBetween = (start: string, end: string) => {
   return Math.floor(diff / (1000 * 60 * 60 * 24)) + 1;
 };
 
-const buildDefaultPredictionWindow = () => {
-  const today = formatIsoDate(new Date());
+const buildDefaultPredictionWindow = (anchorDate?: string) => {
+  const today = anchorDate ?? getTodayIso();
   return {
     from: addDays(today, -(HORIZON_DAYS - 1)),
     to: today,
@@ -151,6 +153,12 @@ export default function ExpectedSalesPage() {
     const message = await response.text();
     if (response.status === 404) {
       return 'Resursa nu a fost găsită (404).';
+    }
+    if (response.status === 403) {
+      if (message.toLowerCase().includes('no eligible membership')) {
+        return 'Nu există un membership activ pentru companie. Contactează administratorul.';
+      }
+      return 'Acces interzis (403). Verifică autentificarea.';
     }
     if (response.status === 409) {
       return 'Conflict la salvare (409). Verifică dacă modelul există deja.';
@@ -287,16 +295,23 @@ export default function ExpectedSalesPage() {
     [fetchPredictionsForModel]
   );
 
-  const fetchFilteredPredictions = useCallback(async () => {
+  const fetchFilteredPredictions = useCallback(async (options?: {
+    from?: string;
+    to?: string;
+    modelId?: string;
+  }) => {
+    const resolvedFrom = options?.from ?? filterFrom;
+    const resolvedTo = options?.to ?? filterTo;
+    const resolvedModelId = options?.modelId ?? activeModelId;
     const query = new URLSearchParams();
-    if (filterFrom) {
-      query.set('from', filterFrom);
+    if (resolvedFrom) {
+      query.set('from', resolvedFrom);
     }
-    if (filterTo) {
-      query.set('to', filterTo);
+    if (resolvedTo) {
+      query.set('to', resolvedTo);
     }
-    if (activeModelId) {
-      query.set('model_id', activeModelId);
+    if (resolvedModelId) {
+      query.set('model_id', resolvedModelId);
     }
     query.set('horizon_days', String(DAILY_HORIZON_DAYS));
 
@@ -311,11 +326,24 @@ export default function ExpectedSalesPage() {
 
     const data = (await response.json()) as MlPredictionResponse[];
     setDailyPredictions(data);
-  }, [activeModelId, apiBaseUrl, buildHeaders, filterFrom, filterTo, parseErrorMessage]);
+  }, [
+    activeModelId,
+    apiBaseUrl,
+    buildHeaders,
+    filterFrom,
+    filterTo,
+    parseErrorMessage,
+  ]);
 
   const initializePage = useCallback(async () => {
     setIsInitializing(true);
     setErrorMessage(null);
+    const token = getAuthToken();
+    if (!token) {
+      setErrorMessage('Nu ești autentificat. Conectează-te pentru a vedea prognozele.');
+      setIsInitializing(false);
+      return;
+    }
     let loadedModels: MlModelResponse[] = [];
     try {
       loadedModels = await fetchModels();
@@ -370,6 +398,12 @@ export default function ExpectedSalesPage() {
   const handleGenerateForecast = async () => {
     setErrorMessage(null);
 
+    const token = getAuthToken();
+    if (!token) {
+      setErrorMessage('Nu ești autentificat. Conectează-te și încearcă din nou.');
+      return;
+    }
+
     if (!trainFrom || !trainTo) {
       setErrorMessage('Selectează intervalul de training.');
       return;
@@ -386,7 +420,10 @@ export default function ExpectedSalesPage() {
     try {
       const trainResponse = await fetch(`${apiBaseUrl}/ml/models/train`, {
         method: 'POST',
-        headers: buildHeaders(true),
+        headers: {
+          ...buildHeaders(true),
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           name: MODEL_NAME,
           version: MODEL_VERSION,
@@ -408,31 +445,40 @@ export default function ExpectedSalesPage() {
           return next;
         });
         setActiveModelId(existingModel.id);
-        const aggregateQuery = new URLSearchParams({
-          model_id: existingModel.id,
-          horizon_days: String(HORIZON_DAYS),
+        const refreshResponse = await fetch(`${apiBaseUrl}/ml/predictions/refresh`, {
+          method: 'POST',
+          headers: {
+            ...buildHeaders(true),
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            model_id: existingModel.id,
+            prediction_date: resolvedPredictionDate,
+            horizon_days: HORIZON_DAYS,
+          }),
         });
-        const aggregateResponse = await fetch(
-          `${apiBaseUrl}/ml/predictions?${aggregateQuery.toString()}`,
-          { headers: buildHeaders() }
-        );
-        if (aggregateResponse.ok) {
-          const aggregateData =
-            (await aggregateResponse.json()) as MlPredictionResponse[];
-          const latestAggregate = aggregateData.sort((a, b) =>
-            b.prediction_date.localeCompare(a.prediction_date)
-          )[0];
-          if (latestAggregate) {
-            setAggregatePrediction(latestAggregate);
-            const from = latestAggregate.prediction_date;
-            const to = addDays(from, HORIZON_DAYS - 1);
-            setFilterFrom(from);
-            setFilterTo(to);
-            await fetchPredictionsForModel(existingModel.id, from, to);
-            return;
-          }
+
+        if (!refreshResponse.ok) {
+          throw new Error(await parseErrorMessage(refreshResponse));
         }
-        await fetchFilteredPredictions();
+
+        const data = (await refreshResponse.json()) as MlPredictionResponse[];
+        const aggregate = data.find(
+          (item) => item.horizon_days === HORIZON_DAYS
+        );
+        const daily = data.filter(
+          (item) => item.horizon_days === DAILY_HORIZON_DAYS
+        );
+        setAggregatePrediction(aggregate ?? null);
+        if (aggregate) {
+          const from = aggregate.prediction_date;
+          const to = addDays(from, HORIZON_DAYS - 1);
+          setFilterFrom(from);
+          setFilterTo(to);
+        }
+        setDailyPredictions(
+          daily.sort((a, b) => a.prediction_date.localeCompare(b.prediction_date))
+        );
         return;
       }
 
@@ -454,7 +500,10 @@ export default function ExpectedSalesPage() {
 
       const refreshResponse = await fetch(`${apiBaseUrl}/ml/predictions/refresh`, {
         method: 'POST',
-        headers: buildHeaders(true),
+        headers: {
+          ...buildHeaders(true),
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           model_id: trainedModel.id,
           prediction_date: resolvedPredictionDate,
@@ -494,19 +543,14 @@ export default function ExpectedSalesPage() {
     setErrorMessage(null);
     setIsFiltering(true);
     try {
-      if (!filterFrom || !filterTo) {
-        setErrorMessage('Selectează un interval complet pentru actualizare.');
+      const fromDate = getTodayIso();
+      setFilterFrom(fromDate);
+      if (!filterTo) {
+        setErrorMessage('Selectează data până la care vrei prognoza.');
         return;
       }
-      if (new Date(filterFrom) > new Date(filterTo)) {
-        setErrorMessage('Intervalul selectat este invalid.');
-        return;
-      }
-      const selectedDays = daysBetween(filterFrom, filterTo);
-      if (selectedDays > HORIZON_DAYS) {
-        setErrorMessage(
-          `Intervalul selectat depășește orizontul permis de ${HORIZON_DAYS} zile.`
-        );
+      if (new Date(fromDate) > new Date(filterTo)) {
+        setErrorMessage('Data de final trebuie să fie după data curentă.');
         return;
       }
       if (!activeModelId) {
@@ -515,15 +559,18 @@ export default function ExpectedSalesPage() {
       }
       if (aggregatePrediction) {
         const allowedFrom = aggregatePrediction.prediction_date;
-        const allowedTo = addDays(allowedFrom, HORIZON_DAYS - 1);
-        if (filterFrom < allowedFrom || filterTo > allowedTo) {
+        if (fromDate < allowedFrom) {
           setErrorMessage(
-            'Intervalul selectat depășește perioada disponibilă pentru model.'
+            'Data de început este înainte de perioada disponibilă pentru model.'
           );
           return;
         }
       }
-      await fetchFilteredPredictions();
+      await fetchFilteredPredictions({
+        from: fromDate,
+        to: filterTo,
+        modelId: activeModelId,
+      });
     } catch (error) {
       setErrorMessage(normalizeErrorMessage(error));
     } finally {
@@ -532,8 +579,8 @@ export default function ExpectedSalesPage() {
   };
 
   const horizonLabelDays = useMemo(() => {
-    if (filterFrom && filterTo) {
-      return daysBetween(filterFrom, filterTo);
+    if (filterTo) {
+      return daysBetween(getTodayIso(), filterTo);
     }
     if (aggregatePrediction?.horizon_days) {
       return aggregatePrediction.horizon_days;
@@ -542,7 +589,7 @@ export default function ExpectedSalesPage() {
       return dailyPredictions.length;
     }
     return HORIZON_DAYS;
-  }, [aggregatePrediction?.horizon_days, dailyPredictions.length, filterFrom, filterTo]);
+  }, [aggregatePrediction?.horizon_days, dailyPredictions.length, filterTo]);
 
   const forecast = useMemo<ForecastSummary | null>(() => {
     if (dailyPredictions.length === 0 && !aggregatePrediction) {
@@ -653,7 +700,7 @@ export default function ExpectedSalesPage() {
               onChange={(event) => setPredictionDate(event.target.value)}
             />
           </div>
-          <Button onClick={handleGenerateForecast} disabled={isGenerating}>
+          <Button type="button" onClick={handleGenerateForecast} disabled={isGenerating}>
             {isGenerating ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -747,13 +794,8 @@ export default function ExpectedSalesPage() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="filter-from">De la</Label>
-                  <Input
-                    id="filter-from"
-                    type="date"
-                    value={filterFrom}
-                    onChange={(event) => setFilterFrom(event.target.value)}
-                  />
+                  <Label htmlFor="filter-from">De la (astăzi)</Label>
+                  <Input id="filter-from" type="date" value={getTodayIso()} readOnly />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="filter-to">Până la</Label>
@@ -766,7 +808,7 @@ export default function ExpectedSalesPage() {
                 </div>
               </div>
 
-              <Button onClick={handleFilterPredictions} disabled={isFiltering}>
+              <Button type="button" onClick={handleFilterPredictions} disabled={isFiltering}>
                 {isFiltering ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />

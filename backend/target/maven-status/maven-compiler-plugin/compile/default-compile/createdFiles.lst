@@ -1,0 +1,12 @@
+com/salesway/ml/controller/MlController.class
+com/salesway/ml/service/MlService.class
+com/salesway/ml/dto/ForecastResponse$DailyPrediction.class
+com/salesway/ml/dto/PredictResponse$PredictionItem.class
+com/salesway/ml/dto/MlPredictionResponse.class
+com/salesway/ml/dto/PredictRequest.class
+com/salesway/ml/dto/TrainResponse.class
+com/salesway/ml/dto/ForecastResponse.class
+com/salesway/ml/dto/MlModelResponse.class
+com/salesway/ml/dto/TrainRequest.class
+com/salesway/ml/dto/PredictResponse.class
+com/salesway/ml/client/MlFastApiClient.class

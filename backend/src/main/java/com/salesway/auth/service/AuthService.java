@@ -4,6 +4,7 @@ import com.salesway.auth.dto.LoginRequest;
 import com.salesway.auth.dto.LoginResponse;
 import com.salesway.auth.dto.SignupRequest;
 import com.salesway.auth.dto.SignupResponse;
+import com.salesway.auth.dto.UpdateProfileRequest;
 import com.salesway.auth.entity.User;
 import com.salesway.auth.repository.UserRepository;
 import com.salesway.common.enums.MembershipRole;
@@ -103,6 +104,14 @@ public class AuthService {
         createMembershipForManager(user, managerMembership, request.getRole());
 
         return new SignupResponse(user.getId(), user.getEmail());
+    }
+
+    @Transactional
+    public User updateProfile(CustomUserDetails userDetails, UpdateProfileRequest request) {
+        User user = userDetails.getUser();
+        user.setFirstName(request.getFirstName().trim());
+        user.setLastName(request.getLastName().trim());
+        return userRepository.save(user);
     }
 
     private void validateSignup(SignupRequest request, String normalizedEmail) {

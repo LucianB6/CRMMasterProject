@@ -17,8 +17,10 @@ import com.salesway.ml.entity.MlPrediction;
 import com.salesway.ml.repository.MlModelRepository;
 import com.salesway.ml.repository.MlPredictionRepository;
 import com.salesway.security.CustomUserDetails;
+import jakarta.persistence.criteria.Predicate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -247,9 +249,28 @@ public class MlService {
         }
 
         CompanyMembership membership = getReportingMembership(false);
-        return mlPredictionRepository
-                .findByCompanyAndFilters(membership.getCompany().getId(), modelId, horizonDays, from, to)
-                .stream()
+        Specification<MlPrediction> spec = (root, query, builder) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(builder.equal(root.get("company").get("id"), membership.getCompany().getId()));
+
+            if (modelId != null) {
+                predicates.add(builder.equal(root.get("model").get("id"), modelId));
+            }
+            if (horizonDays != null) {
+                predicates.add(builder.equal(root.get("horizonDays"), horizonDays));
+            }
+            if (from != null) {
+                predicates.add(builder.greaterThanOrEqualTo(root.get("predictionDate"), from));
+            }
+            if (to != null) {
+                predicates.add(builder.lessThanOrEqualTo(root.get("predictionDate"), to));
+            }
+
+            query.orderBy(builder.desc(root.get("predictionDate")));
+            return builder.and(predicates.toArray(new Predicate[0]));
+        };
+
+        return mlPredictionRepository.findAll(spec).stream()
                 .map(this::toPredictionResponse)
                 .toList();
     }
