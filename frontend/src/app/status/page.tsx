@@ -28,10 +28,7 @@ export default function StatusPage() {
       setStatus('loading');
       setMessage(null);
       try {
-        let response = await apiFetchRaw('/actuator/health');
-        if (response.status === 404) {
-          response = await apiFetchRaw('/health');
-        }
+        const response = await apiFetchRaw('/health');
         const body = await parseBody(response);
         if (!response.ok) {
           const detail =
