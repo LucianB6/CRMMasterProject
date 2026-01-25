@@ -96,6 +96,14 @@ const daysBetween = (start: string, end: string) => {
   return Math.floor(diff / (1000 * 60 * 60 * 24)) + 1;
 };
 
+const buildDefaultPredictionWindow = () => {
+  const today = formatIsoDate(new Date());
+  return {
+    from: addDays(today, -(HORIZON_DAYS - 1)),
+    to: today,
+  };
+};
+
 export default function ExpectedSalesPage() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -271,37 +279,12 @@ export default function ExpectedSalesPage() {
 
   const fetchDailyWindowForModel = useCallback(
     async (modelId: string) => {
-      const query = new URLSearchParams({
-        model_id: modelId,
-        horizon_days: String(DAILY_HORIZON_DAYS),
-      });
-
-      const response = await fetch(
-        `${apiBaseUrl}/ml/predictions?${query.toString()}`,
-        { headers: buildHeaders() }
-      );
-
-      if (!response.ok) {
-        throw new Error(await parseErrorMessage(response));
-      }
-
-      const data = (await response.json()) as MlPredictionResponse[];
-      if (data.length === 0) {
-        setDailyPredictions([]);
-        return;
-      }
-
-      const latestDate = data
-        .map((item) => item.prediction_date)
-        .sort()
-        .slice(-1)[0];
-      const from = addDays(latestDate, -(HORIZON_DAYS - 1));
-      const to = latestDate;
+      const { from, to } = buildDefaultPredictionWindow();
       setFilterFrom(from);
       setFilterTo(to);
       await fetchPredictionsForModel(modelId, from, to);
     },
-    [apiBaseUrl, buildHeaders, fetchPredictionsForModel, parseErrorMessage]
+    [fetchPredictionsForModel]
   );
 
   const fetchFilteredPredictions = useCallback(async () => {
