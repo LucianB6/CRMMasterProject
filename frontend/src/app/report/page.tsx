@@ -239,7 +239,7 @@ export default function DailyReportPage() {
         setIsSaving(false);
       }
     },
-    [form, getAuthToken, handleApiResponse, resolveStatus, toast]
+    [form, getAuthToken, resolveStatus, toast]
   );
 
   function onSubmit(values: ReportFormValues) {
