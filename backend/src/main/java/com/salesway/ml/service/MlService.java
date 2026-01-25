@@ -4,7 +4,6 @@ import com.salesway.common.enums.MembershipStatus;
 import com.salesway.common.enums.MlModelStatus;
 import com.salesway.memberships.entity.CompanyMembership;
 import com.salesway.memberships.repository.CompanyMembershipRepository;
-import com.salesway.ml.client.MlFastApiClient;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.salesway.ml.dto.ForecastResponse;
@@ -146,10 +145,11 @@ public class MlService {
             predictions.add(prediction);
         }
 
-        LocalDate aggregateDate = request.getPredictionDate();
-        if (aggregateDate == null && !items.isEmpty()) {
-            aggregateDate = items.get(0).getDate();
-        }
+        LocalDate aggregateDate = items.stream()
+                .map(ForecastResponse.DailyPrediction::getDate)
+                .filter(date -> date != null)
+                .min(LocalDate::compareTo)
+                .orElse(request.getPredictionDate());
         if (forecastResponse.getTotal() != null && aggregateDate != null) {
             MlPrediction aggregate = mlPredictionRepository
                     .findByCompanyIdAndModelIdAndPredictionDateAndHorizonDays(
