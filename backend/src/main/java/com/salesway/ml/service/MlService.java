@@ -2,6 +2,7 @@ package com.salesway.ml.service;
 
 import com.salesway.common.enums.MembershipStatus;
 import com.salesway.common.enums.MlModelStatus;
+import com.salesway.ml.client.MlFastApiClient;
 import com.salesway.memberships.entity.CompanyMembership;
 import com.salesway.memberships.repository.CompanyMembershipRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
