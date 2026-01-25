@@ -1,4 +1,4 @@
-package com.salesway.ml.client;
+package com.salesway.ml.service;
 
 import com.salesway.ml.dto.ForecastResponse;
 import org.springframework.beans.factory.annotation.Value;

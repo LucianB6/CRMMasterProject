@@ -4,7 +4,6 @@ import com.salesway.common.enums.MembershipStatus;
 import com.salesway.common.enums.MlModelStatus;
 import com.salesway.memberships.entity.CompanyMembership;
 import com.salesway.memberships.repository.CompanyMembershipRepository;
-import com.salesway.ml.client.MlFastApiClient;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.salesway.ml.dto.ForecastResponse;
