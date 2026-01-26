@@ -1,3 +1,4 @@
+import logging
 import os
 import subprocess
 import sys
@@ -17,6 +18,8 @@ from config import get_allowed_origins_list, get_database_url, settings
 BASE_DIR = Path(__file__).resolve().parent
 
 app = FastAPI(title="Prediction Service")
+logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
+logger = logging.getLogger("prediction-service")
 
 def require_api_key(x_api_key: Optional[str]) -> None:
     expected = os.getenv("PREDICTION_API_KEY")
@@ -37,22 +40,37 @@ def run_pipeline(company_id: Optional[str]) -> None:
     if company_id:
         env["PREDICTION_COMPANY_ID"] = company_id
 
-    subprocess.run(
-        [sys.executable, "app_build_dataset.py"],
-        cwd=str(BASE_DIR),
-        env=env,
-        check=True,
-        capture_output=True,
-        text=True,
+    logger.info(
+        "Running pipeline with PREDICTION_DB_URL=%s, PREDICTION_COMPANY_ID=%s, PREDICTION_SAVE_DB=%s",
+        env.get("PREDICTION_DB_URL"),
+        env.get("PREDICTION_COMPANY_ID"),
+        env.get("PREDICTION_SAVE_DB"),
     )
-    subprocess.run(
-        [sys.executable, "app_train_forecast.py"],
-        cwd=str(BASE_DIR),
-        env=env,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+
+    try:
+        logger.info("Starting app_build_dataset.py")
+        subprocess.run(
+            [sys.executable, "app_build_dataset.py"],
+            cwd=str(BASE_DIR),
+            env=env,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        logger.info("Starting app_train_forecast.py")
+        subprocess.run(
+            [sys.executable, "app_train_forecast.py"],
+            cwd=str(BASE_DIR),
+            env=env,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        stdout = (exc.stdout or "").strip()
+        stderr = (exc.stderr or "").strip()
+        logger.error("Pipeline failed (exit=%s). stdout=%s stderr=%s", exc.returncode, stdout, stderr)
+        raise
 
 
 origins = get_allowed_origins_list(settings.allowed_origins)
@@ -79,9 +97,12 @@ def refresh_forecast(
     try:
         run_pipeline(payload.company_id)
     except subprocess.CalledProcessError as exc:
+        stderr = (exc.stderr or "").strip()
+        stdout = (exc.stdout or "").strip()
+        error_detail = stderr if stderr else stdout
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Pipeline failed: {exc.stderr or exc.stdout or str(exc)}",
+            detail=f"Pipeline failed: {error_detail or str(exc)}",
         ) from exc
     return {"status": "ok"}
 
