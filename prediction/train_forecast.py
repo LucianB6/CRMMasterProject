@@ -94,7 +94,7 @@ def parse_args() -> ForecastConfig:
     )
     args = parser.parse_args()
 
-    config = load_config(args.config)
+    config = load_config(args.config) if settings.env == "local" else {}
     if args.csv_path is None:
         args.csv_path = config.get("csv_path", "data/daily_report.csv")
     if args.target == "new_cash_collected" and config.get("target"):

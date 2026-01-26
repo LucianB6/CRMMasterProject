@@ -26,7 +26,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--api-token", default=None)
     args = parser.parse_args()
 
-    config = load_config(args.config)
+    config = load_config(args.config) if settings.env == "local" else {}
     env_db_url = os.getenv("PREDICTION_DB_URL") or get_database_url(settings)
     env_api_url = os.getenv("PREDICTION_API_URL")
     env_api_token = os.getenv("PREDICTION_API_TOKEN")
