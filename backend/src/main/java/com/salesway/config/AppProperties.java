@@ -13,6 +13,7 @@ import java.util.List;
 public class AppProperties {
     private final Prediction prediction = new Prediction();
     private final Cors cors = new Cors();
+    private final OpenAi openAi = new OpenAi();
 
     public Prediction getPrediction() {
         return prediction;
@@ -20,6 +21,10 @@ public class AppProperties {
 
     public Cors getCors() {
         return cors;
+    }
+
+    public OpenAi getOpenAi() {
+        return openAi;
     }
 
     public static class Prediction {
@@ -63,6 +68,45 @@ public class AppProperties {
 
         public void setAllowedOrigins(List<String> allowedOrigins) {
             this.allowedOrigins = allowedOrigins;
+        }
+    }
+
+    public static class OpenAi {
+        private String apiKey;
+        private String baseUrl = "https://api.openai.com/v1";
+        private String chatModel = "gpt-4o-mini";
+        private String embeddingModel = "text-embedding-3-small";
+
+        public String getApiKey() {
+            return apiKey;
+        }
+
+        public void setApiKey(String apiKey) {
+            this.apiKey = apiKey;
+        }
+
+        public String getBaseUrl() {
+            return baseUrl;
+        }
+
+        public void setBaseUrl(String baseUrl) {
+            this.baseUrl = baseUrl;
+        }
+
+        public String getChatModel() {
+            return chatModel;
+        }
+
+        public void setChatModel(String chatModel) {
+            this.chatModel = chatModel;
+        }
+
+        public String getEmbeddingModel() {
+            return embeddingModel;
+        }
+
+        public void setEmbeddingModel(String embeddingModel) {
+            this.embeddingModel = embeddingModel;
         }
     }
 }

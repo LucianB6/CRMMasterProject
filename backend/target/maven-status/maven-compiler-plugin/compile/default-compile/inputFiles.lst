@@ -17,6 +17,11 @@
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/calendar/repository/CalendarEventRepository.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/calendar/repository/CalendarIntegrationRepository.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/calendar/service/CalendarEventService.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/chatbot/client/OpenAiClient.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/chatbot/controller/ChatbotController.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/chatbot/dto/ChatRequest.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/chatbot/dto/ChatResponse.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/chatbot/dto/IngestResponse.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/chatbot/entity/ChatConversation.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/chatbot/entity/ChatMessage.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/chatbot/entity/KbChunk.java
@@ -25,6 +30,7 @@
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/chatbot/repository/ChatMessageRepository.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/chatbot/repository/KbChunkRepository.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/chatbot/repository/KbDocumentRepository.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/chatbot/service/ChatbotService.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/common/auditing/AuditedEntity.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/common/auditing/BaseEntity.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/common/auditing/CreatedOnlyEntity.java

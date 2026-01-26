@@ -122,7 +122,9 @@ export default function ExpectedSalesPage() {
   const [activeModelId, setActiveModelId] = useState<string>('');
   const [trainFrom, setTrainFrom] = useState(buildDefaultTrainFrom);
   const [trainTo, setTrainTo] = useState(() => formatIsoDate(new Date()));
-  const [forecastFrom, setForecastFrom] = useState(() => formatIsoDate(new Date()));
+  const [forecastFrom, setForecastFrom] = useState(() =>
+    addDays(formatIsoDate(new Date()), 1)
+  );
   const [forecastTo, setForecastTo] = useState(() =>
     formatIsoDate(addMonths(new Date(), 6))
   );
