@@ -10,6 +10,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 import psycopg2
+from psycopg2 import errors as pg_errors
 from psycopg2.extras import execute_batch
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error
@@ -29,7 +30,7 @@ def load_config(path: str) -> dict:
 
 
 def default_version() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
+    return datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
 
 
 @dataclass
@@ -300,35 +301,69 @@ def save_results_to_db(config: ForecastConfig, metrics: dict, forecast: dict) ->
                     (now, config.company_id, config.model_name),
                 )
 
-            cursor.execute(
-                """
-                INSERT INTO ml_models (
-                    id,
-                    created_at,
-                    updated_at,
-                    artifact_uri,
-                    metrics_json,
-                    name,
-                    status,
-                    trained_at,
-                    version,
-                    company_id
+            insert_version = config.model_version
+            try:
+                cursor.execute(
+                    """
+                    INSERT INTO ml_models (
+                        id,
+                        created_at,
+                        updated_at,
+                        artifact_uri,
+                        metrics_json,
+                        name,
+                        status,
+                        trained_at,
+                        version,
+                        company_id
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        model_id,
+                        now,
+                        now,
+                        artifact_uri,
+                        metrics_text,
+                        config.model_name,
+                        config.model_status,
+                        now,
+                        insert_version,
+                        config.company_id,
+                    ),
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """,
-                (
-                    model_id,
-                    now,
-                    now,
-                    artifact_uri,
-                    metrics_text,
-                    config.model_name,
-                    config.model_status,
-                    now,
-                    config.model_version,
-                    config.company_id,
-                ),
-            )
+            except pg_errors.UniqueViolation:
+                connection.rollback()
+                insert_version = default_version()
+                cursor.execute(
+                    """
+                    INSERT INTO ml_models (
+                        id,
+                        created_at,
+                        updated_at,
+                        artifact_uri,
+                        metrics_json,
+                        name,
+                        status,
+                        trained_at,
+                        version,
+                        company_id
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        model_id,
+                        now,
+                        now,
+                        artifact_uri,
+                        metrics_text,
+                        config.model_name,
+                        config.model_status,
+                        now,
+                        insert_version,
+                        config.company_id,
+                    ),
+                )
 
             prediction_rows = []
             prediction_date = None
