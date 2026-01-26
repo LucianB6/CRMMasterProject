@@ -133,11 +133,33 @@ public class MlService {
         LocalDate toDate = fromDate == null || request.getHorizonDays() == null
                 ? null
                 : fromDate.plusDays(request.getHorizonDays() - 1L);
-        List<ForecastResponse.DailyPrediction> items = Optional.ofNullable(forecastResponse.getDailyPredictions())
+        List<ForecastResponse.DailyPrediction> allItems = Optional.ofNullable(forecastResponse.getDailyPredictions())
                 .orElseGet(List::of);
-        items = items.stream()
+        allItems = allItems.stream()
                 .filter(item -> item.getDate() != null && item.getValue() != null)
                 .toList();
+        if (allItems.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No predictions available from ML service");
+        }
+        LocalDate availableFrom = allItems.stream()
+                .map(ForecastResponse.DailyPrediction::getDate)
+                .min(LocalDate::compareTo)
+                .orElse(null);
+        LocalDate availableTo = allItems.stream()
+                .map(ForecastResponse.DailyPrediction::getDate)
+                .max(LocalDate::compareTo)
+                .orElse(null);
+        if (fromDate != null && toDate != null) {
+            if (availableFrom != null && availableTo != null
+                    && (fromDate.isBefore(availableFrom) || toDate.isAfter(availableTo))) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Prediction date must be within available range: " + availableFrom + " to " + availableTo
+                );
+            }
+        }
+
+        List<ForecastResponse.DailyPrediction> items = allItems;
         if (fromDate != null && toDate != null) {
             items = items.stream()
                     .filter(item -> !item.getDate().isBefore(fromDate) && !item.getDate().isAfter(toDate))
