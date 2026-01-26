@@ -25,6 +25,8 @@ public class AppProperties {
     public static class Prediction {
         @NotBlank
         private String baseUrl;
+        private String apiKey;
+        private String apiKeyHeader = "X-API-Key";
 
         public String getBaseUrl() {
             return baseUrl;
@@ -32,6 +34,22 @@ public class AppProperties {
 
         public void setBaseUrl(String baseUrl) {
             this.baseUrl = baseUrl;
+        }
+
+        public String getApiKey() {
+            return apiKey;
+        }
+
+        public void setApiKey(String apiKey) {
+            this.apiKey = apiKey;
+        }
+
+        public String getApiKeyHeader() {
+            return apiKeyHeader;
+        }
+
+        public void setApiKeyHeader(String apiKeyHeader) {
+            this.apiKeyHeader = apiKeyHeader;
         }
     }
 
