@@ -82,7 +82,8 @@ public class MlService {
         mlFastApiClient.refreshForecast(membership.getCompany().getId());
         ForecastResponse forecastResponse = mlFastApiClient.getForecast(
                 request.getHorizonDays(),
-                membership.getCompany().getId()
+                membership.getCompany().getId(),
+                request.getTrainTo()
         );
 
         List<MlModel> activeModels = mlModelRepository.findByCompanyIdAndNameAndStatus(
@@ -144,7 +145,8 @@ public class MlService {
         mlFastApiClient.refreshForecast(membership.getCompany().getId());
         ForecastResponse forecastResponse = mlFastApiClient.getForecast(
                 request.getHorizonDays(),
-                membership.getCompany().getId()
+                membership.getCompany().getId(),
+                request.getPredictionDate()
         );
         List<ForecastResponse.DailyPrediction> allItems = Optional.ofNullable(forecastResponse.getDailyPredictions())
                 .orElseGet(List::of);

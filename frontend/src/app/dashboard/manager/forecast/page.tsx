@@ -58,10 +58,14 @@ const MODEL_VERSION = 'v1';
 
 const formatIsoDate = (value: Date) => value.toISOString().slice(0, 10);
 
+const addMonths = (date: Date, amount: number) => {
+  const next = new Date(date);
+  next.setMonth(next.getMonth() + amount);
+  return next;
+};
+
 const buildDefaultTrainFrom = () => {
-  const date = new Date();
-  date.setDate(date.getDate() - 90);
-  return formatIsoDate(date);
+  return formatIsoDate(addMonths(new Date(), -6));
 };
 
 const formatCurrency = (value: number) =>
@@ -106,14 +110,6 @@ const daysBetween = (start: string, end: string) => {
   return Math.floor(diff / (1000 * 60 * 60 * 24)) + 1;
 };
 
-const buildDefaultPredictionWindow = (anchorDate?: string) => {
-  const today = anchorDate ?? getTodayIso();
-  return {
-    from: addDays(today, -(HORIZON_DAYS - 1)),
-    to: today,
-  };
-};
-
 export default function ExpectedSalesPage() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -128,7 +124,7 @@ export default function ExpectedSalesPage() {
   const [trainTo, setTrainTo] = useState(() => formatIsoDate(new Date()));
   const [forecastFrom, setForecastFrom] = useState(() => formatIsoDate(new Date()));
   const [forecastTo, setForecastTo] = useState(() =>
-    addDays(formatIsoDate(new Date()), HORIZON_DAYS - 1)
+    formatIsoDate(addMonths(new Date(), 6))
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -205,10 +201,6 @@ export default function ExpectedSalesPage() {
       setAggregatePrediction(latest);
       if (latest) {
         setActiveModelId(latest.model_id);
-        const from = latest.prediction_date;
-        const to = addDays(from, HORIZON_DAYS - 1);
-        setForecastFrom(from);
-        setForecastTo(to);
       }
       return latest;
     },
@@ -229,13 +221,6 @@ export default function ExpectedSalesPage() {
         { headers: buildHeaders() }
       );
       setDailyPredictions(data);
-      if (data.length > 0) {
-        const sorted = [...data].sort((a, b) =>
-          a.prediction_date.localeCompare(b.prediction_date)
-        );
-        setForecastFrom(sorted[0].prediction_date);
-        setForecastTo(sorted[sorted.length - 1].prediction_date);
-      }
     },
     [buildHeaders]
   );
@@ -272,10 +257,7 @@ export default function ExpectedSalesPage() {
   );
 
   const fetchDailyWindowForModel = useCallback(
-    async (modelId: string) => {
-      const { from, to } = buildDefaultPredictionWindow();
-      setForecastFrom(from);
-      setForecastTo(to);
+    async (modelId: string, from: string, to: string) => {
       await fetchPredictionsForModel(modelId, from, to);
     },
     [fetchPredictionsForModel]
@@ -290,52 +272,19 @@ export default function ExpectedSalesPage() {
       setIsInitializing(false);
       return;
     }
-    let loadedModels: MlModelResponse[] = [];
-    try {
-      loadedModels = await fetchModels();
-    } catch (error) {
-      setErrorMessage(normalizeErrorMessage(error));
-    }
 
     try {
-      const latest = await fetchLatestPredictions();
-      if (latest) {
-        const from = latest.prediction_date;
-        const to = addDays(from, HORIZON_DAYS - 1);
-        await fetchPredictionsForModel(latest.model_id, from, to);
-      } else {
-        setDailyPredictions([]);
+      const data = await fetchModels();
+      const active = getLatestActiveModel(data);
+      if (active) {
+        setActiveModelId(active.id);
       }
     } catch (error) {
-      const message = normalizeErrorMessage(error);
-      if (message.includes('(404)')) {
-        const activeModel =
-          loadedModels.length > 0 ? getLatestActiveModel(loadedModels) : null;
-        if (activeModel) {
-          setActiveModelId(activeModel.id);
-          try {
-            await fetchDailyWindowForModel(activeModel.id);
-          } catch (fetchError) {
-            setErrorMessage(normalizeErrorMessage(fetchError));
-            setDailyPredictions([]);
-          }
-        } else {
-          setDailyPredictions([]);
-        }
-      } else {
-        setErrorMessage(message);
-        setDailyPredictions([]);
-      }
+      setErrorMessage(normalizeErrorMessage(error));
     } finally {
       setIsInitializing(false);
     }
-  }, [
-    fetchDailyWindowForModel,
-    fetchLatestPredictions,
-    fetchModels,
-    fetchPredictionsForModel,
-    getLatestActiveModel,
-  ]);
+  }, [fetchModels, getLatestActiveModel, getAuthToken]);
 
   useEffect(() => {
     void initializePage();
@@ -370,6 +319,13 @@ export default function ExpectedSalesPage() {
 
     setIsGenerating(true);
     try {
+      console.info('[forecast] generate: inputs', {
+        train_from: trainFrom,
+        train_to: trainTo,
+        forecast_from: forecastFrom,
+        forecast_to: forecastTo,
+        selected_days: selectedDays,
+      });
       let trainedModel: MlModelResponse;
       if (!trainFrom || !trainTo) {
         setErrorMessage('Selectează intervalul de training.');
@@ -439,14 +395,16 @@ export default function ExpectedSalesPage() {
       );
       setAggregatePrediction(aggregate ?? null);
       setDailyPredictions(sortedDaily);
-      if (sortedDaily.length > 0) {
-        setForecastFrom(sortedDaily[0].prediction_date);
-        setForecastTo(sortedDaily[sortedDaily.length - 1].prediction_date);
-      } else if (aggregate) {
-        setForecastFrom(aggregate.prediction_date);
-        setForecastTo(aggregate.prediction_date);
-      }
     } catch (error) {
+      if (error instanceof ApiError) {
+        console.error('[forecast] refresh error', {
+          status: error.status,
+          body: error.body,
+          message: error.message,
+        });
+      } else {
+        console.error('[forecast] refresh error', error);
+      }
       setErrorMessage(normalizeErrorMessage(error));
     } finally {
       setIsGenerating(false);

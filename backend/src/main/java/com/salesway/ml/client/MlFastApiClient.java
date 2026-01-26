@@ -11,6 +11,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import java.util.Map;
 import java.util.UUID;
 import java.util.HashMap;
+import java.time.LocalDate;
 
 @Component
 public class MlFastApiClient {
@@ -31,10 +32,15 @@ public class MlFastApiClient {
     }
 
     public ForecastResponse getForecast(int periodDays, UUID companyId) {
+        return getForecast(periodDays, companyId, null);
+    }
+
+    public ForecastResponse getForecast(int periodDays, UUID companyId, LocalDate predictionDate) {
         Map<String, String> headers = resolveAuthHeader();
         String path = UriComponentsBuilder.fromPath("/forecast")
-                .queryParam("period", periodDays)
                 .queryParam("company_id", companyId == null ? null : companyId.toString())
+                .queryParam("prediction_date", predictionDate == null ? null : predictionDate.toString())
+                .queryParam("horizon_days", periodDays)
                 .build()
                 .toUriString();
         ForecastResponse response = predictionClientService.get(path, ForecastResponse.class, headers).block();
