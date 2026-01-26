@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Optional
 
 import psycopg2
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import FastAPI, Header, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -130,7 +130,7 @@ def get_forecast(
             if requested_prediction_date < last_data_date:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"prediction_date must be >= last_data_date: {last_data_date.isoformat()}",
+                    detail=f"prediction_date must be >= last_available_date: {last_data_date.isoformat()}",
                 )
 
             cursor.execute(
@@ -151,16 +151,24 @@ def get_forecast(
                 )
             model_id, trained_at = model_row
 
+            end_date = requested_prediction_date + timedelta(days=horizon_days - 1)
+
             def fetch_daily_rows() -> list[tuple]:
                 cursor.execute(
                     """
                     SELECT prediction_date, predicted_revenue
                     FROM ml_predictions
-                    WHERE model_id = %s AND horizon_days = 1 AND prediction_date >= %s
+                    WHERE model_id = %s
+                      AND horizon_days = 1
+                      AND prediction_date >= %s
+                      AND prediction_date <= %s
                     ORDER BY prediction_date ASC
-                    LIMIT %s
                     """,
-                    (str(model_id), requested_prediction_date, horizon_days),
+                    (
+                        str(model_id),
+                        requested_prediction_date,
+                        end_date,
+                    ),
                 )
                 return cursor.fetchall()
 
@@ -184,6 +192,7 @@ def get_forecast(
     return {
         "model_id": str(model_id),
         "trained_at": trained_at.isoformat() if trained_at else None,
+        "prediction_date": prediction_date,
         "period_days": horizon_days,
         "total": total,
         "daily_predictions": daily_predictions,
