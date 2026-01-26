@@ -195,7 +195,16 @@ def get_forecast(
 
             daily_rows = fetch_daily_rows()
             if len(daily_rows) < horizon_days:
-                run_pipeline(company_id)
+                try:
+                    run_pipeline(company_id)
+                except subprocess.CalledProcessError as exc:
+                    stderr = (exc.stderr or "").strip()
+                    stdout = (exc.stdout or "").strip()
+                    error_detail = stderr if stderr else stdout
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail=f"Pipeline failed: {error_detail or str(exc)}",
+                    ) from exc
                 daily_rows = fetch_daily_rows()
 
             if len(daily_rows) < horizon_days:
