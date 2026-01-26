@@ -64,6 +64,15 @@ public class MlService {
     public MlModelResponse trainModel(TrainRequest request) {
         CompanyMembership membership = getReportingMembership(false);
 
+        List<MlModel> existingActive = mlModelRepository.findByCompanyIdAndNameAndStatus(
+                membership.getCompany().getId(),
+                request.getName(),
+                MlModelStatus.ACTIVE
+        );
+        if (!existingActive.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Active model already exists");
+        }
+
         mlModelRepository
                 .findByCompanyIdAndNameAndVersion(membership.getCompany().getId(), request.getName(), request.getVersion())
                 .ifPresent(model -> {
@@ -107,6 +116,9 @@ public class MlService {
     @Transactional
     public List<MlPredictionResponse> refreshPredictions(PredictRequest request) {
         CompanyMembership membership = getReportingMembership(false);
+        if (request.getHorizonDays() != null && request.getHorizonDays() > 360) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "horizon_days must be <= 360");
+        }
 
         MlModel model = mlModelRepository
                 .findByIdAndCompanyId(request.getModelId(), membership.getCompany().getId())
@@ -117,8 +129,26 @@ public class MlService {
                 request.getHorizonDays(),
                 membership.getCompany().getId()
         );
+        LocalDate fromDate = request.getPredictionDate();
+        LocalDate toDate = fromDate == null || request.getHorizonDays() == null
+                ? null
+                : fromDate.plusDays(request.getHorizonDays() - 1L);
         List<ForecastResponse.DailyPrediction> items = Optional.ofNullable(forecastResponse.getDailyPredictions())
                 .orElseGet(List::of);
+        items = items.stream()
+                .filter(item -> item.getDate() != null && item.getValue() != null)
+                .toList();
+        if (fromDate != null && toDate != null) {
+            items = items.stream()
+                    .filter(item -> !item.getDate().isBefore(fromDate) && !item.getDate().isAfter(toDate))
+                    .toList();
+        }
+        if (items.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Predictions not found for requested range");
+        }
+        if (request.getHorizonDays() != null && items.size() < request.getHorizonDays()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Not enough predictions for requested range");
+        }
 
         List<MlPrediction> predictions = new ArrayList<>();
         for (ForecastResponse.DailyPrediction item : items) {
@@ -148,11 +178,13 @@ public class MlService {
             predictions.add(prediction);
         }
 
-        LocalDate aggregateDate = items.stream()
-                .map(ForecastResponse.DailyPrediction::getDate)
-                .filter(date -> date != null)
-                .min(LocalDate::compareTo)
-                .orElse(request.getPredictionDate());
+        LocalDate aggregateDate = request.getPredictionDate() != null
+                ? request.getPredictionDate()
+                : items.stream()
+                        .map(ForecastResponse.DailyPrediction::getDate)
+                        .filter(date -> date != null)
+                        .min(LocalDate::compareTo)
+                        .orElse(null);
         if (forecastResponse.getTotal() != null && aggregateDate != null) {
             MlPrediction aggregate = mlPredictionRepository
                     .findByCompanyIdAndModelIdAndPredictionDateAndHorizonDays(

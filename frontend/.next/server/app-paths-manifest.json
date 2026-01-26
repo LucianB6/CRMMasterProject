@@ -1,4 +1,22 @@
 {
+  "/_not-found/page": "app/_not-found/page.js",
   "/status/page": "app/status/page.js",
-  "/dashboard/manager/forecast/page": "app/dashboard/manager/forecast/page.js"
+  "/page": "app/page.js",
+  "/login/page": "app/login/page.js",
+  "/report/page": "app/report/page.js",
+  "/dashboard/goals/page": "app/dashboard/goals/page.js",
+  "/dashboard/manager/forecast/page": "app/dashboard/manager/forecast/page.js",
+  "/dashboard/manager/create-agent/page": "app/dashboard/manager/create-agent/page.js",
+  "/dashboard/history/page": "app/dashboard/history/page.js",
+  "/dashboard/manager/history/page": "app/dashboard/manager/history/page.js",
+  "/dashboard/manager/reports/page": "app/dashboard/manager/reports/page.js",
+  "/dashboard/report/page": "app/dashboard/report/page.js",
+  "/dashboard/manager/overview/page": "app/dashboard/manager/overview/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/dashboard/notifications/page": "app/dashboard/notifications/page.js",
+  "/dashboard/settings/page": "app/dashboard/settings/page.js",
+  "/dashboard/profile/page": "app/dashboard/profile/page.js",
+  "/dashboard/tasks/page": "app/dashboard/tasks/page.js",
+  "/dashboard/calendar/page": "app/dashboard/calendar/page.js",
+  "/dashboard/ai-assistant/page": "app/dashboard/ai-assistant/page.js"
 }
