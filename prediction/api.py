@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Optional
 
 import psycopg2
+from datetime import date
+
 from fastapi import FastAPI, Header, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -53,12 +55,6 @@ def run_pipeline(company_id: Optional[str]) -> None:
     )
 
 
-def period_to_days(period: int) -> int:
-    if period in (3, 6, 12):
-        return period * 30
-    return period
-
-
 origins = get_allowed_origins_list(settings.allowed_origins)
 app.add_middleware(
     CORSMiddleware,
@@ -92,9 +88,9 @@ def refresh_forecast(
 
 @app.get("/forecast")
 def get_forecast(
-    period: int = Query(3, description="Months (3/6/12) or days (e.g., 365)"),
     company_id: Optional[str] = Query(default=None),
-    prediction_date: Optional[str] = Query(default=None, description="ISO date (YYYY-MM-DD)"),
+    prediction_date: str = Query(..., description="ISO date (YYYY-MM-DD)"),
+    horizon_days: int = Query(..., ge=1, le=360, description="Number of days (max 360)"),
     x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
 ) -> dict:
     require_api_key(x_api_key)
@@ -106,10 +102,37 @@ def get_forecast(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="db_url missing")
 
     model_name = "forecast_rf"
-    days = period_to_days(period)
+    try:
+        requested_prediction_date = date.fromisoformat(prediction_date)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="prediction_date must be ISO format YYYY-MM-DD",
+        ) from exc
 
     with psycopg2.connect(db_url) as connection:
         with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT MAX(report_date)
+                FROM daily_reports
+                WHERE company_id = %s
+                """,
+                (company_id,),
+            )
+            last_data_row = cursor.fetchone()
+            last_data_date = last_data_row[0] if last_data_row else None
+            if not last_data_date:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="No historical data found for company",
+                )
+            if requested_prediction_date < last_data_date:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"prediction_date must be >= last_data_date: {last_data_date.isoformat()}",
+                )
+
             cursor.execute(
                 """
                 SELECT id, trained_at
@@ -128,18 +151,7 @@ def get_forecast(
                 )
             model_id, trained_at = model_row
 
-            requested_prediction_date = None
-            if prediction_date:
-                try:
-                    from datetime import date as _date
-
-                    requested_prediction_date = _date.fromisoformat(prediction_date)
-                except ValueError as exc:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="prediction_date must be ISO format YYYY-MM-DD",
-                    ) from exc
-
+            def fetch_daily_rows() -> list[tuple]:
                 cursor.execute(
                     """
                     SELECT prediction_date, predicted_revenue
@@ -148,64 +160,31 @@ def get_forecast(
                     ORDER BY prediction_date ASC
                     LIMIT %s
                     """,
-                    (str(model_id), requested_prediction_date, days),
+                    (str(model_id), requested_prediction_date, horizon_days),
                 )
-                daily_rows = cursor.fetchall()
-            else:
-                cursor.execute(
-                    """
-                    SELECT prediction_date, predicted_revenue
-                    FROM ml_predictions
-                    WHERE model_id = %s AND horizon_days = 1
-                    ORDER BY prediction_date DESC
-                    LIMIT %s
-                    """,
-                    (str(model_id), days),
-                )
-                daily_rows = cursor.fetchall()
+                return cursor.fetchall()
 
-            if not daily_rows:
+            daily_rows = fetch_daily_rows()
+            if len(daily_rows) < horizon_days:
+                run_pipeline(company_id)
+                daily_rows = fetch_daily_rows()
+
+            if len(daily_rows) < horizon_days:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail="No daily predictions found for model",
+                    detail="Not enough predictions for requested date range",
                 )
 
-            if prediction_date:
-                if len(daily_rows) < days:
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail="Not enough predictions for requested date range",
-                    )
-            else:
-                daily_rows.reverse()
             daily_predictions = [
                 {"date": row[0].isoformat(), "value": float(row[1])} for row in daily_rows
             ]
 
-            cursor.execute(
-                """
-                SELECT predicted_revenue
-                FROM ml_predictions
-                WHERE model_id = %s AND horizon_days = %s
-                ORDER BY created_at DESC
-                LIMIT 1
-                """,
-                (str(model_id), days),
-            )
-            total_row = cursor.fetchone()
-            if total_row:
-                total = float(total_row[0])
-            else:
-                total = float(sum(item["value"] for item in daily_predictions))
-
-    first_prediction_date = daily_predictions[0]["date"] if daily_predictions else None
+            total = float(sum(item["value"] for item in daily_predictions))
 
     return {
         "model_id": str(model_id),
         "trained_at": trained_at.isoformat() if trained_at else None,
-        "period_days": days,
+        "period_days": horizon_days,
         "total": total,
-        "requested_prediction_date": prediction_date,
-        "first_prediction_date": first_prediction_date,
         "daily_predictions": daily_predictions,
     }
