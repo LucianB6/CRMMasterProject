@@ -368,46 +368,38 @@ export default function ExpectedSalesPage() {
       return;
     }
 
-    const activeModel =
-      models.find((model) => model.id === activeModelId) ??
-      getLatestActiveModel(models);
-
     setIsGenerating(true);
     try {
       let trainedModel: MlModelResponse;
-      if (!activeModel) {
-        if (!trainFrom || !trainTo) {
-          setErrorMessage('Selectează intervalul de training.');
-          return;
+      if (!trainFrom || !trainTo) {
+        setErrorMessage('Selectează intervalul de training.');
+        return;
+      }
+      if (new Date(trainFrom) > new Date(trainTo)) {
+        setErrorMessage('Data de început trebuie să fie înainte de data de final.');
+        return;
+      }
+      try {
+        trainedModel = await apiFetch<MlModelResponse>('/ml/models/train', {
+          method: 'POST',
+          headers: {
+            ...buildHeaders(true),
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name: MODEL_NAME,
+            version: MODEL_VERSION,
+            horizon_days: HORIZON_DAYS,
+            train_from: trainFrom,
+            train_to: trainTo,
+          }),
+        });
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 409) {
+          trainedModel = await fetchActiveModelByName();
+        } else {
+          throw error;
         }
-        if (new Date(trainFrom) > new Date(trainTo)) {
-          setErrorMessage('Data de început trebuie să fie înainte de data de final.');
-          return;
-        }
-        try {
-          trainedModel = await apiFetch<MlModelResponse>('/ml/models/train', {
-            method: 'POST',
-            headers: {
-              ...buildHeaders(true),
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              name: MODEL_NAME,
-              version: MODEL_VERSION,
-              horizon_days: HORIZON_DAYS,
-              train_from: trainFrom,
-              train_to: trainTo,
-            }),
-          });
-        } catch (error) {
-          if (error instanceof ApiError && error.status === 409) {
-            trainedModel = await fetchActiveModelByName();
-          } else {
-            throw error;
-          }
-        }
-      } else {
-        trainedModel = activeModel;
       }
 
       setModels((prev) => {
@@ -534,10 +526,6 @@ export default function ExpectedSalesPage() {
     }
   };
 
-  const hasActiveModel = useMemo(
-    () => Boolean(getLatestActiveModel(models)),
-    [getLatestActiveModel, models]
-  );
 
   return (
     <div className="space-y-6">
@@ -557,28 +545,24 @@ export default function ExpectedSalesPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-5 md:items-end">
-          {!hasActiveModel && (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="train-from">Training: de la</Label>
-                <Input
-                  id="train-from"
-                  type="date"
-                  value={trainFrom}
-                  onChange={(event) => setTrainFrom(event.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="train-to">Training: până la</Label>
-                <Input
-                  id="train-to"
-                  type="date"
-                  value={trainTo}
-                  onChange={(event) => setTrainTo(event.target.value)}
-                />
-              </div>
-            </>
-          )}
+          <div className="space-y-2">
+            <Label htmlFor="train-from">Training: de la</Label>
+            <Input
+              id="train-from"
+              type="date"
+              value={trainFrom}
+              onChange={(event) => setTrainFrom(event.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="train-to">Training: până la</Label>
+            <Input
+              id="train-to"
+              type="date"
+              value={trainTo}
+              onChange={(event) => setTrainTo(event.target.value)}
+            />
+          </div>
           <div className="space-y-2">
             <Label htmlFor="forecast-from">Prognoză: de la</Label>
             <Input
@@ -606,7 +590,7 @@ export default function ExpectedSalesPage() {
             ) : (
               <>
                 <BrainCircuit className="mr-2 h-4 w-4" />
-                {hasActiveModel ? 'Refresh Prognoză' : 'Generează Prognoză'}
+                Generează Prognoză
               </>
             )}
           </Button>

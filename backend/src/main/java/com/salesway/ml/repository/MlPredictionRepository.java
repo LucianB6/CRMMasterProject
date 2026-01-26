@@ -30,4 +30,12 @@ public interface MlPredictionRepository extends JpaRepository<MlPrediction, UUID
             Integer horizonDays
     );
 
+    List<MlPrediction> findByCompanyIdAndModelIdAndPredictionDateBetweenAndHorizonDaysOrderByPredictionDateAsc(
+            UUID companyId,
+            UUID modelId,
+            LocalDate fromDate,
+            LocalDate toDate,
+            Integer horizonDays
+    );
+
 }

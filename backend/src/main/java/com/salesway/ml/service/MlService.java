@@ -119,20 +119,33 @@ public class MlService {
         if (request.getHorizonDays() != null && request.getHorizonDays() > 360) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "horizon_days must be <= 360");
         }
+        if (request.getPredictionDate() == null || request.getHorizonDays() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "prediction_date and horizon_days are required");
+        }
 
         MlModel model = mlModelRepository
                 .findByIdAndCompanyId(request.getModelId(), membership.getCompany().getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Model not found"));
+
+        LocalDate fromDate = request.getPredictionDate();
+        LocalDate toDate = fromDate.plusDays(request.getHorizonDays() - 1L);
+        List<MlPrediction> existing = mlPredictionRepository
+                .findByCompanyIdAndModelIdAndPredictionDateBetweenAndHorizonDaysOrderByPredictionDateAsc(
+                        membership.getCompany().getId(),
+                        model.getId(),
+                        fromDate,
+                        toDate,
+                        1
+                );
+        if (existing.size() == request.getHorizonDays()) {
+            return existing.stream().map(this::toPredictionResponse).toList();
+        }
 
         mlFastApiClient.refreshForecast(membership.getCompany().getId());
         ForecastResponse forecastResponse = mlFastApiClient.getForecast(
                 request.getHorizonDays(),
                 membership.getCompany().getId()
         );
-        LocalDate fromDate = request.getPredictionDate();
-        LocalDate toDate = fromDate == null || request.getHorizonDays() == null
-                ? null
-                : fromDate.plusDays(request.getHorizonDays() - 1L);
         List<ForecastResponse.DailyPrediction> allItems = Optional.ofNullable(forecastResponse.getDailyPredictions())
                 .orElseGet(List::of);
         allItems = allItems.stream()
@@ -149,27 +162,27 @@ public class MlService {
                 .map(ForecastResponse.DailyPrediction::getDate)
                 .max(LocalDate::compareTo)
                 .orElse(null);
-        if (fromDate != null && toDate != null) {
-            if (availableFrom != null && availableTo != null
-                    && (fromDate.isBefore(availableFrom) || toDate.isAfter(availableTo))) {
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST,
-                        "Prediction date must be within available range: " + availableFrom + " to " + availableTo
-                );
-            }
+        if (availableFrom != null && availableTo != null
+                && (fromDate.isBefore(availableFrom) || toDate.isAfter(availableTo))) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Prediction date is outside available data range: " + availableFrom + " to " + availableTo
+            );
         }
 
         List<ForecastResponse.DailyPrediction> items = allItems;
-        if (fromDate != null && toDate != null) {
-            items = items.stream()
-                    .filter(item -> !item.getDate().isBefore(fromDate) && !item.getDate().isAfter(toDate))
-                    .toList();
-        }
+        items = items.stream()
+                .filter(item -> !item.getDate().isBefore(fromDate) && !item.getDate().isAfter(toDate))
+                .toList();
         if (items.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Predictions not found for requested range");
         }
         if (request.getHorizonDays() != null && items.size() < request.getHorizonDays()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Not enough predictions for requested range");
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Not enough predictions for requested range: expected "
+                            + request.getHorizonDays() + ", got " + items.size()
+            );
         }
 
         List<MlPrediction> predictions = new ArrayList<>();
