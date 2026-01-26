@@ -31,6 +31,7 @@ def run_pipeline(company_id: Optional[str]) -> None:
     database_url = get_database_url(settings)
     if database_url and not env.get("PREDICTION_DB_URL"):
         env["PREDICTION_DB_URL"] = database_url
+    env.setdefault("PREDICTION_SAVE_DB", "true")
     if company_id:
         env["PREDICTION_COMPANY_ID"] = company_id
 

@@ -108,14 +108,35 @@ def parse_args() -> ForecastConfig:
     args.api_url = args.api_url or config.get("api_url")
     args.api_token = args.api_token or config.get("api_token")
     args.company_id = args.company_id or config.get("company_id")
-    args.model_name = args.model_name or config.get("model_name", "forecast_rf")
-    args.model_version = args.model_version or config.get("model_version", default_version())
-    args.model_status = args.model_status or config.get("model_status", "ACTIVE")
-    args.artifact_uri = args.artifact_uri or config.get("artifact_uri")
-    args.save_db = args.save_db or bool(config.get("save_db", False))
-    args.deprecate_previous = args.deprecate_previous or bool(
-        config.get("deprecate_previous", True)
+    args.model_name = args.model_name or os.getenv("PREDICTION_MODEL_NAME") or config.get(
+        "model_name", "forecast_rf"
     )
+    args.model_version = (
+        args.model_version
+        or os.getenv("PREDICTION_MODEL_VERSION")
+        or config.get("model_version", default_version())
+    )
+    args.model_status = (
+        args.model_status
+        or os.getenv("PREDICTION_MODEL_STATUS")
+        or config.get("model_status", "ACTIVE")
+    )
+    args.artifact_uri = args.artifact_uri or os.getenv("PREDICTION_ARTIFACT_URI") or config.get(
+        "artifact_uri"
+    )
+    save_db_env = os.getenv("PREDICTION_SAVE_DB")
+    if save_db_env is not None:
+        args.save_db = save_db_env.strip().lower() in {"1", "true", "yes"}
+    else:
+        args.save_db = args.save_db or bool(config.get("save_db", False))
+
+    deprecate_env = os.getenv("PREDICTION_DEPRECATE_PREVIOUS")
+    if deprecate_env is not None:
+        args.deprecate_previous = deprecate_env.strip().lower() in {"1", "true", "yes"}
+    else:
+        args.deprecate_previous = args.deprecate_previous or bool(
+            config.get("deprecate_previous", True)
+        )
 
     horizons = tuple(int(value) for value in args.horizons.split(",") if value.strip())
 
