@@ -148,10 +148,11 @@ def get_forecast(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="No historical data found for company",
                 )
-            if requested_prediction_date < last_data_date:
+            last_available_date = last_data_date + timedelta(days=1)
+            if requested_prediction_date < last_available_date:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"prediction_date must be >= last_available_date: {last_data_date.isoformat()}",
+                    detail=f"prediction_date must be >= last_available_date: {last_available_date.isoformat()}",
                 )
 
             cursor.execute(
