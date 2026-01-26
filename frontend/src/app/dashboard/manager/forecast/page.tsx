@@ -77,12 +77,25 @@ const formatCurrency = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
-const formatDisplayDate = (value: string) =>
-  new Date(value).toLocaleDateString('ro-RO', {
+const formatDisplayDate = (value: string) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (match) {
+    const year = Number(match[1]);
+    const month = Number(match[2]) - 1;
+    const day = Number(match[3]);
+    return new Date(Date.UTC(year, month, day)).toLocaleDateString('ro-RO', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'UTC',
+    });
+  }
+  return new Date(value).toLocaleDateString('ro-RO', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
   });
+};
 
 const addDays = (dateValue: string, days: number) => {
   const date = new Date(dateValue);
@@ -434,18 +447,18 @@ export default function ExpectedSalesPage() {
           const daily = data.filter(
             (item) => item.horizon_days === DAILY_HORIZON_DAYS
           );
-          setAggregatePrediction(aggregate ?? null);
-          if (aggregate) {
-            const from = aggregate.prediction_date;
-            const to = addDays(from, HORIZON_DAYS - 1);
-            setFilterFrom(from);
-            setFilterTo(to);
-          }
-          setDailyPredictions(
-            daily.sort((a, b) =>
-              a.prediction_date.localeCompare(b.prediction_date)
-            )
+          const sortedDaily = daily.sort((a, b) =>
+            a.prediction_date.localeCompare(b.prediction_date)
           );
+          setAggregatePrediction(aggregate ?? null);
+          setDailyPredictions(sortedDaily);
+          if (sortedDaily.length > 0) {
+            setFilterFrom(sortedDaily[0].prediction_date);
+            setFilterTo(sortedDaily[sortedDaily.length - 1].prediction_date);
+          } else if (aggregate) {
+            setFilterFrom(aggregate.prediction_date);
+            setFilterTo(aggregate.prediction_date);
+          }
           return;
         }
         throw error;
@@ -483,16 +496,18 @@ export default function ExpectedSalesPage() {
       const daily = data.filter(
         (item) => item.horizon_days === DAILY_HORIZON_DAYS
       );
-      setAggregatePrediction(aggregate ?? null);
-      if (aggregate) {
-        const from = aggregate.prediction_date;
-        const to = addDays(from, HORIZON_DAYS - 1);
-        setFilterFrom(from);
-        setFilterTo(to);
-      }
-      setDailyPredictions(
-        daily.sort((a, b) => a.prediction_date.localeCompare(b.prediction_date))
+      const sortedDaily = daily.sort((a, b) =>
+        a.prediction_date.localeCompare(b.prediction_date)
       );
+      setAggregatePrediction(aggregate ?? null);
+      setDailyPredictions(sortedDaily);
+      if (sortedDaily.length > 0) {
+        setFilterFrom(sortedDaily[0].prediction_date);
+        setFilterTo(sortedDaily[sortedDaily.length - 1].prediction_date);
+      } else if (aggregate) {
+        setFilterFrom(aggregate.prediction_date);
+        setFilterTo(aggregate.prediction_date);
+      }
     } catch (error) {
       setErrorMessage(normalizeErrorMessage(error));
     } finally {
@@ -568,10 +583,7 @@ export default function ExpectedSalesPage() {
     const activeModel = models.find((model) => model.id === activeModelId);
     const from = sorted[0]?.prediction_date ?? aggregatePrediction?.prediction_date;
     const to =
-      sorted[sorted.length - 1]?.prediction_date ??
-      (aggregatePrediction
-        ? addDays(aggregatePrediction.prediction_date, HORIZON_DAYS - 1)
-        : undefined);
+      sorted[sorted.length - 1]?.prediction_date ?? aggregatePrediction?.prediction_date;
 
     return {
       prediction:
