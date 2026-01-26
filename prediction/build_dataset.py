@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 from data_sources import ApiConfig, DbConfig, fetch_from_api, fetch_from_db, write_csv
+from config import get_database_url, settings
 
 
 def load_config(path: str) -> dict:
@@ -26,7 +27,7 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
 
     config = load_config(args.config)
-    env_db_url = os.getenv("PREDICTION_DB_URL")
+    env_db_url = os.getenv("PREDICTION_DB_URL") or get_database_url(settings)
     env_api_url = os.getenv("PREDICTION_API_URL")
     env_api_token = os.getenv("PREDICTION_API_TOKEN")
 

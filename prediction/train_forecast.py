@@ -15,6 +15,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 from data_sources import ApiConfig, DbConfig, fetch_from_api, fetch_from_db, write_csv
+from config import get_database_url, settings
 
 
 def load_config(path: str) -> dict:
@@ -104,7 +105,7 @@ def parse_args() -> ForecastConfig:
         args.rolling_window = int(config["rolling_window"])
     if args.horizons == "3,6,12" and config.get("horizons"):
         args.horizons = config["horizons"]
-    args.db_url = args.db_url or config.get("db_url")
+    args.db_url = args.db_url or os.getenv("PREDICTION_DB_URL") or get_database_url(settings) or config.get("db_url")
     args.api_url = args.api_url or config.get("api_url")
     args.api_token = args.api_token or config.get("api_token")
     args.company_id = args.company_id or config.get("company_id")
