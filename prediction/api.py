@@ -94,6 +94,7 @@ def refresh_forecast(
 def get_forecast(
     period: int = Query(3, description="Months (3/6/12) or days (e.g., 365)"),
     company_id: Optional[str] = Query(default=None),
+    prediction_date: Optional[str] = Query(default=None, description="ISO date (YYYY-MM-DD)"),
     x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
 ) -> dict:
     require_api_key(x_api_key)
@@ -127,17 +128,41 @@ def get_forecast(
                 )
             model_id, trained_at = model_row
 
-            cursor.execute(
-                """
-                SELECT prediction_date, predicted_revenue
-                FROM ml_predictions
-                WHERE model_id = %s AND horizon_days = 1
-                ORDER BY prediction_date DESC
-                LIMIT %s
-                """,
-                (str(model_id), days),
-            )
-            daily_rows = cursor.fetchall()
+            requested_prediction_date = None
+            if prediction_date:
+                try:
+                    from datetime import date as _date
+
+                    requested_prediction_date = _date.fromisoformat(prediction_date)
+                except ValueError as exc:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="prediction_date must be ISO format YYYY-MM-DD",
+                    ) from exc
+
+                cursor.execute(
+                    """
+                    SELECT prediction_date, predicted_revenue
+                    FROM ml_predictions
+                    WHERE model_id = %s AND horizon_days = 1 AND prediction_date >= %s
+                    ORDER BY prediction_date ASC
+                    LIMIT %s
+                    """,
+                    (str(model_id), requested_prediction_date, days),
+                )
+                daily_rows = cursor.fetchall()
+            else:
+                cursor.execute(
+                    """
+                    SELECT prediction_date, predicted_revenue
+                    FROM ml_predictions
+                    WHERE model_id = %s AND horizon_days = 1
+                    ORDER BY prediction_date DESC
+                    LIMIT %s
+                    """,
+                    (str(model_id), days),
+                )
+                daily_rows = cursor.fetchall()
 
             if not daily_rows:
                 raise HTTPException(
@@ -145,7 +170,14 @@ def get_forecast(
                     detail="No daily predictions found for model",
                 )
 
-            daily_rows.reverse()
+            if prediction_date:
+                if len(daily_rows) < days:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="Not enough predictions for requested date range",
+                    )
+            else:
+                daily_rows.reverse()
             daily_predictions = [
                 {"date": row[0].isoformat(), "value": float(row[1])} for row in daily_rows
             ]
@@ -166,10 +198,14 @@ def get_forecast(
             else:
                 total = float(sum(item["value"] for item in daily_predictions))
 
+    first_prediction_date = daily_predictions[0]["date"] if daily_predictions else None
+
     return {
         "model_id": str(model_id),
         "trained_at": trained_at.isoformat() if trained_at else None,
         "period_days": days,
         "total": total,
+        "requested_prediction_date": prediction_date,
+        "first_prediction_date": first_prediction_date,
         "daily_predictions": daily_predictions,
     }
