@@ -1,0 +1,10 @@
+{
+  "manager": {
+    "email": "manager@example.com",
+    "password": "Password123!"
+  },
+  "agent": {
+    "email": "demo1@example.com",
+    "password": "Password123!"
+  }
+}
