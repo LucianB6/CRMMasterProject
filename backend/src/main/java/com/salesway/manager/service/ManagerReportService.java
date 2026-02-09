@@ -254,7 +254,8 @@ public class ManagerReportService {
                 inputs.getUpsellConversationTaken(),
                 inputs.getUpsells(),
                 inputs.getContractValue(),
-                inputs.getNewCashCollected()
+                inputs.getNewCashCollected(),
+                inputs.getObservations()
         );
 
         return new ManagerDailyReportResponse(
