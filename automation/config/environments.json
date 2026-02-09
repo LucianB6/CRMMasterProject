@@ -1,0 +1,5 @@
+{
+  "production": {
+    "baseUrl": "https://salesway-crm.web.app/"
+  }
+}
