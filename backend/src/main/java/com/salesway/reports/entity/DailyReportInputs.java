@@ -103,6 +103,9 @@ public class DailyReportInputs extends AuditedEntity {
     @Column(name = "new_cash_collected", nullable = false, precision = 19, scale = 2)
     private BigDecimal newCashCollected = BigDecimal.ZERO;
 
+    @Column(name = "observations", columnDefinition = "text")
+    private String observations;
+
     public UUID getId() {
         return id;
     }
@@ -237,5 +240,13 @@ public class DailyReportInputs extends AuditedEntity {
 
     public void setNewCashCollected(BigDecimal newCashCollected) {
         this.newCashCollected = newCashCollected;
+    }
+
+    public String getObservations() {
+        return observations;
+    }
+
+    public void setObservations(String observations) {
+        this.observations = observations;
     }
 }

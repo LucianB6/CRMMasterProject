@@ -83,6 +83,9 @@ public class DailyReportInputsRequest {
     @JsonProperty("new_cash_collected")
     private BigDecimal newCashCollected;
 
+    @JsonProperty("observations")
+    private String observations;
+
     public Integer getOutboundDials() {
         return outboundDials;
     }
@@ -201,5 +204,13 @@ public class DailyReportInputsRequest {
 
     public void setNewCashCollected(BigDecimal newCashCollected) {
         this.newCashCollected = newCashCollected;
+    }
+
+    public String getObservations() {
+        return observations;
+    }
+
+    public void setObservations(String observations) {
+        this.observations = observations;
     }
 }

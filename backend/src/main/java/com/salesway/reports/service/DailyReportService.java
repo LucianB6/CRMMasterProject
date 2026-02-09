@@ -313,6 +313,7 @@ public class DailyReportService {
         inputs.setUpsells(request.getUpsells());
         inputs.setContractValue(request.getContractValue());
         inputs.setNewCashCollected(request.getNewCashCollected());
+        inputs.setObservations(request.getObservations());
     }
 
     private void updateMetrics(DailyReport report, DailyReportInputs inputs) {
@@ -444,7 +445,8 @@ public class DailyReportService {
                 inputs.getUpsellConversationTaken(),
                 inputs.getUpsells(),
                 inputs.getContractValue(),
-                inputs.getNewCashCollected()
+                inputs.getNewCashCollected(),
+                inputs.getObservations()
         );
 
         return new DailyReportResponse(

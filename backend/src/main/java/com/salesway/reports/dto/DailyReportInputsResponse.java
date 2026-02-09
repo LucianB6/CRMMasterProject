@@ -50,6 +50,9 @@ public class DailyReportInputsResponse {
     @JsonProperty("new_cash_collected")
     private final BigDecimal newCashCollected;
 
+    @JsonProperty("observations")
+    private final String observations;
+
     public DailyReportInputsResponse(
             Integer outboundDials,
             Integer pickups,
@@ -65,7 +68,8 @@ public class DailyReportInputsResponse {
             Integer upsellConversationTaken,
             Integer upsells,
             BigDecimal contractValue,
-            BigDecimal newCashCollected
+            BigDecimal newCashCollected,
+            String observations
     ) {
         this.outboundDials = outboundDials;
         this.pickups = pickups;
@@ -82,6 +86,7 @@ public class DailyReportInputsResponse {
         this.upsells = upsells;
         this.contractValue = contractValue;
         this.newCashCollected = newCashCollected;
+        this.observations = observations;
     }
 
     public Integer getOutboundDials() {
@@ -142,5 +147,9 @@ public class DailyReportInputsResponse {
 
     public BigDecimal getNewCashCollected() {
         return newCashCollected;
+    }
+
+    public String getObservations() {
+        return observations;
     }
 }
