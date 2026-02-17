@@ -15,7 +15,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
@@ -42,10 +41,7 @@ class LeadFormServiceTest {
     @Mock
     private CompanyRepository companyRepository;
 
-    @InjectMocks
     private LeadFormService leadFormService;
-
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
     private LeadForm form;
 
@@ -56,7 +52,7 @@ class LeadFormServiceTest {
                 questionRepository,
                 managerAccessService,
                 companyRepository,
-                objectMapper
+                new ObjectMapper()
         );
 
         Company company = new Company();
@@ -71,83 +67,77 @@ class LeadFormServiceTest {
 
         when(managerAccessService.getManagerMembership()).thenReturn(membership);
         when(leadFormRepository.findByCompanyId(company.getId())).thenReturn(Optional.of(form));
+        when(questionRepository.save(any(LeadFormQuestion.class))).thenAnswer(invocation -> {
+            LeadFormQuestion question = invocation.getArgument(0);
+            if (question.getId() == null) {
+                question.setId(UUID.randomUUID());
+            }
+            return question;
+        });
     }
 
     @Test
-    void addQuestion_withNullOptionsJson_persistsNullJsonb() {
-        when(questionRepository.save(any(LeadFormQuestion.class))).thenAnswer(invocation -> {
-            LeadFormQuestion question = invocation.getArgument(0);
-            question.setId(UUID.randomUUID());
-            return question;
-        });
-
-        LeadQuestionRequest request = baseRequest();
+    void createQuestion_textAlias_mapsToShortTextAndIgnoresOptions() {
+        LeadQuestionRequest request = baseRequest("TEXT");
         request.setOptionsJson(null);
 
         var response = leadFormService.addQuestion(request);
 
         ArgumentCaptor<LeadFormQuestion> captor = ArgumentCaptor.forClass(LeadFormQuestion.class);
         verify(questionRepository).save(captor.capture());
+
+        assertThat(captor.getValue().getQuestionType()).isEqualTo("short_text");
         assertThat(captor.getValue().getOptionsJson()).isNull();
+        assertThat(response.questionType()).isEqualTo("short_text");
         assertThat(response.optionsJson()).isNull();
     }
 
     @Test
-    void addQuestion_withValidOptionsJson_parsesAndPersistsJsonb() {
-        when(questionRepository.save(any(LeadFormQuestion.class))).thenAnswer(invocation -> {
-            LeadFormQuestion question = invocation.getArgument(0);
-            question.setId(UUID.randomUUID());
-            return question;
-        });
-
-        LeadQuestionRequest request = baseRequest();
-        request.setOptionsJson("[\"B2B\",\"B2C\"]");
+    void createQuestion_selectWithValidOptions_persistsJsonArray() {
+        LeadQuestionRequest request = baseRequest("SELECT");
+        request.setOptionsJson("[\"Optiunea 1\",\"Optiunea 2\"]");
 
         var response = leadFormService.addQuestion(request);
 
         ArgumentCaptor<LeadFormQuestion> captor = ArgumentCaptor.forClass(LeadFormQuestion.class);
         verify(questionRepository).save(captor.capture());
-        JsonNode persisted = captor.getValue().getOptionsJson();
+        JsonNode options = captor.getValue().getOptionsJson();
 
-        assertThat(persisted).isNotNull();
-        assertThat(persisted.isArray()).isTrue();
-        assertThat(response.optionsJson()).isEqualTo("[\"B2B\",\"B2C\"]");
+        assertThat(captor.getValue().getQuestionType()).isEqualTo("single_select");
+        assertThat(options).isNotNull();
+        assertThat(options.isArray()).isTrue();
+        assertThat(response.optionsJson()).isEqualTo("[\"Optiunea 1\",\"Optiunea 2\"]");
     }
 
     @Test
-    void addQuestion_withInvalidOptionsJson_returnsBadRequest() {
-        LeadQuestionRequest request = baseRequest();
-        request.setOptionsJson("{invalid json}");
+    void createQuestion_invalidQuestionType_returnsBadRequest() {
+        LeadQuestionRequest request = baseRequest("TEXTX");
 
         assertThatThrownBy(() -> leadFormService.addQuestion(request))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> {
-                    ResponseStatusException responseException = (ResponseStatusException) ex;
-                    assertThat(responseException.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-                    assertThat(responseException.getReason()).contains("optionsJson invalid json");
+                    ResponseStatusException rse = (ResponseStatusException) ex;
+                    assertThat(rse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(rse.getReason()).contains("questionType invalid");
                 });
     }
 
     @Test
-    void updateQuestion_withValidOptionsJson_updatesJsonb() {
-        UUID questionId = UUID.randomUUID();
-        LeadFormQuestion existing = new LeadFormQuestion();
-        existing.setId(questionId);
-        existing.setLeadForm(form);
+    void createQuestion_invalidOptionsJson_returnsBadRequest() {
+        LeadQuestionRequest request = baseRequest("MULTI_SELECT");
+        request.setOptionsJson("{invalid}");
 
-        when(questionRepository.findByIdAndLeadFormId(questionId, form.getId())).thenReturn(Optional.of(existing));
-        when(questionRepository.save(any(LeadFormQuestion.class))).thenAnswer(invocation -> invocation.getArgument(0));
-
-        LeadQuestionRequest request = baseRequest();
-        request.setOptionsJson("{\"choices\":[\"a\",\"b\"]}");
-
-        var response = leadFormService.updateQuestion(questionId, request);
-
-        assertThat(response.optionsJson()).isEqualTo("{\"choices\":[\"a\",\"b\"]}");
+        assertThatThrownBy(() -> leadFormService.addQuestion(request))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> {
+                    ResponseStatusException rse = (ResponseStatusException) ex;
+                    assertThat(rse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(rse.getReason()).contains("optionsJson invalid JSON");
+                });
     }
 
     @Test
-    void updateQuestion_withInvalidOptionsJson_returnsBadRequest() {
+    void updateQuestion_invalidOptionsJson_returnsBadRequest() {
         UUID questionId = UUID.randomUUID();
         LeadFormQuestion existing = new LeadFormQuestion();
         existing.setId(questionId);
@@ -155,22 +145,22 @@ class LeadFormServiceTest {
 
         when(questionRepository.findByIdAndLeadFormId(questionId, form.getId())).thenReturn(Optional.of(existing));
 
-        LeadQuestionRequest request = baseRequest();
+        LeadQuestionRequest request = baseRequest("SELECT");
         request.setOptionsJson("not-json");
 
         assertThatThrownBy(() -> leadFormService.updateQuestion(questionId, request))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> {
-                    ResponseStatusException responseException = (ResponseStatusException) ex;
-                    assertThat(responseException.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-                    assertThat(responseException.getReason()).contains("optionsJson invalid json");
+                    ResponseStatusException rse = (ResponseStatusException) ex;
+                    assertThat(rse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(rse.getReason()).contains("optionsJson invalid JSON");
                 });
     }
 
-    private LeadQuestionRequest baseRequest() {
+    private LeadQuestionRequest baseRequest(String type) {
         LeadQuestionRequest request = new LeadQuestionRequest();
-        request.setQuestionType("single_select");
-        request.setLabel("Tip business");
+        request.setQuestionType(type);
+        request.setLabel("Label");
         request.setRequired(true);
         request.setDisplayOrder(1);
         request.setPlaceholder(null);

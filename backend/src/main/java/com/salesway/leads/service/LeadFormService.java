@@ -21,13 +21,32 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
 public class LeadFormService {
+    private static final Map<String, String> QUESTION_TYPE_MAPPING = new LinkedHashMap<>();
+    private static final Set<String> SELECT_TYPES = Set.of("single_select", "multi_select");
+
+    static {
+        QUESTION_TYPE_MAPPING.put("TEXT", "short_text");
+        QUESTION_TYPE_MAPPING.put("SHORT_TEXT", "short_text");
+        QUESTION_TYPE_MAPPING.put("LONG_TEXT", "long_text");
+        QUESTION_TYPE_MAPPING.put("SELECT", "single_select");
+        QUESTION_TYPE_MAPPING.put("SINGLE_SELECT", "single_select");
+        QUESTION_TYPE_MAPPING.put("MULTI_SELECT", "multi_select");
+        QUESTION_TYPE_MAPPING.put("NUMBER", "number");
+        QUESTION_TYPE_MAPPING.put("DATE", "date");
+        QUESTION_TYPE_MAPPING.put("BOOLEAN", "boolean");
+        QUESTION_TYPE_MAPPING.put("SHORT-TEXT", "short_text");
+        QUESTION_TYPE_MAPPING.put("LONG-TEXT", "long_text");
+    }
+
     private final LeadFormRepository leadFormRepository;
     private final LeadFormQuestionRepository questionRepository;
     private final ManagerAccessService managerAccessService;
@@ -131,25 +150,62 @@ public class LeadFormService {
     }
 
     private void applyQuestionRequest(LeadFormQuestion question, LeadQuestionRequest request) {
-        question.setQuestionType(request.getQuestionType());
+        String normalizedType = normalizeQuestionType(request.getQuestionType());
+        question.setQuestionType(normalizedType);
         question.setLabel(request.getLabel());
         question.setPlaceholder(request.getPlaceholder());
         question.setHelpText(request.getHelpText());
         question.setRequired(request.getRequired());
-        question.setOptionsJson(parseOptionsJson(request.getOptionsJson()));
+        question.setOptionsJson(parseAndValidateOptionsJson(request.getOptionsJson(), normalizedType));
         question.setDisplayOrder(request.getDisplayOrder());
     }
 
-    private JsonNode parseOptionsJson(String optionsJson) {
-        if (optionsJson == null || optionsJson.isBlank()) {
+    private String normalizeQuestionType(String rawType) {
+        String normalizedInput = rawType == null ? "" : rawType.trim().toUpperCase().replace('-', '_');
+        String mapped = QUESTION_TYPE_MAPPING.get(normalizedInput);
+        if (mapped != null) {
+            return mapped;
+        }
+
+        String snakeCaseInput = rawType == null ? "" : rawType.trim().toLowerCase();
+        if (QUESTION_TYPE_MAPPING.containsValue(snakeCaseInput)) {
+            return snakeCaseInput;
+        }
+
+        String allowed = String.join(", ", QUESTION_TYPE_MAPPING.keySet());
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "questionType invalid; allowed: " + allowed);
+    }
+
+    private JsonNode parseAndValidateOptionsJson(String optionsJson, String normalizedType) {
+        if (!SELECT_TYPES.contains(normalizedType)) {
             return null;
         }
 
-        try {
-            return objectMapper.readTree(optionsJson);
-        } catch (JsonProcessingException exception) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "optionsJson invalid json", exception);
+        if (optionsJson == null || optionsJson.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "optionsJson invalid JSON: expected non-empty JSON array of strings for " + normalizedType);
         }
+
+        final JsonNode parsed;
+        try {
+            parsed = objectMapper.readTree(optionsJson);
+        } catch (JsonProcessingException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "optionsJson invalid JSON", exception);
+        }
+
+        if (!parsed.isArray() || parsed.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "optionsJson invalid JSON: expected non-empty JSON array of strings for " + normalizedType);
+        }
+
+        for (JsonNode node : parsed) {
+            if (!node.isTextual() || node.asText().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "optionsJson invalid JSON: expected non-empty JSON array of strings for " + normalizedType);
+            }
+        }
+
+        return parsed;
     }
 
     private LeadQuestionResponse toQuestionResponse(LeadFormQuestion question) {
