@@ -1,5 +1,6 @@
 package com.salesway.leads.entity;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.salesway.common.auditing.AuditedEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -9,6 +10,8 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "lead_form_questions")
@@ -36,8 +39,9 @@ public class LeadFormQuestion extends AuditedEntity {
     @Column(name = "required", nullable = false)
     private Boolean required = false;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "options_json", columnDefinition = "jsonb")
-    private String optionsJson;
+    private JsonNode optionsJson;
 
     @NotNull
     @Column(name = "display_order", nullable = false)
@@ -95,11 +99,11 @@ public class LeadFormQuestion extends AuditedEntity {
         this.required = required;
     }
 
-    public String getOptionsJson() {
+    public JsonNode getOptionsJson() {
         return optionsJson;
     }
 
-    public void setOptionsJson(String optionsJson) {
+    public void setOptionsJson(JsonNode optionsJson) {
         this.optionsJson = optionsJson;
     }
 

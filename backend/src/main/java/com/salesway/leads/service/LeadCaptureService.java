@@ -61,7 +61,7 @@ public class LeadCaptureService {
         List<LeadQuestionResponse> questions = questionRepository.findByLeadFormIdAndIsActiveTrueOrderByDisplayOrderAsc(form.getId())
                 .stream().map(q -> new LeadQuestionResponse(
                         q.getId(), q.getQuestionType(), q.getLabel(), q.getPlaceholder(),
-                        q.getHelpText(), q.getRequired(), q.getOptionsJson(), q.getDisplayOrder(), q.getIsActive()
+                        q.getHelpText(), q.getRequired(), toJson(q.getOptionsJson()), q.getDisplayOrder(), q.getIsActive()
                 )).toList();
 
         return new LeadFormResponse(form.getId(), form.getTitle(), form.getPublicSlug(), form.getIsActive(), questions);
@@ -118,7 +118,7 @@ public class LeadCaptureService {
             answer.setQuestionLabelSnapshot(question.getLabel());
             answer.setQuestionTypeSnapshot(question.getQuestionType());
             answer.setRequiredSnapshot(question.getRequired());
-            answer.setOptionsSnapshot(question.getOptionsJson());
+            answer.setOptionsSnapshot(toJson(question.getOptionsJson()));
             answerRepository.save(answer);
         }
 
@@ -126,6 +126,10 @@ public class LeadCaptureService {
     }
 
     private String toJson(Object value) {
+        if (value == null) {
+            return null;
+        }
+
         try {
             return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException exception) {

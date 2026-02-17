@@ -1,5 +1,8 @@
 package com.salesway.leads.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.salesway.companies.entity.Company;
 import com.salesway.companies.repository.CompanyRepository;
 import com.salesway.leads.dto.LeadFormResponse;
@@ -29,17 +32,20 @@ public class LeadFormService {
     private final LeadFormQuestionRepository questionRepository;
     private final ManagerAccessService managerAccessService;
     private final CompanyRepository companyRepository;
+    private final ObjectMapper objectMapper;
 
     public LeadFormService(
             LeadFormRepository leadFormRepository,
             LeadFormQuestionRepository questionRepository,
             ManagerAccessService managerAccessService,
-            CompanyRepository companyRepository
+            CompanyRepository companyRepository,
+            ObjectMapper objectMapper
     ) {
         this.leadFormRepository = leadFormRepository;
         this.questionRepository = questionRepository;
         this.managerAccessService = managerAccessService;
         this.companyRepository = companyRepository;
+        this.objectMapper = objectMapper;
     }
 
     @Transactional(readOnly = true)
@@ -130,8 +136,20 @@ public class LeadFormService {
         question.setPlaceholder(request.getPlaceholder());
         question.setHelpText(request.getHelpText());
         question.setRequired(request.getRequired());
-        question.setOptionsJson(request.getOptionsJson());
+        question.setOptionsJson(parseOptionsJson(request.getOptionsJson()));
         question.setDisplayOrder(request.getDisplayOrder());
+    }
+
+    private JsonNode parseOptionsJson(String optionsJson) {
+        if (optionsJson == null || optionsJson.isBlank()) {
+            return null;
+        }
+
+        try {
+            return objectMapper.readTree(optionsJson);
+        } catch (JsonProcessingException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "optionsJson invalid json", exception);
+        }
     }
 
     private LeadQuestionResponse toQuestionResponse(LeadFormQuestion question) {
@@ -142,9 +160,21 @@ public class LeadFormService {
                 question.getPlaceholder(),
                 question.getHelpText(),
                 question.getRequired(),
-                question.getOptionsJson(),
+                toJsonString(question.getOptionsJson()),
                 question.getDisplayOrder(),
                 question.getIsActive()
         );
+    }
+
+    private String toJsonString(JsonNode value) {
+        if (value == null) {
+            return null;
+        }
+
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException exception) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to serialize optionsJson", exception);
+        }
     }
 }
