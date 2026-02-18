@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.salesway.companies.entity.Company;
 import com.salesway.leads.dto.PublicLeadSubmitRequest;
 import com.salesway.leads.entity.Lead;
+import com.salesway.leads.entity.LeadAnswer;
 import com.salesway.leads.entity.LeadForm;
 import com.salesway.leads.entity.LeadFormQuestion;
 import com.salesway.leads.repository.LeadAnswerRepository;
@@ -15,6 +16,7 @@ import com.salesway.leads.repository.LeadStandardFieldsRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
@@ -28,6 +30,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -115,6 +119,11 @@ class LeadCaptureServiceTest {
 
         assertThat(response.leadId()).isNotNull();
         assertThat(response.status()).isEqualTo("new");
+
+        ArgumentCaptor<LeadAnswer> answerCaptor = ArgumentCaptor.forClass(LeadAnswer.class);
+        verify(answerRepository, atLeastOnce()).save(answerCaptor.capture());
+        assertThat(answerCaptor.getValue().getAnswerValue().isTextual()).isTrue();
+
     }
 
     @Test

@@ -23,6 +23,20 @@ class ApiExceptionHandlerTest {
         assertThat(response.getBody().get("message")).contains("questionType invalid");
     }
 
+
+    @Test
+    void mapsAnswerValueJsonbTypeMismatchToBadRequest() {
+        DataIntegrityViolationException ex = new DataIntegrityViolationException(
+                "ERROR: SQLState: 42804, column answer_value is of type jsonb but expression is of type character varying"
+        );
+
+        var response = handler.handleDataIntegrityViolation(ex);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().get("message")).contains("answers[].value invalid JSON type");
+    }
+
     @Test
     void keepsOtherIntegrityViolationsAsServerError() {
         DataIntegrityViolationException ex = new DataIntegrityViolationException("some other integrity issue");

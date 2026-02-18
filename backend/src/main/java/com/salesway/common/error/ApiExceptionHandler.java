@@ -23,6 +23,16 @@ public class ApiExceptionHandler {
             ));
         }
 
+
+        if (message != null && message.contains("SQLState: 42804")
+                && message.contains("answer_value")
+                && message.contains("jsonb")
+                && message.contains("character varying")) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "answers[].value invalid JSON type for jsonb persistence"
+            ));
+        }
+
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
                 "message", "Data integrity violation"
         ));

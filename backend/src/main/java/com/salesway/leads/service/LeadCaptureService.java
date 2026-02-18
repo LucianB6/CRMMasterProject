@@ -130,11 +130,11 @@ public class LeadCaptureService {
             LeadAnswer answer = new LeadAnswer();
             answer.setLead(savedLead);
             answer.setQuestion(question);
-            answer.setAnswerValue(toJson(answerItem.getValue()));
+            answer.setAnswerValue(answerItem.getValue());
             answer.setQuestionLabelSnapshot(question.getLabel());
             answer.setQuestionTypeSnapshot(question.getQuestionType());
             answer.setRequiredSnapshot(question.getRequired());
-            answer.setOptionsSnapshot(toJson(question.getOptionsJson()));
+            answer.setOptionsSnapshot(question.getOptionsJson());
             answerRepository.save(answer);
         }
 

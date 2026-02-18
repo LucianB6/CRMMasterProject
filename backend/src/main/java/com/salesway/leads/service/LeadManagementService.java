@@ -1,5 +1,8 @@
 package com.salesway.leads.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.salesway.leads.dto.LeadAnswerResponse;
 import com.salesway.leads.dto.LeadDetailResponse;
 import com.salesway.leads.dto.LeadListItemResponse;
@@ -27,17 +30,20 @@ public class LeadManagementService {
     private final LeadStandardFieldsRepository standardFieldsRepository;
     private final LeadAnswerRepository leadAnswerRepository;
     private final ManagerAccessService managerAccessService;
+    private final ObjectMapper objectMapper;
 
     public LeadManagementService(
             LeadRepository leadRepository,
             LeadStandardFieldsRepository standardFieldsRepository,
             LeadAnswerRepository leadAnswerRepository,
-            ManagerAccessService managerAccessService
+            ManagerAccessService managerAccessService,
+            ObjectMapper objectMapper
     ) {
         this.leadRepository = leadRepository;
         this.standardFieldsRepository = standardFieldsRepository;
         this.leadAnswerRepository = leadAnswerRepository;
         this.managerAccessService = managerAccessService;
+        this.objectMapper = objectMapper;
     }
 
     @Transactional(readOnly = true)
@@ -92,8 +98,20 @@ public class LeadManagementService {
                 answer.getQuestionLabelSnapshot(),
                 answer.getQuestionTypeSnapshot(),
                 answer.getRequiredSnapshot(),
-                answer.getOptionsSnapshot(),
-                answer.getAnswerValue()
+                toJsonString(answer.getOptionsSnapshot()),
+                toJsonString(answer.getAnswerValue())
         );
+    }
+
+    private String toJsonString(JsonNode node) {
+        if (node == null) {
+            return null;
+        }
+
+        try {
+            return objectMapper.writeValueAsString(node);
+        } catch (JsonProcessingException exception) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to serialize lead answer", exception);
+        }
     }
 }
