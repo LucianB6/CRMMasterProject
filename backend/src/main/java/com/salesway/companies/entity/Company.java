@@ -21,6 +21,10 @@ public class Company extends AuditedEntity {
     @Column(name = "timezone", nullable = false)
     private String timezone;
 
+    @Size(max = 64)
+    @Column(name = "plan_code")
+    private String planCode;
+
     @NotNull
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
@@ -47,5 +51,13 @@ public class Company extends AuditedEntity {
 
     public void setIsActive(Boolean isActive) {
         this.isActive = isActive;
+    }
+
+    public String getPlanCode() {
+        return planCode;
+    }
+
+    public void setPlanCode(String planCode) {
+        this.planCode = planCode;
     }
 }

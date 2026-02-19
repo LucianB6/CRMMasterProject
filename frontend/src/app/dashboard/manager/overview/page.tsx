@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Bar,
   BarChart,
@@ -28,7 +29,7 @@ import {
 } from '../../../../components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../../components/ui/tabs';
 import { useToast } from '../../../../hooks/use-toast';
-import { apiFetch } from '../../../../lib/api';
+import { ApiError, apiFetch } from '../../../../lib/api';
 
 type ManagerAgent = {
   membership_id: string;
@@ -66,6 +67,7 @@ type ChartPoint = {
 };
 
 export default function ManagerOverviewPage() {
+  const router = useRouter();
   const { toast } = useToast();
   const [selectedAgentId, setSelectedAgentId] = useState('all');
   const [rangePreset, setRangePreset] = useState<'month' | 'year'>('month');
@@ -107,7 +109,7 @@ export default function ManagerOverviewPage() {
     if (Number.isNaN(date.getTime())) {
       return dateString;
     }
-    return new Intl.DateTimeFormat('ro-RO', {
+    return new Intl.DateTimeFormat('en-US', {
       weekday: 'short',
       day: '2-digit',
       month: 'short',
@@ -132,31 +134,43 @@ export default function ManagerOverviewPage() {
     const fetchAgents = async () => {
       try {
         const token = getAuthToken();
+        if (!token) {
+          router.replace('/login');
+          return;
+        }
         const data = await apiFetch<ManagerAgent[]>('/manager/overview/agents', {
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          headers: { Authorization: `Bearer ${token}` },
         });
         setAgents(data);
       } catch (error) {
+        if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+          router.replace('/login');
+          return;
+        }
         toast({
-          title: 'Eroare',
+          title: 'Error',
           description:
             error instanceof Error
               ? error.message
-              : 'Nu am putut încărca agenții.',
+              : 'Unable to load agents.',
           variant: 'destructive',
         });
       }
     };
 
     fetchAgents();
-  }, [getAuthToken, toast]);
+  }, [getAuthToken, router, toast]);
 
   useEffect(() => {
     const fetchOverview = async () => {
       try {
         setIsLoading(true);
         const token = getAuthToken();
-        const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+        if (!token) {
+          router.replace('/login');
+          return;
+        }
+        const headers = { Authorization: `Bearer ${token}` };
         const { from, to } = buildDateRange(rangePreset);
 
         const summaryPath =
@@ -199,12 +213,16 @@ export default function ManagerOverviewPage() {
           setAgentPerformance(mapped);
         }
       } catch (error) {
+        if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+          router.replace('/login');
+          return;
+        }
         toast({
-          title: 'Eroare',
+          title: 'Error',
           description:
             error instanceof Error
               ? error.message
-              : 'Nu am putut încărca datele de overview.',
+              : 'Unable to load overview data.',
           variant: 'destructive',
         });
       } finally {
@@ -213,32 +231,32 @@ export default function ManagerOverviewPage() {
     };
 
     fetchOverview();
-  }, [buildDateRange, formatDayLabel, getAuthToken, rangePreset, selectedAgentId, toast]);
+  }, [buildDateRange, formatDayLabel, getAuthToken, rangePreset, selectedAgentId, router, toast]);
 
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="font-headline text-2xl">Privire de ansamblu echipă</h1>
+        <h1 className="font-headline text-2xl">Team overview</h1>
         <p className="text-muted-foreground">
-          Analizează performanța generală sau filtrează după un agent specific.
+          Analyze overall performance or filter by a specific agent.
         </p>
       </header>
 
       <Card>
         <CardHeader>
-          <CardTitle>Filtru</CardTitle>
+          <CardTitle>Filter</CardTitle>
           <CardDescription>
-            Selectează &quot;Toți Agenții&quot; pentru a vedea date agregate sau
-            alege un agent pentru a-i vedea performanța individuală.
+            Select &quot;All agents&quot; to see aggregated data or choose an agent to
+            view individual performance.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
             <SelectTrigger className="w-full sm:w-[280px]">
-              <SelectValue placeholder="Selectează o opțiune" />
+              <SelectValue placeholder="Select an option" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Toți Agenții</SelectItem>
+              <SelectItem value="all">All agents</SelectItem>
               {agents.map((agent) => (
                 <SelectItem key={agent.membership_id} value={agent.membership_id}>
                   {agent.email}
@@ -248,8 +266,8 @@ export default function ManagerOverviewPage() {
           </Select>
           <Tabs value={rangePreset} onValueChange={(value) => setRangePreset(value as 'month' | 'year')}>
             <TabsList>
-              <TabsTrigger value="month">Ultima lună</TabsTrigger>
-              <TabsTrigger value="year">Ultimul an</TabsTrigger>
+              <TabsTrigger value="month">Last month</TabsTrigger>
+              <TabsTrigger value="year">Last year</TabsTrigger>
             </TabsList>
           </Tabs>
         </CardContent>
@@ -257,13 +275,13 @@ export default function ManagerOverviewPage() {
 
       <div className="space-y-2">
         <h2 className="text-lg font-semibold tracking-tight">
-          Quick Stats - {rangePreset === 'year' ? 'ultimul an' : 'ultima lună'}
+          Quick Stats - {rangePreset === 'year' ? 'last year' : 'last month'}
         </h2>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
-                Apeluri făcute
+                Calls made
               </CardTitle>
               <Phone className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
@@ -273,7 +291,7 @@ export default function ManagerOverviewPage() {
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Conversii</CardTitle>
+              <CardTitle className="text-sm font-medium">Conversions</CardTitle>
               <Target className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -285,7 +303,7 @@ export default function ManagerOverviewPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
-                Vânzări închise
+                Closed sales
               </CardTitle>
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
@@ -296,7 +314,7 @@ export default function ManagerOverviewPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
-                Valoare vânzări
+                Sales value
               </CardTitle>
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
@@ -307,23 +325,23 @@ export default function ManagerOverviewPage() {
         </div>
         {isLoading && (
           <p className="text-sm text-muted-foreground">
-            Se actualizează datele...
+            Updating data...
           </p>
         )}
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Performanță Echipă</CardTitle>
+          <CardTitle>Team performance</CardTitle>
           <CardDescription>
-            {rangePreset === 'year' ? 'Ultimul an' : 'Ultima lună'}
+            {rangePreset === 'year' ? 'Last year' : 'Last month'}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="calls">
             <TabsList className="mb-4">
-              <TabsTrigger value="calls">Apeluri</TabsTrigger>
-              <TabsTrigger value="sales">Vânzări</TabsTrigger>
+              <TabsTrigger value="calls">Calls</TabsTrigger>
+              <TabsTrigger value="sales">Sales</TabsTrigger>
             </TabsList>
             <TabsContent value="calls">
               <ResponsiveContainer width="100%" height={300}>
@@ -340,7 +358,7 @@ export default function ManagerOverviewPage() {
                   <Legend iconSize={10} />
                   <Bar
                     dataKey="calls"
-                    name="Apeluri"
+                    name="Calls"
                     fill="hsl(var(--chart-1))"
                     radius={[4, 4, 0, 0]}
                   />
@@ -362,7 +380,7 @@ export default function ManagerOverviewPage() {
                   <Legend iconSize={10} />
                   <Bar
                     dataKey="sales"
-                    name="Vânzări"
+                    name="Sales"
                     fill="hsl(var(--chart-2))"
                     radius={[4, 4, 0, 0]}
                   />

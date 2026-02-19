@@ -12,7 +12,7 @@ import {
   ListTodo,
   Target,
 } from 'lucide-react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import * as React from 'react';
 
 import {
@@ -37,34 +37,34 @@ const managerAvatar = PlaceHolderImages.find((img) => img.id === 'avatar-4');
 
 const agentMenuItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutGrid },
-  { href: '/dashboard/history', label: 'Istoric', icon: LineChart },
-  { href: '/dashboard/report', label: 'Raport Zilnic', icon: FileText },
+  { href: '/dashboard/history', label: 'History', icon: LineChart },
+  { href: '/dashboard/report', label: 'Daily Report', icon: FileText },
   { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar },
-  { href: '/dashboard/tasks', label: 'Task-uri', icon: ListTodo },
-  { href: '/dashboard/goals', label: 'Obiective', icon: Target },
+  { href: '/dashboard/tasks', label: 'Tasks', icon: ListTodo },
+  { href: '/dashboard/goals', label: 'Goals', icon: Target },
 ];
 
 const managerMenuItems = [
   {
     href: '/dashboard/manager/overview',
-    label: 'Privire de ansamblu',
+    label: 'Overview',
     icon: Users,
   },
   {
     href: '/dashboard/manager/history',
-    label: 'Istoric echipă',
+    label: 'Team history',
     icon: LineChart,
   },
   {
     href: '/dashboard/manager/forecast',
-    label: 'Prognoza vanzari',
+    label: 'Sales forecast',
     icon: LineChart,
   },
-  { href: '/dashboard/manager/reports', label: 'Rapoarte Echipă', icon: FileText },
-  { href: '/dashboard/notifications', label: 'Notificări', icon: Bell },
+  { href: '/dashboard/manager/reports', label: 'Team Reports', icon: FileText },
+  { href: '/dashboard/notifications', label: 'Notifications', icon: Bell },
   {
     href: '/dashboard/manager/create-agent',
-    label: 'Creează cont angajat',
+    label: 'Create employee account',
     icon: UserPlus,
   },
 ];
@@ -105,14 +105,20 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [userRole, setUserRole] = React.useState<string | null>(null);
-  const [displayName, setDisplayName] = React.useState('Cont');
+  const [displayName, setDisplayName] = React.useState('Account');
   const [initials, setInitials] = React.useState('?');
 
   React.useEffect(() => {
+    const token = localStorage.getItem('salesway_token');
+    if (!token) {
+      router.replace('/login');
+      return;
+    }
     const role = localStorage.getItem('userRole');
     setUserRole(role || 'agent');
-  }, []);
+  }, [router]);
 
   React.useEffect(() => {
     const fetchUser = async () => {
@@ -134,7 +140,7 @@ export default function DashboardLayout({
           .filter(Boolean)
           .join(' ')
           .trim();
-        const fallbackName = data.email?.split('@')[0] ?? 'Cont';
+        const fallbackName = data.email?.split('@')[0] ?? 'Account';
         const resolvedName = fullName || fallbackName;
         setDisplayName(resolvedName);
         const nextInitials = resolvedName
@@ -162,7 +168,7 @@ export default function DashboardLayout({
     <SidebarProvider>
       <Sidebar>
         <SidebarHeader>
-          <Logo />
+          <Logo href={isManager ? '/dashboard/manager/overview' : '/dashboard'} />
         </SidebarHeader>
 
         <SidebarContent>
@@ -209,7 +215,7 @@ export default function DashboardLayout({
           )}
           <SidebarMenu>
             <p className="px-2 py-2 text-xs font-semibold text-sidebar-foreground/70">
-              Instrumente
+              Tools
             </p>
             {toolsMenuItems.map((item) => (
               <SidebarMenuItem key={item.href}>
@@ -251,7 +257,7 @@ export default function DashboardLayout({
       </Sidebar>
 
       <SidebarInset>
-        <DashboardHeader />
+        <DashboardHeader showNotifications={isManager} />
         <main className="h-full flex-1 overflow-y-auto p-4 md:p-6">
           {children}
         </main>

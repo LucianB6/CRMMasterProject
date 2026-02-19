@@ -29,17 +29,17 @@ import { Camera, User } from 'lucide-react';
 import { apiFetch } from '../../../lib/api';
 
 const profileSchema = z.object({
-  firstName: z.string().min(1, 'Prenumele este obligatoriu.'),
-  lastName: z.string().min(1, 'Numele este obligatoriu.'),
+  firstName: z.string().min(1, 'First name is required.'),
+  lastName: z.string().min(1, 'Last name is required.'),
   email: z.string().email(),
 });
 
 const passwordSchema = z
   .object({
-    currentPassword: z.string().min(1, 'Parola curentă este obligatorie.'),
+    currentPassword: z.string().min(1, 'Current password is required.'),
     newPassword: z
       .string()
-      .min(8, 'Parola nouă trebuie să aibă minim 8 caractere.'),
+      .min(8, 'New password must be at least 8 characters.'),
     confirmPassword: z.string(),
   })
   .refine((data) => data.newPassword === data.confirmPassword, {
@@ -72,8 +72,8 @@ export default function ProfilePage() {
   function onProfileSubmit(values: z.infer<typeof profileSchema>) {
     console.log('Updating profile:', values);
     toast({
-      title: 'Profil actualizat!',
-      description: 'Informațiile tale au fost salvate cu succes.',
+      title: 'Profile updated!',
+      description: 'Your information has been saved successfully.',
     });
   }
 
@@ -118,8 +118,8 @@ export default function ProfilePage() {
   function onPasswordSubmit(values: z.infer<typeof passwordSchema>) {
     console.log('Changing password');
     toast({
-      title: 'Parolă schimbată!',
-      description: 'Parola ta a fost actualizată cu succes.',
+      title: 'Password changed!',
+      description: 'Your password has been updated successfully.',
     });
     passwordForm.reset();
   }
@@ -127,17 +127,17 @@ export default function ProfilePage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="font-headline text-2xl">Profilul Meu</h1>
+        <h1 className="font-headline text-2xl">My Profile</h1>
         <p className="text-muted-foreground">
-          Vezi și actualizează detaliile contului tău.
+          View and update your account details.
         </p>
       </header>
 
       <Card>
         <CardHeader>
-          <CardTitle>Informații personale</CardTitle>
+          <CardTitle>Personal information</CardTitle>
           <CardDescription>
-            Actualizează fotografia și detaliile personale aici.
+            Update your photo and personal details here.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -155,7 +155,7 @@ export default function ProfilePage() {
                   </Avatar>
                   <Button type="button" variant="outline" size="sm">
                     <Camera className="mr-2 h-4 w-4" />
-                    Schimbă poza
+                    Change photo
                   </Button>
                 </div>
                 <div className="grid flex-1 gap-4 sm:grid-cols-2">
@@ -164,7 +164,7 @@ export default function ProfilePage() {
                     name="firstName"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Prenume</FormLabel>
+                        <FormLabel>First Name</FormLabel>
                         <FormControl>
                           <Input placeholder="Jane" {...field} />
                         </FormControl>
@@ -177,7 +177,7 @@ export default function ProfilePage() {
                     name="lastName"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Nume</FormLabel>
+                        <FormLabel>Last Name</FormLabel>
                         <FormControl>
                           <Input placeholder="Smith" {...field} />
                         </FormControl>
@@ -193,7 +193,7 @@ export default function ProfilePage() {
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Adresă de Email</FormLabel>
+                    <FormLabel>Email Address</FormLabel>
                     <FormControl>
                       <Input {...field} type="email" readOnly disabled />
                     </FormControl>
@@ -202,7 +202,7 @@ export default function ProfilePage() {
                 )}
               />
               <div className="flex justify-end">
-                <Button type="submit">Salvează modificările</Button>
+                <Button type="submit">Save changes</Button>
               </div>
             </form>
           </Form>
@@ -213,9 +213,9 @@ export default function ProfilePage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Schimbă parola</CardTitle>
+          <CardTitle>Change password</CardTitle>
           <CardDescription>
-            Pentru securitatea contului tău, alege o parolă puternică.
+            For account security, choose a strong password.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -229,7 +229,7 @@ export default function ProfilePage() {
                 name="currentPassword"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Parola curentă</FormLabel>
+                    <FormLabel>Current password</FormLabel>
                     <FormControl>
                       <Input placeholder="••••••••" {...field} type="password" />
                     </FormControl>
@@ -242,7 +242,7 @@ export default function ProfilePage() {
                 name="newPassword"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Parola nouă</FormLabel>
+                    <FormLabel>New password</FormLabel>
                     <FormControl>
                       <Input placeholder="••••••••" {...field} type="password" />
                     </FormControl>
@@ -255,7 +255,7 @@ export default function ProfilePage() {
                 name="confirmPassword"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Confirmă parola nouă</FormLabel>
+                    <FormLabel>Confirm new password</FormLabel>
                     <FormControl>
                       <Input placeholder="••••••••" {...field} type="password" />
                     </FormControl>
@@ -264,7 +264,7 @@ export default function ProfilePage() {
                 )}
               />
               <div className="flex justify-end">
-                <Button type="submit">Schimbă parola</Button>
+                <Button type="submit">Change password</Button>
               </div>
             </form>
           </Form>

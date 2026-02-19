@@ -37,44 +37,44 @@ import {
 import { Label } from '../../../../components/ui/label';
 
 const reportSchema = z.object({
-  outbound_dials: z.coerce.number().int().min(0, 'Valoare pozitivă necesară.'),
-  pickups: z.coerce.number().int().min(0, 'Valoare pozitivă necesară.'),
+  outbound_dials: z.coerce.number().int().min(0, 'Positive value required.'),
+  pickups: z.coerce.number().int().min(0, 'Positive value required.'),
   conversations_30s_plus: z.coerce
     .number()
     .int()
-    .min(0, 'Valoare pozitivă necesară.'),
+    .min(0, 'Positive value required.'),
   sales_call_booked_from_outbound: z.coerce
     .number()
     .int()
-    .min(0, 'Valoare pozitivă necesară.'),
+    .min(0, 'Positive value required.'),
   sales_call_on_calendar: z.coerce
     .number()
     .int()
-    .min(0, 'Valoare pozitivă necesară.'),
-  no_show: z.coerce.number().int().min(0, 'Valoare pozitivă necesară.'),
+    .min(0, 'Positive value required.'),
+  no_show: z.coerce.number().int().min(0, 'Positive value required.'),
   reschedule_request: z.coerce
     .number()
     .int()
-    .min(0, 'Valoare pozitivă necesară.'),
-  cancel: z.coerce.number().int().min(0, 'Valoare pozitivă necesară.'),
-  deposits: z.coerce.number().int().min(0, 'Valoare pozitivă necesară.'),
+    .min(0, 'Positive value required.'),
+  cancel: z.coerce.number().int().min(0, 'Positive value required.'),
+  deposits: z.coerce.number().int().min(0, 'Positive value required.'),
   sales_one_call_close: z.coerce
     .number()
     .int()
-    .min(0, 'Valoare pozitivă necesară.'),
+    .min(0, 'Positive value required.'),
   followup_sales: z.coerce
     .number()
     .int()
-    .min(0, 'Valoare pozitivă necesară.'),
+    .min(0, 'Positive value required.'),
   upsell_conversation_taken: z.coerce
     .number()
     .int()
-    .min(0, 'Valoare pozitivă necesară.'),
-  upsells: z.coerce.number().int().min(0, 'Valoare pozitivă necesară.'),
-  contract_value: z.coerce.number().min(0, 'Valoarea trebuie să fie pozitivă.'),
+    .min(0, 'Positive value required.'),
+  upsells: z.coerce.number().int().min(0, 'Positive value required.'),
+  contract_value: z.coerce.number().min(0, 'Value must be positive.'),
   new_cash_collected: z.coerce
     .number()
-    .min(0, 'Valoarea trebuie să fie pozitivă.'),
+    .min(0, 'Value must be positive.'),
   observations: z
     .string()
     .max(1000, 'Maxim 1000 de caractere.')
@@ -115,8 +115,8 @@ type ManagerReportResponse = {
 
 const statusConfig = {
   DRAFT: { text: 'Draft', icon: Clock, color: 'text-yellow-500' },
-  SUBMITTED: { text: 'Trimis', icon: CheckCircle, color: 'text-green-500' },
-  AUTO_SUBMITTED: { text: 'Auto-trimis', icon: Lock, color: 'text-muted-foreground' },
+  SUBMITTED: { text: 'Submitted', icon: CheckCircle, color: 'text-green-500' },
+  AUTO_SUBMITTED: { text: 'Auto-submitted', icon: Lock, color: 'text-muted-foreground' },
 };
 
 const baseReportValues = {
@@ -201,11 +201,11 @@ export default function ManagerReportsPage() {
         }
       } catch (error) {
         toast({
-          title: 'Eroare',
+          title: 'Error',
           description:
             error instanceof Error
               ? error.message
-              : 'Nu am putut încărca agenții.',
+              : 'Unable to load agents.',
           variant: 'destructive',
         });
       }
@@ -239,11 +239,11 @@ export default function ManagerReportsPage() {
         form.reset(normalizeInputs(latest));
       } catch (error) {
         toast({
-          title: 'Eroare',
+          title: 'Error',
           description:
             error instanceof Error
               ? error.message
-              : 'Nu am putut încărca raportul agentului.',
+              : 'Unable to load the agent report.',
           variant: 'destructive',
         });
         setCurrentReport(null);
@@ -260,8 +260,8 @@ export default function ManagerReportsPage() {
     async (values: z.infer<typeof reportSchema>, status: ManagerReportStatus) => {
       if (!currentReport) {
         toast({
-          title: 'Raport lipsă',
-          description: 'Nu există un raport de actualizat pentru agentul selectat.',
+          title: 'Missing report',
+          description: 'There is no report to update for the selected agent.',
           variant: 'destructive',
         });
         return;
@@ -274,8 +274,8 @@ export default function ManagerReportsPage() {
           `/manager/reports/${currentReport.id}`,
           {
             method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
+        headers: {
+          'Content-Type': 'application/json',
               ...(token ? { Authorization: `Bearer ${token}` } : {}),
             },
             body: JSON.stringify({
@@ -287,16 +287,16 @@ export default function ManagerReportsPage() {
         setCurrentReport(updated);
         form.reset(normalizeInputs(updated));
         toast({
-          title: status === 'SUBMITTED' ? 'Raport publicat!' : 'Raport salvat!',
-          description: `Datele pentru ${updated.agent_email} au fost actualizate.`,
+          title: status === 'SUBMITTED' ? 'Report published!' : 'Report saved!',
+          description: `Data for ${updated.agent_email} has been updated.`,
         });
       } catch (error) {
         toast({
-          title: 'Eroare',
+          title: 'Error',
           description:
             error instanceof Error
               ? error.message
-              : 'Nu am putut salva raportul.',
+              : 'Unable to save report.',
           variant: 'destructive',
         });
       } finally {
@@ -313,16 +313,16 @@ export default function ManagerReportsPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="font-headline text-2xl">Rapoarte Echipă</h1>
+        <h1 className="font-headline text-2xl">Team Reports</h1>
         <p className="text-muted-foreground">
-          Vizualizează și editează rapoartele zilnice ale agenților tăi.
+          View and edit your agents' daily reports.
         </p>
       </header>
       <Card>
         <CardHeader>
-          <CardTitle>Selectează Agent</CardTitle>
+          <CardTitle>Select Agent</CardTitle>
           <CardDescription>
-            Alege un agent pentru a vedea raportul zilnic curent.
+            Choose an agent to view today's daily report.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -330,15 +330,15 @@ export default function ManagerReportsPage() {
             <Label>Agent</Label>
             <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
               <SelectTrigger className="mt-2 w-full sm:w-[280px]">
-                <SelectValue placeholder="Selectează un agent" />
+                <SelectValue placeholder="Select an agent" />
               </SelectTrigger>
-              <SelectContent>
+            <SelectContent>
                 {agents.map((agent) => (
                   <SelectItem key={agent.membership_id} value={agent.membership_id}>
                     {agent.email}
                   </SelectItem>
                 ))}
-              </SelectContent>
+            </SelectContent>
             </Select>
           </div>
           <div className="flex items-center gap-2 rounded-md border p-2">
@@ -362,10 +362,10 @@ export default function ManagerReportsPage() {
               onClick={form.handleSubmit((values) => submitReport(values, 'DRAFT'))}
               disabled={isLoading || isSaving}
             >
-              Salvează modificări
+              Save changes
             </Button>
             <Button type="submit" disabled={isLoading || isSaving}>
-              Publică raportul
+              Publish report
             </Button>
           </div>
           <div className="space-y-6">
@@ -373,7 +373,7 @@ export default function ManagerReportsPage() {
               <CardHeader>
                 <CardTitle>Activitate Outbound</CardTitle>
                 <CardDescription>
-                  Indicatori principali legați de efortul de contactare.
+                  Key indicators tied to outreach effort.
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-3">
@@ -382,7 +382,7 @@ export default function ManagerReportsPage() {
                   name="outbound_dials"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Apeluri outbound efectuate</FormLabel>
+                      <FormLabel>Outbound calls made</FormLabel>
                       <FormControl>
                         <Input type="number" min="0" {...field} />
                       </FormControl>
@@ -395,7 +395,7 @@ export default function ManagerReportsPage() {
                   name="pickups"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Apeluri preluate</FormLabel>
+                      <FormLabel>Calls answered</FormLabel>
                       <FormControl>
                         <Input type="number" min="0" {...field} />
                       </FormControl>
@@ -408,7 +408,7 @@ export default function ManagerReportsPage() {
                   name="conversations_30s_plus"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Conversații &gt; 30s</FormLabel>
+                      <FormLabel>Conversations &gt; 30s</FormLabel>
                       <FormControl>
                         <Input type="number" min="0" {...field} />
                       </FormControl>
@@ -420,9 +420,9 @@ export default function ManagerReportsPage() {
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle>Management Apeluri de Vânzări</CardTitle>
+                <CardTitle>Sales Call Management</CardTitle>
                 <CardDescription>
-                  Rezultatele apelurilor programate.
+                  Results of scheduled calls.
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
@@ -431,7 +431,7 @@ export default function ManagerReportsPage() {
                   name="sales_call_booked_from_outbound"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Programări Outbound</FormLabel>
+                      <FormLabel>Outbound bookings</FormLabel>
                       <FormControl>
                         <Input type="number" min="0" {...field} />
                       </FormControl>
@@ -444,7 +444,7 @@ export default function ManagerReportsPage() {
                   name="sales_call_on_calendar"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Apeluri pe Calendar</FormLabel>
+                      <FormLabel>Calls on Calendar</FormLabel>
                       <FormControl>
                         <Input type="number" min="0" {...field} />
                       </FormControl>
@@ -470,7 +470,7 @@ export default function ManagerReportsPage() {
                   name="reschedule_request"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Cereri reprogramare</FormLabel>
+                      <FormLabel>Reschedule requests</FormLabel>
                       <FormControl>
                         <Input type="number" min="0" {...field} />
                       </FormControl>
@@ -483,7 +483,7 @@ export default function ManagerReportsPage() {
                   name="cancel"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Anulări</FormLabel>
+                      <FormLabel>Cancellations</FormLabel>
                       <FormControl>
                         <Input type="number" min="0" {...field} />
                       </FormControl>
@@ -495,9 +495,9 @@ export default function ManagerReportsPage() {
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle>Performanță Vânzări</CardTitle>
+                <CardTitle>Sales Performance</CardTitle>
                 <CardDescription>
-                  Indicatori cheie de performanță în vânzări.
+                  Key sales performance indicators.
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-3">
@@ -506,7 +506,7 @@ export default function ManagerReportsPage() {
                   name="deposits"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Avansuri încasate</FormLabel>
+                      <FormLabel>Deposits collected</FormLabel>
                       <FormControl>
                         <Input type="number" min="0" {...field} />
                       </FormControl>
@@ -519,7 +519,7 @@ export default function ManagerReportsPage() {
                   name="sales_one_call_close"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Vânzări închise la primul apel</FormLabel>
+                      <FormLabel>Sales closed on first call</FormLabel>
                       <FormControl>
                         <Input type="number" min="0" {...field} />
                       </FormControl>
@@ -532,7 +532,7 @@ export default function ManagerReportsPage() {
                   name="followup_sales"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Vânzări din follow-up</FormLabel>
+                      <FormLabel>Follow-up sales</FormLabel>
                       <FormControl>
                         <Input type="number" min="0" {...field} />
                       </FormControl>
@@ -544,8 +544,8 @@ export default function ManagerReportsPage() {
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle>Oportunități Upsell</CardTitle>
-                <CardDescription>Urmărirea vânzărilor adiționale.</CardDescription>
+                <CardTitle>Upsell Opportunities</CardTitle>
+                <CardDescription>Tracking additional sales.</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-2">
                 <FormField
@@ -553,7 +553,7 @@ export default function ManagerReportsPage() {
                   name="upsell_conversation_taken"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Discuții de upsell purtate</FormLabel>
+                      <FormLabel>Upsell conversations held</FormLabel>
                       <FormControl>
                         <Input type="number" min="0" {...field} />
                       </FormControl>
@@ -579,7 +579,7 @@ export default function ManagerReportsPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Valori Financiare</CardTitle>
-                <CardDescription>Totalurile financiare pentru ziua de azi.</CardDescription>
+                <CardDescription>Financial totals for today.</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-2">
                 <FormField
@@ -587,7 +587,7 @@ export default function ManagerReportsPage() {
                   name="contract_value"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Valoare totală contracte (RON)</FormLabel>
+                      <FormLabel>Total contract value (RON)</FormLabel>
                       <FormControl>
                         <Input type="number" min="0" step="0.01" {...field} />
                       </FormControl>
@@ -600,7 +600,7 @@ export default function ManagerReportsPage() {
                   name="new_cash_collected"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Bani noi încasați (RON)</FormLabel>
+                      <FormLabel>New cash collected (RON)</FormLabel>
                       <FormControl>
                         <Input type="number" min="0" step="0.01" {...field} />
                       </FormControl>
@@ -612,7 +612,7 @@ export default function ManagerReportsPage() {
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle>Secțiunea D — Observații</CardTitle>
+                <CardTitle>Section D — Notes</CardTitle>
               </CardHeader>
               <CardContent>
                 <FormField
@@ -622,7 +622,7 @@ export default function ManagerReportsPage() {
                     <FormItem>
                       <Textarea
                         {...field}
-                        placeholder="Adaugă observații, probleme întâmpinate sau alt context relevant..."
+                        placeholder="Add notes, issues encountered, or other relevant context..."
                         className="min-h-[100px]"
                         maxLength={1000}
                       />

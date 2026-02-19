@@ -38,7 +38,7 @@ export function AiAssistant({ children }: { children: React.ReactNode }) {
     startTransition(async () => {
       const assistantMessage: Message = {
         role: "assistant",
-        content: "Îți pot oferi câteva sugestii dacă îmi dai mai multe detalii."
+        content: "I can offer a few suggestions if you give me more details."
       };
       setMessages((prev) => [...prev, assistantMessage]);
     });

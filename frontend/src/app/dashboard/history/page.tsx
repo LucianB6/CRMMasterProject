@@ -40,36 +40,36 @@ import {
 
 const metricsConfig = {
   sales: {
-    label: 'Vânzări',
+    label: 'Sales',
     dataKey: 'sales',
-    unitLabel: 'Unități',
+    unitLabel: 'Units',
     icon: ShoppingCart,
     showValue: true,
-    barName: 'Vânzări',
+    barName: 'Sales',
   },
   calls: {
-    label: 'Apeluri Făcute',
+    label: 'Calls Made',
     dataKey: 'calls',
-    unitLabel: 'Apeluri',
+    unitLabel: 'Calls',
     icon: Phone,
     showValue: false,
-    barName: 'Apeluri',
+    barName: 'Calls',
   },
   followUpSales: {
-    label: 'Vânzări Follow-up',
+    label: 'Follow-up Sales',
     dataKey: 'followUpSales',
-    unitLabel: 'Unități',
+    unitLabel: 'Units',
     icon: RefreshCw,
     showValue: false,
-    barName: 'Vânzări Follow-up',
+    barName: 'Follow-up Sales',
   },
   outboundBookings: {
-    label: 'Programări Outbound',
+    label: 'Bookings Outbound',
     dataKey: 'outboundBookings',
-    unitLabel: 'Programări',
+    unitLabel: 'Bookings',
     icon: CalendarPlus,
     showValue: false,
-    barName: 'Programări',
+    barName: 'Bookings',
   },
 } as const;
 
@@ -141,7 +141,7 @@ const formatIsoDate = (date: Date) => date.toISOString().split('T')[0];
 const parseReportDate = (date: string) => new Date(`${date}T00:00:00Z`);
 
 const formatMonthLabel = (date: Date) => {
-  const formatted = date.toLocaleString('ro-RO', { month: 'short' }).replace('.', '');
+  const formatted = date.toLocaleString('en-US', { month: 'short' }).replace('.', '');
   return formatted.charAt(0).toUpperCase() + formatted.slice(1);
 };
 
@@ -184,13 +184,13 @@ const buildDailySeries = (
     const diffDays = Math.round(
       (todayUtc.getTime() - cursor.getTime()) / (1000 * 60 * 60 * 24)
     );
-    let periodLabel = `${diffDays} zile`;
+    let periodLabel = `${diffDays} days ago`;
     if (diffDays === 0) {
-      periodLabel = 'Azi';
+      periodLabel = 'Today';
     } else if (diffDays === 1) {
-      periodLabel = 'Ieri';
+      periodLabel = 'Yesterday';
     } else {
-      periodLabel = `Acum ${diffDays} zile`;
+      periodLabel = `${diffDays} days ago`;
     }
     const totals = totalsByDate.get(iso);
     data.push({
@@ -245,7 +245,7 @@ const buildWeeklySeries = (
     const weekNumber = index + 1;
     const totals = totalsByWeek.get(weekNumber);
     return {
-      period: `Săpt. ${weekNumber}`,
+      period: `Wk ${weekNumber}`,
       sales: totals?.sales ?? 0,
       calls: totals?.calls ?? 0,
       followUpSales: totals?.followUpSales ?? 0,
@@ -380,9 +380,9 @@ export default function HistoryPage() {
       });
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : 'Eroare necunoscută';
+        error instanceof Error ? error.message : 'Unknown error';
       toast({
-        title: 'Nu am putut încărca istoricul',
+        title: 'Unable to load history',
         description: message,
         variant: 'destructive',
       });
@@ -422,7 +422,7 @@ export default function HistoryPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
-                Medie / Perioadă
+                Average / Period
               </CardTitle>
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
@@ -436,14 +436,14 @@ export default function HistoryPage() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Valoare Totală (RON)
+                  Total Value (RON)
                 </CardTitle>
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
                   {totals.totalValue > 0
-                    ? totals.totalValue.toLocaleString('ro-RO')
+                    ? totals.totalValue.toLocaleString('en-US')
                     : '-'}
                 </div>
               </CardContent>
@@ -453,7 +453,7 @@ export default function HistoryPage() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle>{`Grafic ${metric.label} - ${title}`}</CardTitle>
+              <CardTitle>{`Chart ${metric.label} - ${title}`}</CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
@@ -491,7 +491,7 @@ export default function HistoryPage() {
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle>{`Tabel ${metric.label} - ${title}`}</CardTitle>
+              <CardTitle>{`Table ${metric.label} - ${title}`}</CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
@@ -502,7 +502,7 @@ export default function HistoryPage() {
                       {metric.label} ({metric.unitLabel})
                     </TableHead>
                     {metric.showValue && (
-                      <TableHead className="text-right">Valoare (RON)</TableHead>
+                      <TableHead className="text-right">Value (RON)</TableHead>
                     )}
                   </TableRow>
                 </TableHeader>
@@ -515,7 +515,7 @@ export default function HistoryPage() {
                       </TableCell>
                       {metric.showValue && (
                         <TableCell className="text-right">
-                          {(item.value || 0).toLocaleString('ro-RO')}
+                          {(item.value || 0).toLocaleString('en-US')}
                         </TableCell>
                       )}
                     </TableRow>
@@ -555,45 +555,45 @@ export default function HistoryPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="font-headline text-2xl">Istoric Vânzări & Activitate</h1>
+        <h1 className="font-headline text-2xl">Sales & Activity History</h1>
         <p className="text-muted-foreground">
-          Analizează performanța ta pe diferite perioade de timp.
+          Analyze your performance across different time periods.
         </p>
       </header>
       {isLoading ? (
         <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-          Se încarcă istoricul...
+          Loading history...
         </div>
       ) : (
         <Tabs defaultValue="7days" className="w-full">
           <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
-            <TabsTrigger value="7days">Ultimele 7 zile</TabsTrigger>
-            <TabsTrigger value="currentMonth">Luna curentă</TabsTrigger>
-            <TabsTrigger value="currentYear">Anul curent</TabsTrigger>
-            <TabsTrigger value="previousYear">Anul precedent</TabsTrigger>
+            <TabsTrigger value="7days">Last 7 days</TabsTrigger>
+            <TabsTrigger value="currentMonth">Current month</TabsTrigger>
+            <TabsTrigger value="currentYear">Current year</TabsTrigger>
+            <TabsTrigger value="previousYear">Previous year</TabsTrigger>
           </TabsList>
           <TabsContent value="7days" className="mt-6">
             {renderPeriodContent(
-              'Ultimele 7 zile',
+              'Last 7 days',
               historyData.last7Days,
-              'Ziua'
+              'Day'
             )}
           </TabsContent>
           <TabsContent value="currentMonth" className="mt-6">
             {renderPeriodContent(
-              'Luna Curentă',
+              'Current Month',
               historyData.currentMonth,
-              'Săptămâna'
+              'Week'
             )}
           </TabsContent>
           <TabsContent value="currentYear" className="mt-6">
-            {renderPeriodContent('Anul Curent', historyData.currentYear, 'Luna')}
+            {renderPeriodContent('Current Year', historyData.currentYear, 'Month')}
           </TabsContent>
           <TabsContent value="previousYear" className="mt-6">
             {renderPeriodContent(
-              'Anul Precedent',
+              'Previous Year',
               historyData.previousYear,
-              'Luna'
+              'Month'
             )}
           </TabsContent>
         </Tabs>

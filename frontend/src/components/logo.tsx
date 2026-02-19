@@ -1,15 +1,17 @@
-import Link from "next/link";
 
-import { cn } from "../lib/utils";
+import { cn } from '../lib/utils';
+import Link from 'next/link';
 
-type LogoProps = Omit<React.ComponentPropsWithoutRef<"a">, "href">;
+type LogoProps = React.AnchorHTMLAttributes<HTMLAnchorElement> & {
+  href?: string;
+};
 
-export function Logo({ className, ...props }: LogoProps) {
+export function Logo({ className, href = '/', ...props }: LogoProps) {
   return (
     <Link
-      href="/dashboard"
+      href={href}
       className={cn(
-        "flex items-center justify-center gap-2",
+        'flex items-center justify-center gap-2 text-sidebar-foreground',
         className
       )}
       {...props}

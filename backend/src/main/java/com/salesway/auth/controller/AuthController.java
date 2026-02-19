@@ -3,6 +3,7 @@ package com.salesway.auth.controller;
 import com.salesway.auth.dto.LoginRequest;
 import com.salesway.auth.dto.LoginResponse;
 import com.salesway.auth.dto.CurrentUserResponse;
+import com.salesway.auth.dto.GoogleLoginRequest;
 import com.salesway.auth.dto.SignupRequest;
 import com.salesway.auth.dto.SignupResponse;
 import com.salesway.auth.dto.UpdateProfileRequest;
@@ -33,6 +34,11 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         return ResponseEntity.ok(authService.login(request));
+    }
+
+    @PostMapping("/google")
+    public ResponseEntity<LoginResponse> googleLogin(@Valid @RequestBody GoogleLoginRequest request) {
+        return ResponseEntity.ok(authService.googleLogin(request));
     }
 
     @PostMapping("/signup")

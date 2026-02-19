@@ -69,7 +69,7 @@ const buildDefaultTrainFrom = () => {
 };
 
 const formatCurrency = (value: number) =>
-  new Intl.NumberFormat('ro-RO', {
+  new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'RON',
     maximumFractionDigits: 0,
@@ -81,14 +81,14 @@ const formatDisplayDate = (value: string) => {
     const year = Number(match[1]);
     const month = Number(match[2]) - 1;
     const day = Number(match[3]);
-    return new Date(Date.UTC(year, month, day)).toLocaleDateString('ro-RO', {
+    return new Date(Date.UTC(year, month, day)).toLocaleDateString('en-US', {
       day: '2-digit',
       month: 'short',
       year: 'numeric',
       timeZone: 'UTC',
     });
   }
-  return new Date(value).toLocaleDateString('ro-RO', {
+  return new Date(value).toLocaleDateString('en-US', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -151,29 +151,29 @@ export default function ExpectedSalesPage() {
   const normalizeErrorMessage = (error: unknown) => {
     if (error instanceof ApiError) {
       if (error.status === 404) {
-        return 'Resursa nu a fost găsită (404).';
+        return 'Resource not found (404).';
       }
       if (error.status === 403) {
         if ((error.body ?? '').toLowerCase().includes('no eligible membership')) {
-          return 'Nu există un membership activ pentru companie. Contactează administratorul.';
+          return 'No active membership for the company. Contact the administrator.';
         }
-        return 'Acces interzis (403). Verifică autentificarea.';
+        return 'Access denied (403). Check authentication.';
       }
       if (error.status === 409) {
-        return 'Conflict la salvare (409). Verifică dacă modelul există deja.';
+        return 'Save conflict (409). Check if the model already exists.';
       }
       if (error.status >= 500) {
-        return 'Serverul a întâmpinat o eroare. Încearcă din nou mai târziu.';
+        return 'The server encountered an error. Try again later.';
       }
       return error.message;
     }
     if (error instanceof Error) {
       if (error.message.toLowerCase().includes('failed to fetch')) {
-        return 'Nu am putut contacta serverul ML. Verifică conexiunea și configurarea API.';
+        return 'Unable to reach the ML server. Check the connection and API configuration.';
       }
       return error.message;
     }
-    return 'Eroare necunoscută';
+    return 'Unknown error';
   };
 
   const fetchModels = useCallback(async () => {
@@ -236,7 +236,7 @@ export default function ExpectedSalesPage() {
       headers: buildHeaders(),
     });
     if (data.length === 0) {
-      throw new Error('Nu există un model activ disponibil.');
+      throw new Error('No active model available.');
     }
     const sorted = [...data].sort((a, b) =>
       (b.trained_at ?? '').localeCompare(a.trained_at ?? '')
@@ -270,7 +270,7 @@ export default function ExpectedSalesPage() {
     setErrorMessage(null);
     const token = getAuthToken();
     if (!token) {
-      setErrorMessage('Nu ești autentificat. Conectează-te pentru a vedea prognozele.');
+      setErrorMessage('You are not authenticated. Sign in to view forecasts.');
       setIsInitializing(false);
       return;
     }
@@ -297,24 +297,24 @@ export default function ExpectedSalesPage() {
 
     const token = getAuthToken();
     if (!token) {
-      setErrorMessage('Nu ești autentificat. Conectează-te și încearcă din nou.');
+      setErrorMessage('You are not authenticated. Sign in and try again.');
       return;
     }
 
     if (!forecastFrom || !forecastTo) {
-      setErrorMessage('Selectează intervalul prognozei.');
+      setErrorMessage('Select the forecast interval.');
       return;
     }
 
     if (new Date(forecastFrom) > new Date(forecastTo)) {
-      setErrorMessage('Data de început trebuie să fie înainte de data de final.');
+      setErrorMessage('Start date must be before end date.');
       return;
     }
 
     const selectedDays = daysBetween(forecastFrom, forecastTo);
     if (selectedDays > MAX_HORIZON_DAYS) {
       setErrorMessage(
-        `Intervalul selectat depășește orizontul permis de ${MAX_HORIZON_DAYS} zile.`
+        `The selected interval exceeds the allowed horizon of ${MAX_HORIZON_DAYS} days.`
       );
       return;
     }
@@ -330,11 +330,11 @@ export default function ExpectedSalesPage() {
       });
       let trainedModel: MlModelResponse;
       if (!trainFrom || !trainTo) {
-        setErrorMessage('Selectează intervalul de training.');
+        setErrorMessage('Select the training interval.');
         return;
       }
       if (new Date(trainFrom) > new Date(trainTo)) {
-        setErrorMessage('Data de început trebuie să fie înainte de data de final.');
+        setErrorMessage('Start date must be before end date.');
         return;
       }
       try {
@@ -447,16 +447,16 @@ export default function ExpectedSalesPage() {
     return {
       prediction:
         from && to
-          ? `Estimare totală: ${formatCurrency(total)} pentru intervalul ${formatDisplayDate(
+          ? `Total estimate: ${formatCurrency(total)} for the interval ${formatDisplayDate(
               from
             )} - ${formatDisplayDate(to)}.`
-          : `Estimare totală: ${formatCurrency(total)}.`,
+          : `Total estimate: ${formatCurrency(total)}.`,
       confidence: 'Medium',
       summary: `Modelul ${activeModel?.name ?? 'selectat'} (${
         activeModel?.version ?? 'v1'
-      }) a generat prognoza pe baza datelor dintre ${formatDisplayDate(
+      }) generated the forecast based on data between ${formatDisplayDate(
         trainFrom
-      )} și ${formatDisplayDate(trainTo)}.`,
+      )} and ${formatDisplayDate(trainTo)}.`,
     };
   }, [activeModelId, aggregatePrediction, dailyPredictions, models, trainFrom, trainTo]);
 
@@ -490,23 +490,22 @@ export default function ExpectedSalesPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="font-headline text-2xl">Vanzari Asteptate (Prognoza AI)</h1>
+        <h1 className="font-headline text-2xl">Expected Sales (AI Forecast)</h1>
         <p className="text-muted-foreground">
-          Utilizeaza AI pentru a prognoza performanta viitoare a vanzarilor pe
-          baza datelor istorice.
+          Use AI to forecast future sales performance based on historical data.
         </p>
       </header>
 
       <Card>
         <CardHeader>
-          <CardTitle>Prognoză vânzări</CardTitle>
+          <CardTitle>Sales forecast</CardTitle>
           <CardDescription>
-            Selectează intervalul prognozei (maxim {MAX_HORIZON_DAYS} zile).
+            Select the forecast interval (max {MAX_HORIZON_DAYS} days).
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-5 md:items-end">
           <div className="space-y-2">
-            <Label htmlFor="train-from">Training: de la</Label>
+            <Label htmlFor="train-from">Training: from</Label>
             <Input
               id="train-from"
               type="date"
@@ -515,7 +514,7 @@ export default function ExpectedSalesPage() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="train-to">Training: până la</Label>
+            <Label htmlFor="train-to">Training: to</Label>
             <Input
               id="train-to"
               type="date"
@@ -524,7 +523,7 @@ export default function ExpectedSalesPage() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="forecast-from">Prognoză: de la</Label>
+            <Label htmlFor="forecast-from">Forecast: from</Label>
             <Input
               id="forecast-from"
               type="date"
@@ -533,7 +532,7 @@ export default function ExpectedSalesPage() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="forecast-to">Prognoză: până la</Label>
+            <Label htmlFor="forecast-to">Forecast: to</Label>
             <Input
               id="forecast-to"
               type="date"
@@ -545,12 +544,12 @@ export default function ExpectedSalesPage() {
             {isGenerating ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Se actualizează...
+                Updating...
               </>
             ) : (
               <>
                 <BrainCircuit className="mr-2 h-4 w-4" />
-                Generează Prognoză
+                Generate Forecast
               </>
             )}
           </Button>
@@ -570,7 +569,7 @@ export default function ExpectedSalesPage() {
           <div className="text-center text-muted-foreground">
             <Loader2 className="mx-auto h-10 w-10 animate-spin" />
             <p className="mt-4">
-              Se încarcă modelele și prognozele disponibile...
+              Loading available models and forecasts...
             </p>
           </div>
         </Card>
@@ -582,35 +581,35 @@ export default function ExpectedSalesPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Sparkles className="h-6 w-6 text-accent" />
-                <span>Rezultate Prognoza</span>
+                <span>Forecast Results</span>
               </CardTitle>
               <CardDescription>
-                Ultimele predicții pentru orizontul de {horizonLabelDays} zile.
+                Latest predictions for the horizon of {horizonLabelDays} days.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="grid gap-4 md:grid-cols-[1.2fr_1fr]">
                 <div className="space-y-2 rounded-lg border bg-card p-4">
                   <div className="flex items-start justify-between">
-                    <h3 className="text-lg font-semibold">Prognoza Principală</h3>
+                    <h3 className="text-lg font-semibold">Primary Forecast</h3>
                     <Badge
                       className={cn(
                         'text-primary-foreground',
                         getConfidenceBadgeColor(forecast?.confidence)
                       )}
                     >
-                      Încredere: {forecast?.confidence ?? 'Medium'}
+                      Confidence: {forecast?.confidence ?? 'Medium'}
                     </Badge>
                   </div>
                   <p className="text-2xl font-bold text-primary">
-                    {forecast?.prediction ?? 'Așteptăm rezultatele.'}
+                    {forecast?.prediction ?? 'Waiting for results.'}
                   </p>
                 </div>
                 <div className="space-y-2 rounded-lg border bg-card p-4">
-                  <h3 className="text-lg font-semibold">Sumar Analiză</h3>
+                  <h3 className="text-lg font-semibold">Analysis Summary</h3>
                   <p className="text-muted-foreground">
                     {forecast?.summary ??
-                      'Generează o prognoză pentru a vedea analiza detaliată.'}
+                      'Generate a forecast to see detailed analysis.'}
                   </p>
                 </div>
               </div>
@@ -622,9 +621,9 @@ export default function ExpectedSalesPage() {
             <>
               <Card>
                 <CardHeader>
-                  <CardTitle>Grafic Prognoză Vânzări</CardTitle>
+                  <CardTitle>Sales Forecast Chart</CardTitle>
                   <CardDescription>
-                    Vizualizare a vânzărilor prognozate pe intervalul selectat.
+                    View forecasted sales over the selected interval.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -653,14 +652,14 @@ export default function ExpectedSalesPage() {
                           borderColor: 'hsl(var(--border))',
                         }}
                         formatter={(value: number, name: string) => [
-                          `${value.toLocaleString('ro-RO')} RON`,
+                          `${value.toLocaleString('en-US')} RON`,
                           name,
                         ]}
                       />
                       <Legend wrapperStyle={{ fontSize: '0.8rem' }} />
                       <Bar
                         dataKey="forecast"
-                        name="Vânzări Prognozate"
+                        name="Sales Prognozate"
                         fill="hsl(var(--chart-2))"
                         radius={[4, 4, 0, 0]}
                       />
@@ -671,9 +670,9 @@ export default function ExpectedSalesPage() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Detalii prognoză</CardTitle>
+                  <CardTitle>Forecast details</CardTitle>
                   <CardDescription>
-                    Lista predicțiilor pentru fiecare zi din interval.
+                    List of predictions for each day in the interval.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -681,10 +680,10 @@ export default function ExpectedSalesPage() {
                     <table className="w-full text-left text-sm">
                       <thead className="text-xs uppercase text-muted-foreground">
                         <tr>
-                          <th className="py-2 pr-4">Dată</th>
-                          <th className="py-2 pr-4">Valoare prognozată</th>
-                          <th className="py-2 pr-4">Limită inferioară</th>
-                          <th className="py-2">Limită superioară</th>
+                          <th className="py-2 pr-4">Date</th>
+                          <th className="py-2 pr-4">Forecast value</th>
+                          <th className="py-2 pr-4">Lower bound</th>
+                          <th className="py-2">Upper bound</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -719,9 +718,9 @@ export default function ExpectedSalesPage() {
           ) : (
             <Card className="flex flex-col items-center justify-center gap-4 py-16 text-center">
               <TrendingUp className="h-16 w-16 text-muted-foreground" />
-              <h3 className="text-xl font-semibold">Nu există prognoze încă</h3>
+              <h3 className="text-xl font-semibold">No forecasts yet</h3>
               <p className="text-muted-foreground">
-                Generează o prognoză sau ajustează filtrele pentru a vedea date.
+                Generate a forecast or adjust filters to see data.
               </p>
             </Card>
           )}

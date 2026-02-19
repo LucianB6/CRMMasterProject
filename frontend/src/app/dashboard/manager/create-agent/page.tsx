@@ -35,18 +35,18 @@ const createAgentSchema = z
   .object({
     email: z
       .string()
-      .email('Te rugăm să introduci o adresă de email validă.')
-      .max(255, 'Email-ul trebuie să aibă maxim 255 de caractere.'),
+      .email('Please enter a valid email address.')
+      .max(255, 'Email must be at most 255 characters.'),
     password: z
       .string()
-      .min(8, 'Parola trebuie să aibă cel puțin 8 caractere.')
-      .max(255, 'Parola trebuie să aibă maxim 255 de caractere.'),
+      .min(8, 'Password must be at least 8 characters.')
+      .max(255, 'Password must be at most 255 characters.'),
     retypePassword: z
       .string()
-      .min(8, 'Confirmarea parolei trebuie să aibă cel puțin 8 caractere.')
-      .max(255, 'Confirmarea parolei trebuie să aibă maxim 255 de caractere.'),
-    firstName: z.string().min(1, 'Prenumele este obligatoriu.').max(255),
-    lastName: z.string().min(1, 'Numele este obligatoriu.').max(255),
+      .min(8, 'Password confirmation must be at least 8 characters.')
+      .max(255, 'Password confirmation must be at most 255 characters.'),
+    firstName: z.string().min(1, 'First name is required.').max(255),
+    lastName: z.string().min(1, 'Last name is required.').max(255),
     role: z.enum(['AGENT', 'MANAGER']),
   })
   .refine((data) => data.password === data.retypePassword, {
@@ -84,8 +84,8 @@ export default function CreateAgentPage() {
         const token = getAuthToken();
         const data = await apiFetch<{ email: string }>('/manager/agents', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+        headers: {
+          'Content-Type': 'application/json',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
           body: JSON.stringify({
@@ -98,17 +98,17 @@ export default function CreateAgentPage() {
           }),
         });
         toast({
-          title: 'Cont creat cu succes!',
-          description: `Contul pentru ${data.email} a fost creat.`,
+          title: 'Account creat cu succes!',
+          description: `Accountul pentru ${data.email} a fost creat.`,
         });
         form.reset();
       } catch (error) {
         toast({
-          title: 'Eroare',
+          title: 'Error',
           description:
             error instanceof Error
               ? error.message
-              : 'Nu am putut crea agentul.',
+              : 'Unable to create agent.',
           variant: 'destructive',
         });
       } finally {
@@ -121,16 +121,16 @@ export default function CreateAgentPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="font-headline text-2xl">Creează Cont Agent</h1>
+        <h1 className="font-headline text-2xl">Create Agent Account</h1>
         <p className="text-muted-foreground">
-          Adaugă un nou membru în echipa ta de vânzări.
+          Add a new member to your sales team.
         </p>
       </header>
       <Card className="max-w-2xl">
         <CardHeader>
-          <CardTitle>Detalii Agent</CardTitle>
+          <CardTitle>Agent Details</CardTitle>
           <CardDescription>
-            Completează detaliile de mai jos pentru a crea un cont nou.
+            Fill in the details below to create a new account.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -142,7 +142,7 @@ export default function CreateAgentPage() {
                   name="firstName"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Prenume</FormLabel>
+                      <FormLabel>First Name</FormLabel>
                       <FormControl>
                         <Input placeholder="Alex" {...field} />
                       </FormControl>
@@ -155,7 +155,7 @@ export default function CreateAgentPage() {
                   name="lastName"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Nume</FormLabel>
+                      <FormLabel>Last Name</FormLabel>
                       <FormControl>
                         <Input placeholder="Popescu" {...field} />
                       </FormControl>
@@ -169,7 +169,7 @@ export default function CreateAgentPage() {
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Adresă de Email</FormLabel>
+                    <FormLabel>Email Address</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="alex.popescu@exemplu.com"
@@ -187,10 +187,10 @@ export default function CreateAgentPage() {
                   name="password"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Parolă</FormLabel>
+                      <FormLabel>Password</FormLabel>
                       <FormControl>
                         <Input
-                          placeholder="Introduceți o parolă"
+                          placeholder="Enter a password"
                           {...field}
                           type="password"
                         />
@@ -204,10 +204,10 @@ export default function CreateAgentPage() {
                   name="retypePassword"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Confirmă parola</FormLabel>
+                      <FormLabel>Confirm password</FormLabel>
                       <FormControl>
                         <Input
-                          placeholder="Reintroduceți parola"
+                          placeholder="Re-enter the password"
                           {...field}
                           type="password"
                         />
@@ -226,7 +226,7 @@ export default function CreateAgentPage() {
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Selectează rolul" />
+                          <SelectValue placeholder="Select role" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -240,7 +240,7 @@ export default function CreateAgentPage() {
               />
               <div className="flex justify-end">
                 <Button type="submit" disabled={isSubmitting}>
-                  Creează Cont
+                  Create Account
                 </Button>
               </div>
             </form>

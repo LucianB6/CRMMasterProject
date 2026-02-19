@@ -18,15 +18,6 @@ import {
   CardTitle
 } from "../../components/ui/card";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger
-} from "../../components/ui/dialog";
-import {
   Form,
   FormControl,
   FormField,
@@ -46,20 +37,11 @@ const formSchema = z.object({
   })
 });
 
-const requestAccessFormSchema = z.object({
-  firstName: z.string().min(1, "First name is required."),
-  lastName: z.string().min(1, "Last name is required."),
-  email: z.string().email("Please enter a valid email address.")
-});
-
 type LoginFormValues = z.infer<typeof formSchema>;
-
-type RequestAccessFormValues = z.infer<typeof requestAccessFormSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const [isRequestAccessOpen, setIsRequestAccessOpen] = React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(formSchema),
@@ -69,14 +51,6 @@ export default function LoginPage() {
     }
   });
 
-  const requestAccessForm = useForm<RequestAccessFormValues>({
-    resolver: zodResolver(requestAccessFormSchema),
-    defaultValues: {
-      firstName: "",
-      lastName: "",
-      email: ""
-    }
-  });
 
   const resolveLandingRoute = async (token: string) => {
     try {
@@ -133,24 +107,15 @@ export default function LoginPage() {
     }
   };
 
-  const onRequestAccessSubmit = async (values: RequestAccessFormValues) => {
-    requestAccessForm.reset();
-    setIsRequestAccessOpen(false);
-    toast({
-      title: "Request Sent",
-      description:
-        "Your access request has been sent to the manager for approval."
-    });
-
-    console.info("Request access values:", values);
-  };
 
   return (
-    <div className="flex min-h-screen w-full items-center justify-center bg-muted/40 px-4">
+    <div className="flex min-h-screen w-full items-center justify-center bg-[#67C6EE] px-4 font-body">
       <Card className="w-full max-w-sm">
         <CardHeader className="items-center text-center">
-          <Logo className="mb-4" />
-          <CardTitle className="font-headline text-2xl">Welcome Back</CardTitle>
+          <Logo className="mb-4 text-[#67C6EE]" />
+          <CardTitle className="text-2xl text-[#67C6EE]">
+            Welcome Back
+          </CardTitle>
           <CardDescription>
             Enter your credentials to access your account.
           </CardDescription>
@@ -184,7 +149,7 @@ export default function LoginPage() {
                       <FormLabel>Password</FormLabel>
                       <Link
                         href="#"
-                        className="text-sm font-medium text-primary hover:underline"
+                        className="text-sm font-medium text-[#67C6EE] hover:underline"
                       >
                         Forgot password?
                       </Link>
@@ -197,83 +162,13 @@ export default function LoginPage() {
                 )}
               />
               <div className="flex flex-col gap-2 pt-2 sm:flex-row">
-                <Button type="submit" className="w-full" disabled={isSubmitting}>
+                <Button
+                  type="submit"
+                  className="w-full bg-[#67C6EE] text-white hover:bg-[#67C6EE]/90"
+                  disabled={isSubmitting}
+                >
                   {isSubmitting ? "Signing In..." : "Sign In"}
                 </Button>
-                <Dialog
-                  open={isRequestAccessOpen}
-                  onOpenChange={setIsRequestAccessOpen}
-                >
-                  <DialogTrigger asChild>
-                    <Button variant="outline" className="w-full">
-                      Request Access
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="sm:max-w-[425px]">
-                    <DialogHeader>
-                      <DialogTitle>Request Access</DialogTitle>
-                      <DialogDescription>
-                        Fill out the form below and a manager will review your
-                        request and create an account for you.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <Form {...requestAccessForm}>
-                      <form
-                        onSubmit={requestAccessForm.handleSubmit(
-                          onRequestAccessSubmit
-                        )}
-                        className="space-y-4"
-                      >
-                        <FormField
-                          control={requestAccessForm.control}
-                          name="firstName"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>First Name</FormLabel>
-                              <FormControl>
-                                <Input placeholder="John" {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={requestAccessForm.control}
-                          name="lastName"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Last Name</FormLabel>
-                              <FormControl>
-                                <Input placeholder="Doe" {...field} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={requestAccessForm.control}
-                          name="email"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Email</FormLabel>
-                              <FormControl>
-                                <Input
-                                  placeholder="john.doe@example.com"
-                                  {...field}
-                                  type="email"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <DialogFooter>
-                          <Button type="submit">Submit Request</Button>
-                        </DialogFooter>
-                      </form>
-                    </Form>
-                  </DialogContent>
-                </Dialog>
               </div>
             </form>
           </Form>

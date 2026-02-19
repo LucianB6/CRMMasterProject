@@ -43,7 +43,7 @@ export default function NotificationsPage() {
     if (Number.isNaN(date.getTime())) {
       return value;
     }
-    return new Intl.DateTimeFormat('ro-RO', {
+    return new Intl.DateTimeFormat('en-US', {
       dateStyle: 'medium',
       timeStyle: 'short',
     }).format(date);
@@ -60,19 +60,19 @@ export default function NotificationsPage() {
         : 'Agent';
     switch (notification.type) {
       case 'REPORT_SUBMITTED':
-        return `${agentEmail} a trimis raportul zilnic.`;
+        return `${agentEmail} submitted the daily report.`;
       case 'SALE_RECORDED':
-        return `${agentEmail} a înregistrat o vânzare.`;
+        return `${agentEmail} recorded a sale.`;
       case 'REPORT_DUE_30_MIN':
-        return `${agentEmail} are raportul scadent în curând.`;
+        return `${agentEmail} has a report due soon.`;
       case 'REPORT_NOT_SUBMITTED':
-        return `${agentEmail} nu a trimis raportul zilnic.`;
+        return `${agentEmail} did not submit the daily report.`;
       case 'USER_LOGIN':
-        return `${agentEmail} s-a autentificat.`;
+        return `${agentEmail} signed in.`;
       case 'AUTO_SUBMITTED_SUMMARY':
-        return `${agentEmail} are un raport auto-trimis.`;
+        return `${agentEmail} has an auto-submitted report.`;
       default:
-        return 'Ai primit o notificare nouă.';
+        return 'You received a new notification.';
     }
   }, []);
 
@@ -87,11 +87,11 @@ export default function NotificationsPage() {
         setNotifications(data);
       } catch (error) {
         toast({
-          title: 'Eroare',
+          title: 'Error',
           description:
             error instanceof Error
               ? error.message
-              : 'Nu am putut încărca notificările.',
+              : 'Unable to load notifications.',
           variant: 'destructive',
         });
       } finally {
@@ -105,9 +105,9 @@ export default function NotificationsPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="font-headline text-2xl">Notificări</h1>
+        <h1 className="font-headline text-2xl">Notifications</h1>
         <p className="text-muted-foreground">
-          Aici vezi cele mai recente actualizări de la echipa ta.
+          See the latest updates from your team.
         </p>
       </header>
       <Card>
@@ -115,12 +115,12 @@ export default function NotificationsPage() {
           <div className="flex flex-col">
             {isLoading && (
               <div className="p-4 text-sm text-muted-foreground">
-                Se încarcă notificările...
+                Loading notifications...
               </div>
             )}
             {!isLoading && notifications.length === 0 && (
               <div className="p-4 text-sm text-muted-foreground">
-                Nu există notificări noi.
+                No new notifications.
               </div>
             )}
             {!isLoading &&
@@ -157,7 +157,7 @@ export default function NotificationsPage() {
                         </p>
                       </div>
                       <span className="text-xs text-muted-foreground">
-                        {notification.status === 'READ' ? 'Citit' : 'Nou'}
+                        {notification.status === 'READ' ? 'Read' : 'New'}
                       </span>
                     </div>
                     {index < notifications.length - 1 && <Separator />}

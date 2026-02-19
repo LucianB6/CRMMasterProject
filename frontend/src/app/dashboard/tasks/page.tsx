@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { format } from 'date-fns';
-import { ro } from 'date-fns/locale';
+import { enUS } from 'date-fns/locale';
 
 import { Button } from '../../../components/ui/button';
 import {
@@ -72,8 +72,8 @@ type ApiTask = {
 };
 
 const statusConfig: Record<TaskStatus, { title: string }> = {
-  todo: { title: 'De făcut' },
-  'in-progress': { title: 'În progres' },
+  todo: { title: 'To do' },
+  'in-progress': { title: 'In progress' },
   done: { title: 'Finalizat' },
 };
 
@@ -138,9 +138,9 @@ export default function TasksPage() {
       const data = await apiFetch<ApiTask[]>('/tasks/board', { headers });
       setTasks(data.map(normalizeTask));
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Eroare necunoscută';
+      const message = error instanceof Error ? error.message : 'Unknown error';
       toast({
-        title: 'Nu am putut încărca task-urile',
+        title: 'Unable to load tasks',
         description: message,
         variant: 'destructive',
       });
@@ -179,18 +179,18 @@ export default function TasksPage() {
       });
 
       toast({
-        title: editingTask ? 'Task actualizat!' : 'Task adăugat!',
-        description: `Task-ul "${savedTask.title}" a fost ${
-          editingTask ? 'modificat' : 'adăugat'
+        title: editingTask ? 'Task updated!' : 'Task added!',
+        description: `Task "${savedTask.title}" was ${
+          editingTask ? 'updated' : 'added'
         }.`,
       });
 
       setIsDialogOpen(false);
       setEditingTask(null);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Eroare necunoscută';
+      const message = error instanceof Error ? error.message : 'Unknown error';
       toast({
-        title: 'Nu am putut salva task-ul',
+        title: 'Unable to save task',
         description: message,
         variant: 'destructive',
       });
@@ -224,9 +224,9 @@ export default function TasksPage() {
           prev.map((item) => (item.id === previousTask.id ? previousTask : item))
         );
         const message =
-          error instanceof Error ? error.message : 'Eroare necunoscută';
+          error instanceof Error ? error.message : 'Unknown error';
         toast({
-          title: 'Nu am putut muta task-ul',
+          title: 'Unable to move task',
           description: message,
           variant: 'destructive',
         });
@@ -244,11 +244,11 @@ export default function TasksPage() {
       });
 
       setTasks((prev) => prev.filter((t) => t.id !== taskId));
-      toast({ title: 'Task șters.' });
+      toast({ title: 'Task deleted.' });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Eroare necunoscută';
+      const message = error instanceof Error ? error.message : 'Unknown error';
       toast({
-        title: 'Nu am putut șterge task-ul',
+        title: 'Unable to delete task',
         description: message,
         variant: 'destructive',
       });
@@ -309,13 +309,13 @@ export default function TasksPage() {
     <div className="flex h-full flex-col space-y-6">
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="font-headline text-2xl">Planificator Task-uri</h1>
+          <h1 className="font-headline text-2xl">Task Planner</h1>
           <p className="text-muted-foreground">
-            Organizează-ți activitățile zilnice cu acest panou Kanban.
+            Organize your daily activities with this Kanban board.
           </p>
         </div>
         <Button onClick={openDialogForNew}>
-          <Plus className="mr-2 h-4 w-4" /> Adaugă Task
+          <Plus className="mr-2 h-4 w-4" /> Add Task
         </Button>
       </header>
 
@@ -337,7 +337,7 @@ export default function TasksPage() {
               )}
             >
               {isLoading ? (
-                <p className="text-sm text-muted-foreground">Se încarcă...</p>
+                <p className="text-sm text-muted-foreground">Loading...</p>
               ) : (
                 tasks
                   .filter((t) => t.status === status)
@@ -362,10 +362,10 @@ export default function TasksPage() {
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>
-              {editingTask ? 'Editează Task' : 'Creează Task Nou'}
+              {editingTask ? 'Edit Task' : 'Create New Task'}
             </DialogTitle>
             <DialogDescription>
-              Completează detaliile de mai jos pentru task-ul tău.
+              Fill in the details below for your task.
             </DialogDescription>
           </DialogHeader>
           <Form {...form}>
@@ -375,9 +375,9 @@ export default function TasksPage() {
                 name="title"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Titlu Task</FormLabel>
+                    <FormLabel>Task Title</FormLabel>
                     <FormControl>
-                      <Input placeholder="Ex: Trimite oferta către client" {...field} />
+                      <Input placeholder="e.g., Send the offer to the client" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -388,10 +388,10 @@ export default function TasksPage() {
                 name="goal"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Scop (Opțional)</FormLabel>
+                    <FormLabel>Goal (Optional)</FormLabel>
                     <FormControl>
                       <Textarea
-                        placeholder="Descrie pe scurt obiectivul acestui task..."
+                        placeholder="Briefly describe the goal of this task..."
                         {...field}
                       />
                     </FormControl>
@@ -404,7 +404,7 @@ export default function TasksPage() {
                 name="deadline"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Termen limită (Opțional)</FormLabel>
+                    <FormLabel>Deadline (Optional)</FormLabel>
                     <FormControl>
                       <Input
                         type="date"
@@ -429,7 +429,7 @@ export default function TasksPage() {
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Selectează un status" />
+                          <SelectValue placeholder="Select a status" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -445,7 +445,7 @@ export default function TasksPage() {
                 )}
               />
               <DialogFooter>
-                <Button type="submit">Salvează Task</Button>
+                <Button type="submit">Save Task</Button>
               </DialogFooter>
             </form>
           </Form>
@@ -494,13 +494,13 @@ function TaskCard({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => onEdit(task)}>
-                Editează
+                Edit
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => onDelete(task.id)}
                 className="text-destructive focus:bg-destructive/10 focus:text-destructive"
               >
-                Șterge
+                Delete
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -512,7 +512,7 @@ function TaskCard({
         {task.deadline && (
           <Badge variant="outline" className="mt-2 text-xs">
             <CalendarIcon className="mr-1 h-3 w-3" />
-            {format(task.deadline, 'd MMM', { locale: ro })}
+            {format(task.deadline, 'd MMM', { locale: enUS })}
           </Badge>
         )}
       </CardContent>

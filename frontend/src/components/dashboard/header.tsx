@@ -25,7 +25,7 @@ import { PlaceHolderImages } from "../../lib/placeholder-images";
 import { apiFetch } from "../../lib/api";
 const managerAvatar = PlaceHolderImages.find((img) => img.id === "avatar-4");
 
-export function DashboardHeader() {
+export function DashboardHeader({ showNotifications = true }: { showNotifications?: boolean }) {
   const [displayName, setDisplayName] = React.useState("Cont");
   const [initials, setInitials] = React.useState("?");
 
@@ -71,16 +71,17 @@ export function DashboardHeader() {
     <header className="sticky top-0 z-10 flex h-16 items-center justify-between gap-4 border-b bg-background px-4 md:px-6">
       <div className="flex items-center gap-2">
         <SidebarTrigger className="md:hidden" />
-        <h1 className="font-headline text-xl font-semibold">Dashboard</h1>
       </div>
 
       <div className="flex items-center gap-4">
-        <Button asChild variant="ghost" size="icon" className="rounded-full">
-          <Link href="/dashboard/notifications">
-            <Bell className="h-5 w-5" />
-            <span className="sr-only">Notifications</span>
-          </Link>
-        </Button>
+        {showNotifications && (
+          <Button asChild variant="ghost" size="icon" className="rounded-full">
+            <Link href="/dashboard/notifications">
+              <Bell className="h-5 w-5" />
+              <span className="sr-only">Notifications</span>
+            </Link>
+          </Button>
+        )}
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

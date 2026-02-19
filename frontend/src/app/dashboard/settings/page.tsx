@@ -18,17 +18,17 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="font-headline text-2xl">Setări</h1>
+        <h1 className="font-headline text-2xl">Settings</h1>
         <p className="text-muted-foreground">
-          Gestionează preferințele contului și ale aplicației.
+          Manage your account and app preferences.
         </p>
       </header>
 
       <Card>
         <CardHeader>
-          <CardTitle>Temă vizuală</CardTitle>
+          <CardTitle>Visual theme</CardTitle>
           <CardDescription>
-            Alege cum dorești să arate interfața aplicației.
+            Choose how you want the app interface to look.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -44,7 +44,7 @@ export default function SettingsPage() {
                 className="flex cursor-pointer flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
               >
                 <Sun className="mb-3 h-6 w-6" />
-                Luminos
+                Light
               </Label>
             </div>
             <div>
@@ -54,7 +54,7 @@ export default function SettingsPage() {
                 className="flex cursor-pointer flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
               >
                 <Moon className="mb-3 h-6 w-6" />
-                Întunecat
+                Dark
               </Label>
             </div>
           </RadioGroup>

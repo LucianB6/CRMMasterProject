@@ -17,7 +17,7 @@ import {
   subMonths,
   subWeeks,
 } from 'date-fns';
-import { ro } from 'date-fns/locale';
+import { enUS } from 'date-fns/locale';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { useForm } from 'react-hook-form';
@@ -55,19 +55,22 @@ import { cn } from '../../../lib/utils';
 const eventSchema = z
   .object({
     title: z.string().min(1, 'Motivul este obligatoriu.'),
+    eventDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, { message: 'Data este obligatorie.' }),
     startTime: z
       .string()
       .regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9](?::[0-5][0-9])?$/, {
-        message: 'Format oră invalid (HH:mm).',
+        message: 'Invalid time format (HH:mm).',
       }),
     endTime: z
       .string()
       .regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9](?::[0-5][0-9])?$/, {
-        message: 'Format oră invalid (HH:mm).',
+        message: 'Invalid time format (HH:mm).',
       }),
   })
   .refine((data) => data.startTime < data.endTime, {
-    message: 'Ora de sfârșit trebuie să fie după ora de început.',
+    message: 'End time must be after start time.',
     path: ['endTime'],
   });
 
@@ -85,6 +88,12 @@ type ApiCalendarEvent = {
   title: string;
   start_time: string;
   end_time: string;
+};
+
+type EventLayout = {
+  event: Event;
+  column: number;
+  columns: number;
 };
 
 const normalizeTimeForInput = (value: string) => {
@@ -109,6 +118,75 @@ const minutesToTimeString = (minutes: number) => {
   return `${hours.toString().padStart(2, '0')}:${mins
     .toString()
     .padStart(2, '0')}`;
+};
+
+const computeEventLayout = (dayEvents: Event[]): EventLayout[] => {
+  if (!dayEvents.length) {
+    return [];
+  }
+
+  const sorted = [...dayEvents].sort((a, b) => {
+    const startDiff = parseTimeToMinutes(a.startTime) - parseTimeToMinutes(b.startTime);
+    if (startDiff !== 0) {
+      return startDiff;
+    }
+    return parseTimeToMinutes(a.endTime) - parseTimeToMinutes(b.endTime);
+  });
+
+  const active: Array<{
+    event: Event;
+    end: number;
+    column: number;
+    maxColumns: number;
+  }> = [];
+  const layoutMap = new Map<
+    string,
+    { event: Event; column: number; columns: number }
+  >();
+
+  for (const event of sorted) {
+    const start = parseTimeToMinutes(event.startTime);
+    const end = parseTimeToMinutes(event.endTime);
+
+    for (let i = active.length - 1; i >= 0; i -= 1) {
+      if (active[i].end <= start) {
+        const finished = active[i];
+        const existing = layoutMap.get(finished.event.id);
+        if (existing) {
+          existing.columns = Math.max(existing.columns, finished.maxColumns);
+        }
+        active.splice(i, 1);
+      }
+    }
+
+    const usedColumns = new Set(active.map((item) => item.column));
+    let column = 0;
+    while (usedColumns.has(column)) {
+      column += 1;
+    }
+
+    const entry = { event, end, column, maxColumns: 1 };
+    active.push(entry);
+
+    const currentColumns = active.length;
+    for (const item of active) {
+      item.maxColumns = Math.max(item.maxColumns, currentColumns);
+    }
+
+    layoutMap.set(event.id, { event, column, columns: currentColumns });
+  }
+
+  for (const item of active) {
+    const existing = layoutMap.get(item.event.id);
+    if (existing) {
+      existing.columns = Math.max(existing.columns, item.maxColumns);
+    }
+  }
+
+  return sorted.map((event) => {
+    const layout = layoutMap.get(event.id);
+    return layout ?? { event, column: 0, columns: 1 };
+  });
 };
 
 export default function CalendarPage() {
@@ -168,6 +246,7 @@ export default function CalendarPage() {
     resolver: zodResolver(eventSchema),
     defaultValues: {
       title: '',
+      eventDate: '',
       startTime: '',
       endTime: '',
     },
@@ -175,7 +254,7 @@ export default function CalendarPage() {
 
   const calendarTitle = useMemo(() => {
     if (view === 'month') {
-      return format(currentDate, 'MMMM yyyy', { locale: ro });
+      return format(currentDate, 'MMMM yyyy', { locale: enUS });
     }
     const start = startOfWeek(currentDate, { weekStartsOn: 1 });
     const end = endOfWeek(currentDate, { weekStartsOn: 1 });
@@ -184,26 +263,26 @@ export default function CalendarPage() {
     const endYear = format(end, 'yyyy');
 
     if (startYear !== endYear) {
-      return `${format(start, 'd MMMM yyyy', { locale: ro })} - ${format(
+      return `${format(start, 'd MMMM yyyy', { locale: enUS })} - ${format(
         end,
         'd MMMM yyyy',
-        { locale: ro }
+        { locale: enUS }
       )}`;
     }
 
-    const startMonth = format(start, 'MMMM', { locale: ro });
-    const endMonth = format(end, 'MMMM', { locale: ro });
+    const startMonth = format(start, 'MMMM', { locale: enUS });
+    const endMonth = format(end, 'MMMM', { locale: enUS });
 
     if (startMonth !== endMonth) {
-      return `${format(start, 'd MMMM', { locale: ro })} - ${format(
+      return `${format(start, 'd MMMM', { locale: enUS })} - ${format(
         end,
         'd MMMM yyyy',
-        { locale: ro }
+        { locale: enUS }
       )}`;
     }
 
     return `${format(start, 'd')} - ${format(end, 'd MMMM yyyy', {
-      locale: ro,
+      locale: enUS,
     })}`;
   }, [currentDate, view]);
 
@@ -227,12 +306,12 @@ export default function CalendarPage() {
 
   const weekDays = [
     'Luni',
-    'Marți',
+    'Tue',
     'Miercuri',
     'Joi',
     'Vineri',
-    'Sâmbătă',
-    'Duminică',
+    'Sat',
+    'Sun',
   ];
 
   const handlePrev = () => {
@@ -255,7 +334,12 @@ export default function CalendarPage() {
     setEditingEventId(null);
     setSelectedDate(day);
     setIsDialogOpen(true);
-    form.reset({ title: '', startTime: '', endTime: '' });
+    form.reset({
+      title: '',
+      eventDate: formatIsoDate(day),
+      startTime: '',
+      endTime: '',
+    });
   };
 
   const handleEventClick = (
@@ -272,6 +356,7 @@ export default function CalendarPage() {
     setIsDialogOpen(true);
     form.reset({
       title: eventItem.title,
+      eventDate: formatIsoDate(eventItem.date),
       startTime: normalizeTimeForInput(eventItem.startTime),
       endTime: normalizeTimeForInput(eventItem.endTime),
     });
@@ -304,9 +389,9 @@ export default function CalendarPage() {
         setEvents(data.map(normalizeEvent));
       } catch (error) {
         const message =
-          error instanceof Error ? error.message : 'Eroare necunoscută';
+          error instanceof Error ? error.message : 'Unknown error';
         toast({
-          title: 'Nu am putut încărca evenimentele',
+          title: 'Unable to load events',
           description: message,
           variant: 'destructive',
         });
@@ -337,13 +422,14 @@ export default function CalendarPage() {
   }, []);
 
   async function onSubmit(values: z.infer<typeof eventSchema>) {
-    if (!selectedDate) {
+    if (!values.eventDate) {
       return;
     }
 
     try {
       const token = getAuthToken();
       const isEditing = Boolean(editingEventId);
+      const targetDate = parseISO(values.eventDate);
       const createdEvent = normalizeEvent(await apiFetch<ApiCalendarEvent>(
         isEditing
           ? `/calendar/events/${editingEventId}`
@@ -357,7 +443,7 @@ export default function CalendarPage() {
         body: JSON.stringify({
           ...(isEditing ? { id: editingEventId } : {}),
           title: values.title,
-          event_date: formatIsoDate(selectedDate),
+          event_date: values.eventDate,
           start_time: normalizeTimeForInput(values.startTime),
           end_time: normalizeTimeForInput(values.endTime),
         }),
@@ -365,22 +451,22 @@ export default function CalendarPage() {
       ));
       upsertEvent(createdEvent);
       toast({
-        title: isEditing ? 'Eveniment actualizat' : 'Eveniment adăugat',
+        title: isEditing ? 'Event updated' : 'Event added',
         description: `Evenimentul "${values.title}" a fost ${
-          isEditing ? 'actualizat' : 'adăugat'
+          isEditing ? 'actualizat' : 'added'
         } pe ${format(
-          selectedDate,
+          targetDate,
           'dd MMMM yyyy',
-          { locale: ro }
-        )} între orele ${values.startTime} - ${values.endTime}.`,
+          { locale: enUS }
+        )} between ${values.startTime} - ${values.endTime}.`,
       });
       setIsDialogOpen(false);
       setEditingEventId(null);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : 'Eroare necunoscută';
+        error instanceof Error ? error.message : 'Unknown error';
       toast({
-        title: 'Nu am putut salva evenimentul',
+        title: 'Unable to save event',
         description: message,
         variant: 'destructive',
       });
@@ -545,15 +631,15 @@ export default function CalendarPage() {
       ));
       upsertEvent(savedEvent);
       toast({
-        title: 'Eveniment actualizat',
+        title: 'Event updated',
         description: `Evenimentul "${savedEvent.title}" a fost mutat la ${savedEvent.startTime} - ${savedEvent.endTime}.`,
       });
     } catch (error) {
       upsertEvent(previousEvent);
       const message =
-        error instanceof Error ? error.message : 'Eroare necunoscută';
+        error instanceof Error ? error.message : 'Unknown error';
       toast({
-        title: 'Nu am putut actualiza evenimentul',
+        title: 'Unable to update event',
         description: message,
         variant: 'destructive',
       });
@@ -614,11 +700,11 @@ export default function CalendarPage() {
         <div>
           <h1 className="font-headline text-2xl">Calendar</h1>
           <p className="text-muted-foreground">
-            Vezi și adaugă evenimente în calendarul tău.
+            View and add events to your calendar.
           </p>
         </div>
         <Button onClick={() => handleDayClick(new Date())}>
-          <Plus className="mr-2 h-4 w-4" /> Adaugă Eveniment
+          <Plus className="mr-2 h-4 w-4" /> Add Event
         </Button>
       </header>
 
@@ -634,17 +720,17 @@ export default function CalendarPage() {
               className="flex-grow sm:flex-grow-0"
             >
               <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="month">Lună</TabsTrigger>
-                <TabsTrigger value="week">Săptămână</TabsTrigger>
+                <TabsTrigger value="month">Month</TabsTrigger>
+                <TabsTrigger value="week">Week</TabsTrigger>
               </TabsList>
             </Tabs>
             <Button variant="outline" size="icon" onClick={handlePrev}>
               <ChevronLeft className="h-4 w-4" />
-              <span className="sr-only">Perioada precedentă</span>
+              <span className="sr-only">Previous period</span>
             </Button>
             <Button variant="outline" size="icon" onClick={handleNext}>
               <ChevronRight className="h-4 w-4" />
-              <span className="sr-only">Perioada următoare</span>
+              <span className="sr-only">Next period</span>
             </Button>
           </div>
         </CardHeader>
@@ -682,7 +768,7 @@ export default function CalendarPage() {
                       {format(day, 'd')}
                     </time>
                     <div className="mt-7 space-y-1 sm:mt-8">
-                      {dayEvents.slice(0, 2).map((event, index) => (
+                      {dayEvents.slice(0, 2).map((event) => (
                         <div
                           key={event.id}
                           className="overflow-hidden rounded-md bg-accent p-1 px-1.5 text-xs text-accent-foreground sm:px-2"
@@ -692,9 +778,22 @@ export default function CalendarPage() {
                           <div className="truncate">{event.title}</div>
                         </div>
                       ))}
+                      {dayEvents.length > 2 && (
+                        <button
+                          type="button"
+                          className="w-full rounded-md border border-dashed border-border bg-background px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-muted/60"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setView('week');
+                            setCurrentDate(day);
+                          }}
+                        >
+                          {`Still ${dayEvents.length - 2} events`}
+                        </button>
+                      )}
                       {isLoadingEvents && dayEvents.length === 0 && (
                         <div className="text-[10px] text-muted-foreground">
-                          Se încarcă...
+                          Loading...
                         </div>
                       )}
                     </div>
@@ -729,10 +828,10 @@ export default function CalendarPage() {
                       className="border-b border-l p-1 text-center sm:p-2"
                     >
                       <p className="hidden text-sm capitalize text-muted-foreground sm:block">
-                        {format(day, 'E', { locale: ro })}
+                        {format(day, 'E', { locale: enUS })}
                       </p>
                       <p className="text-sm capitalize text-muted-foreground sm:hidden">
-                        {format(day, 'EEEEE', { locale: ro })}
+                        {format(day, 'EEEEE', { locale: enUS })}
                       </p>
                       <p
                         className={cn(
@@ -776,10 +875,11 @@ export default function CalendarPage() {
                             startTime: dragPreview.startTime,
                             endTime: dragPreview.endTime,
                           };
-                          return [...baseEvents, previewEvent];
+                          return computeEventLayout([...baseEvents, previewEvent]);
                         }
-                        return baseEvents;
-                      })().map((event) => {
+                        return computeEventLayout(baseEvents);
+                      })().map((layout) => {
+                        const event = layout.event;
                         const preview =
                           dragPreview && dragPreview.id === event.id
                             ? dragPreview
@@ -789,20 +889,21 @@ export default function CalendarPage() {
                         const top = timeToPosition(startTime);
                         const height =
                           timeToPosition(endTime) - timeToPosition(startTime);
+                        const widthPercent = 100 / layout.columns;
+                        const leftOffset = layout.column * widthPercent;
 
                         return (
                           <div
                             key={event.id}
                             className={cn(
-                              'absolute z-10 w-full cursor-grab overflow-hidden rounded-md border bg-primary/80 p-1 text-xs text-primary-foreground shadow-md backdrop-blur-sm active:cursor-grabbing sm:p-2',
+                              'absolute z-10 cursor-grab overflow-hidden rounded-md border bg-primary/80 p-1 text-xs text-primary-foreground shadow-md backdrop-blur-sm active:cursor-grabbing sm:p-2',
                               preview && 'opacity-90'
                             )}
                             style={{
                               top: `${top}px`,
                               height: `${Math.max(height, 24)}px`,
-                              left: '2px',
-                              right: '2px',
-                              width: 'calc(100% - 4px)',
+                              left: `calc(${leftOffset}% + 2px)`,
+                              width: `calc(${widthPercent}% - 4px)`,
                             }}
                             onClick={(e) => handleEventClick(event, e)}
                             onMouseDown={(e) => {
@@ -846,14 +947,14 @@ export default function CalendarPage() {
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>
-              {editingEventId ? 'Editează eveniment' : 'Adaugă eveniment nou'}
+              {editingEventId ? 'Edit event' : 'Add new event'}
             </DialogTitle>
             <DialogDescription>
               {selectedDate &&
-                `Adaugă un eveniment pentru data de ${format(
+                `Add an event for ${format(
                   selectedDate,
                   'dd MMMM yyyy',
-                  { locale: ro }
+                  { locale: enUS }
                 )}.`}
             </DialogDescription>
           </DialogHeader>
@@ -870,8 +971,30 @@ export default function CalendarPage() {
                     <FormLabel>Motivul</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="Ex: Întâlnire de vânzări"
+                        placeholder="e.g., Sales meeting"
                         {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="eventDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Data</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="date"
+                        {...field}
+                        onChange={(event) => {
+                          field.onChange(event);
+                          if (event.target.value) {
+                            setSelectedDate(parseISO(event.target.value));
+                          }
+                        }}
                       />
                     </FormControl>
                     <FormMessage />
@@ -884,7 +1007,7 @@ export default function CalendarPage() {
                   name="startTime"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Ora de început</FormLabel>
+                      <FormLabel>Start time</FormLabel>
                       <FormControl>
                         <Input type="time" {...field} />
                       </FormControl>
@@ -897,7 +1020,7 @@ export default function CalendarPage() {
                   name="endTime"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Ora de sfârșit</FormLabel>
+                      <FormLabel>End time</FormLabel>
                       <FormControl>
                         <Input type="time" {...field} />
                       </FormControl>
@@ -907,7 +1030,7 @@ export default function CalendarPage() {
                 />
               </div>
               <DialogFooter>
-                <Button type="submit">Salvează Eveniment</Button>
+                <Button type="submit">Save Event</Button>
               </DialogFooter>
             </form>
           </Form>

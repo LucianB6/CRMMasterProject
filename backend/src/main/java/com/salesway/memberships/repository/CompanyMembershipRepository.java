@@ -54,4 +54,10 @@ public interface CompanyMembershipRepository extends JpaRepository<CompanyMember
     );
 
     Optional<CompanyMembership> findFirstByRoleAndStatus(MembershipRole role, MembershipStatus status);
+
+    boolean existsByCompanyIdAndRoleInAndStatusIn(
+            UUID companyId,
+            Collection<MembershipRole> roles,
+            Collection<MembershipStatus> statuses
+    );
 }

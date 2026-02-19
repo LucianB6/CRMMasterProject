@@ -28,6 +28,18 @@ public class User extends AuditedEntity {
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
+    @Column(name = "google_sub", unique = true)
+    private String googleSub;
+
+    @Column(name = "email_verified", nullable = false)
+    private Boolean emailVerified = false;
+
+    @Column(name = "display_name")
+    private String displayName;
+
+    @Column(name = "picture_url")
+    private String pictureUrl;
+
     @Column(name = "password_updated_at")
     private Instant passwordUpdatedAt;
 
@@ -66,6 +78,38 @@ public class User extends AuditedEntity {
 
     public void setPasswordUpdatedAt(Instant passwordUpdatedAt) {
         this.passwordUpdatedAt = passwordUpdatedAt;
+    }
+
+    public String getGoogleSub() {
+        return googleSub;
+    }
+
+    public void setGoogleSub(String googleSub) {
+        this.googleSub = googleSub;
+    }
+
+    public Boolean getEmailVerified() {
+        return emailVerified;
+    }
+
+    public void setEmailVerified(Boolean emailVerified) {
+        this.emailVerified = emailVerified;
+    }
+
+    public String getDisplayName() {
+        return displayName;
+    }
+
+    public void setDisplayName(String displayName) {
+        this.displayName = displayName;
+    }
+
+    public String getPictureUrl() {
+        return pictureUrl;
+    }
+
+    public void setPictureUrl(String pictureUrl) {
+        this.pictureUrl = pictureUrl;
     }
 
     public Boolean getIsActive() {

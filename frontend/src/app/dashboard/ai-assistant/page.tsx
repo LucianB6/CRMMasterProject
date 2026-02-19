@@ -97,12 +97,12 @@ export default function AiAssistantPage() {
     } catch (error) {
       if (error instanceof ApiError) {
         const message =
-          error.body || error.message || 'A apărut o eroare la trimitere.';
+          error.body || error.message || 'An error occurred while sending.';
         setErrorMessage(message);
       } else if (error instanceof Error) {
         setErrorMessage(error.message);
       } else {
-        setErrorMessage('A apărut o eroare la trimitere.');
+        setErrorMessage('An error occurred while sending.');
       }
     } finally {
       setIsSending(false);
@@ -121,7 +121,7 @@ export default function AiAssistantPage() {
       <header>
         <h1 className="font-headline text-2xl">AI Assistant</h1>
         <p className="text-muted-foreground">
-          Îți oferă răspunsuri rapide și idei pentru fluxurile tale de lucru.
+          Get quick answers and ideas for your workflows.
         </p>
       </header>
 

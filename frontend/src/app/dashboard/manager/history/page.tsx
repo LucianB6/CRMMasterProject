@@ -22,7 +22,7 @@ import {
   startOfYear,
   subDays,
 } from 'date-fns';
-import { ro } from 'date-fns/locale';
+import { enUS } from 'date-fns/locale';
 import {
   Card,
   CardContent,
@@ -59,36 +59,36 @@ import {
 
 const metricsConfig = {
   sales: {
-    label: 'Vanzari',
+    label: 'Sales',
     dataKey: 'sales',
-    unitLabel: 'Unitati',
+    unitLabel: 'Units',
     icon: ShoppingCart,
     showValue: true,
-    barName: 'Vanzari',
+    barName: 'Sales',
   },
   calls: {
-    label: 'Apeluri Facute',
+    label: 'Calls Made',
     dataKey: 'calls',
-    unitLabel: 'Apeluri',
+    unitLabel: 'Calls',
     icon: Phone,
     showValue: false,
-    barName: 'Apeluri',
+    barName: 'Calls',
   },
   followUpSales: {
-    label: 'Vanzari Follow-up',
+    label: 'Sales Follow-up',
     dataKey: 'followUpSales',
-    unitLabel: 'Unitati',
+    unitLabel: 'Units',
     icon: RefreshCw,
     showValue: false,
-    barName: 'Vanzari Follow-up',
+    barName: 'Sales Follow-up',
   },
   outboundBookings: {
-    label: 'Programari Outbound',
+    label: 'Outbound Bookings',
     dataKey: 'outboundBookings',
-    unitLabel: 'Programari',
+    unitLabel: 'Bookings',
     icon: CalendarPlus,
     showValue: false,
-    barName: 'Programari',
+    barName: 'Bookings',
   },
 } as const;
 
@@ -228,7 +228,7 @@ export default function ManagerHistoryPage() {
 
       reports.forEach((report) => {
         const agentId = report.agent_membership_id ?? 'unknown';
-        const email = report.agent_email ?? 'Agent necunoscut';
+        const email = report.agent_email ?? 'Unknown agent';
         const metrics = mapReportToMetrics(report);
         const current = totalsByAgent.get(agentId) ?? {
           email,
@@ -279,7 +279,7 @@ export default function ManagerHistoryPage() {
         const report = reportMap.get(key);
         const metrics = report ? mapReportToMetrics(report) : null;
         return {
-          period: format(day, 'EEE dd MMM', { locale: ro }),
+          period: format(day, 'EEE dd MMM', { locale: enUS }),
           calls: metrics?.calls ?? 0,
           outboundBookings: metrics?.outboundBookings ?? 0,
           followUpSales: metrics?.followUpSales ?? 0,
@@ -301,7 +301,7 @@ export default function ManagerHistoryPage() {
         }) + 1;
 
       const buckets = Array.from({ length: weekCount }, (_, index) => ({
-        period: `Sapt. ${index + 1}`,
+        period: `Wk. ${index + 1}`,
         calls: 0,
         outboundBookings: 0,
         followUpSales: 0,
@@ -336,7 +336,7 @@ export default function ManagerHistoryPage() {
       const months = Array.from({ length: 12 }, (_, index) => {
         const date = new Date(Date.UTC(from.getUTCFullYear(), index, 1));
         return {
-          period: format(date, 'MMM', { locale: ro }),
+          period: format(date, 'MMM', { locale: enUS }),
           calls: 0,
           outboundBookings: 0,
           followUpSales: 0,
@@ -374,9 +374,9 @@ export default function ManagerHistoryPage() {
       setAgents(data);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : 'Eroare necunoscuta';
+        error instanceof Error ? error.message : 'Unknown error';
       toast({
-        title: 'Eroare',
+        title: 'Error',
         description: message,
         variant: 'destructive',
       });
@@ -466,9 +466,9 @@ export default function ManagerHistoryPage() {
         });
       } catch (error) {
         const message =
-          error instanceof Error ? error.message : 'Eroare necunoscuta';
+          error instanceof Error ? error.message : 'Unknown error';
         toast({
-          title: 'Eroare',
+          title: 'Error',
           description: message,
           variant: 'destructive',
         });
@@ -515,7 +515,7 @@ export default function ManagerHistoryPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
-                Medie / Perioada
+                Average / Period
               </CardTitle>
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
@@ -529,14 +529,14 @@ export default function ManagerHistoryPage() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Valoare Totala (RON)
+                  Total Value (RON)
                 </CardTitle>
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
                   {totals.totalValue > 0
-                    ? totals.totalValue.toLocaleString('ro-RO')
+                    ? totals.totalValue.toLocaleString('en-US')
                     : '-'}
                 </div>
               </CardContent>
@@ -546,7 +546,7 @@ export default function ManagerHistoryPage() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle>{`Grafic ${metric.label} - ${title}`}</CardTitle>
+              <CardTitle>{`Chart ${metric.label} - ${title}`}</CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
@@ -584,7 +584,7 @@ export default function ManagerHistoryPage() {
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle>{`Tabel ${metric.label} - ${title}`}</CardTitle>
+              <CardTitle>{`Table ${metric.label} - ${title}`}</CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
@@ -595,7 +595,7 @@ export default function ManagerHistoryPage() {
                       {metric.label} ({metric.unitLabel})
                     </TableHead>
                     {metric.showValue && (
-                      <TableHead className="text-right">Valoare (RON)</TableHead>
+                      <TableHead className="text-right">Value (RON)</TableHead>
                     )}
                   </TableRow>
                 </TableHeader>
@@ -608,7 +608,7 @@ export default function ManagerHistoryPage() {
                       </TableCell>
                       {metric.showValue && (
                         <TableCell className="text-right">
-                          {(item.value || 0).toLocaleString('ro-RO')}
+                          {(item.value || 0).toLocaleString('en-US')}
                         </TableCell>
                       )}
                     </TableRow>
@@ -656,26 +656,26 @@ export default function ManagerHistoryPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="font-headline text-2xl">Istoric Echipa</h1>
+        <h1 className="font-headline text-2xl">Team History</h1>
         <p className="text-muted-foreground">
-          Analizeaza performanta istorica a echipei sau a unui agent specific.
+          Analyze historical team performance or a specific agent.
         </p>
       </header>
 
       <Card>
         <CardHeader>
-          <CardTitle>Filtru Agent</CardTitle>
+          <CardTitle>Agent Filter</CardTitle>
           <CardDescription>
-            Selecteaza &quot;Toti Agentii&quot; pentru date agregate sau alege un agent.
+            Select &quot;All Agents&quot; for aggregated data or choose an agent.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
             <SelectTrigger className="w-full sm:w-[280px]">
-              <SelectValue placeholder="Selecteaza o optiune" />
+              <SelectValue placeholder="Select an option" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Toti Agentii</SelectItem>
+              <SelectItem value="all">All Agents</SelectItem>
               {agents.map((agent) => (
                 <SelectItem
                   key={agent.membership_id}
@@ -691,23 +691,23 @@ export default function ManagerHistoryPage() {
 
       {isLoading && (
         <p className="text-sm text-muted-foreground">
-          Se incarca istoricul...
+          Loading history...
         </p>
       )}
 
       {selectedAgentId !== 'all' ? (
         <p className="text-sm text-muted-foreground">
-          Selecteaza &quot;Toti Agentii&quot; pentru topuri pe echipa.
+          Select &quot;All Agents&quot; for team rankings.
         </p>
       ) : (
         <div className="space-y-2">
           <h2 className="text-lg font-semibold tracking-tight">
-            Top performanta echipa
+            Team performance leaders
           </h2>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Top Vanzari</CardTitle>
+                <CardTitle className="text-sm font-medium">Top Sales</CardTitle>
                 <ShoppingCart className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
@@ -721,7 +721,7 @@ export default function ManagerHistoryPage() {
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Top Apeluri</CardTitle>
+                <CardTitle className="text-sm font-medium">Top Calls</CardTitle>
                 <Phone className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
@@ -736,7 +736,7 @@ export default function ManagerHistoryPage() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Top Vanzari Follow-up
+                  Top Sales Follow-up
                 </CardTitle>
                 <RefreshCw className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
@@ -752,7 +752,7 @@ export default function ManagerHistoryPage() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
-                  Top Programari Outbound
+                  Top Outbound Bookings
                 </CardTitle>
                 <CalendarPlus className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
@@ -780,37 +780,37 @@ export default function ManagerHistoryPage() {
         }
       >
         <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
-          <TabsTrigger value="last7Days">Ultimele 7 zile</TabsTrigger>
-          <TabsTrigger value="currentMonth">Luna curenta</TabsTrigger>
-          <TabsTrigger value="currentYear">Anul curent</TabsTrigger>
-          <TabsTrigger value="previousYear">Anul precedent</TabsTrigger>
+          <TabsTrigger value="last7Days">Last 7 days</TabsTrigger>
+          <TabsTrigger value="currentMonth">Current month</TabsTrigger>
+          <TabsTrigger value="currentYear">Current year</TabsTrigger>
+          <TabsTrigger value="previousYear">Previous year</TabsTrigger>
         </TabsList>
         <TabsContent value="last7Days" className="mt-6">
           {renderPeriodContent(
-            'Ultimele 7 zile',
+            'Last 7 days',
             currentData.last7Days,
-            'Ziua'
+            'Day'
           )}
         </TabsContent>
         <TabsContent value="currentMonth" className="mt-6">
           {renderPeriodContent(
-            'Luna Curenta',
+            'Current Month',
             currentData.currentMonth,
-            'Saptamana'
+            'Week'
           )}
         </TabsContent>
         <TabsContent value="currentYear" className="mt-6">
           {renderPeriodContent(
-            'Anul Curent',
+            'Current Year',
             currentData.currentYear,
-            'Luna'
+            'Month'
           )}
         </TabsContent>
         <TabsContent value="previousYear" className="mt-6">
           {renderPeriodContent(
-            'Anul Precedent',
+            'Previous Year',
             currentData.previousYear,
-            'Luna'
+            'Month'
           )}
         </TabsContent>
       </Tabs>

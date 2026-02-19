@@ -19,7 +19,6 @@ import {
   XCircle,
   Pencil,
   Lock,
-  Bell,
   Clock,
 } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -34,7 +33,6 @@ import {
 } from '../../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Button } from '../../components/ui/button';
-import { Separator } from '../../components/ui/separator';
 import { Skeleton } from '../../components/ui/skeleton';
 import { useToast } from '../../hooks/use-toast';
 import { apiFetch } from '../../lib/api';
@@ -118,28 +116,28 @@ const emptyReport: NormalizedReport = {
 
 const statusConfig = {
   unfilled: {
-    text: 'Necompletat',
+    text: 'Unfilled',
     icon: XCircle,
     color: 'text-destructive',
-    buttonText: 'Completează raportul',
+    buttonText: 'Complete report',
   },
   draft: {
     text: 'Draft',
     icon: Pencil,
     color: 'text-yellow-500',
-    buttonText: 'Continuă raportul',
+    buttonText: 'Continue report',
   },
   submitted: {
-    text: 'Trimis',
+    text: 'Submitted',
     icon: CheckCircle2,
     color: 'text-green-500',
-    buttonText: 'Vezi raportul trimis',
+    buttonText: 'View submitted report',
   },
   locked: {
-    text: 'Blocat',
+    text: 'Locked',
     icon: Lock,
     color: 'text-muted-foreground',
-    buttonText: 'Vezi raportul',
+    buttonText: 'View report',
   },
 };
 
@@ -160,23 +158,6 @@ const addUtcDays = (date: Date, days: number) => {
   return next;
 };
 
-const notifications = [
-  {
-    id: 1,
-    text: 'Managerul a aprobat raportul de Vineri.',
-    time: 'Acum 15 minute',
-  },
-  {
-    id: 2,
-    text: 'Ai primit permisiunea de a edita raportul de Joi.',
-    time: 'Acum 2 ore',
-  },
-  {
-    id: 3,
-    text: 'Raportul de Miercuri a fost marcat ca întârziat.',
-    time: 'Ieri',
-  },
-];
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -240,7 +221,7 @@ export default function DashboardPage() {
   }, []);
 
   const formatNumber = useCallback((value: number) => {
-    return new Intl.NumberFormat('ro-RO').format(value);
+    return new Intl.NumberFormat('en-US').format(value);
   }, []);
 
   const formatCurrency = useCallback((value: number) => {
@@ -331,9 +312,9 @@ export default function DashboardPage() {
         setReportStatus(resolveStatus(data.status, data.id));
       } catch (error) {
         const message =
-          error instanceof Error ? error.message : 'Eroare necunoscută';
+          error instanceof Error ? error.message : 'Unknown error';
         toast({
-          title: 'Nu am putut încărca datele dashboard-ului',
+          title: 'Unable to load dashboard data',
           description: message,
           variant: 'destructive',
         });
@@ -362,19 +343,19 @@ export default function DashboardPage() {
 
         setHistoryLast7Days(
           buildHistorySeries(recentData, recentStart, todayUtc, (date) =>
-            date.toLocaleDateString('ro-RO', { weekday: 'short' })
+            date.toLocaleDateString('en-US', { weekday: 'short' })
           )
         );
         setHistoryCurrentMonth(
           buildHistorySeries(monthData, monthStart, todayUtc, (date) =>
-            date.toLocaleDateString('ro-RO', { day: 'numeric' })
+            date.toLocaleDateString('en-US', { day: 'numeric' })
           )
         );
       } catch (error) {
         const message =
-          error instanceof Error ? error.message : 'Eroare necunoscută';
+          error instanceof Error ? error.message : 'Unknown error';
         toast({
-          title: 'Nu am putut încărca graficele',
+          title: 'Unable to load charts',
           description: message,
           variant: 'destructive',
         });
@@ -392,24 +373,24 @@ export default function DashboardPage() {
   const quickStats = useMemo(
     () => [
       {
-        title: 'Apeluri făcute',
+        title: 'Calls made',
         value: formatNumber(report.inputs.outbound_dials),
         icon: Phone,
       },
       {
-        title: 'Conversii',
+        title: 'Conversions',
         value: formatNumber(report.inputs.pickups),
         icon: Target,
       },
       {
-        title: 'Vânzări închise',
+        title: 'Closed sales',
         value: formatNumber(
           report.inputs.sales_one_call_close + report.inputs.followup_sales
         ),
         icon: TrendingUp,
       },
       {
-        title: 'Valoare vânzări',
+        title: 'Sales value',
         value: formatCurrency(report.inputs.contract_value),
         icon: DollarSign,
       },
@@ -452,7 +433,7 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 items-center gap-4 sm:grid-cols-[1fr_auto_auto] sm:gap-6">
             <div className="space-y-1">
               <p className="font-headline text-xl">
-                {new Date().toLocaleDateString('ro-RO', {
+                {new Date().toLocaleDateString('en-US', {
                   weekday: 'long',
                   year: 'numeric',
                   month: 'long',
@@ -462,7 +443,7 @@ export default function DashboardPage() {
               <div className="flex items-center gap-2">
                 <Icon className={cn('h-5 w-5', currentStatus.color)} />
                 <span className={cn('font-semibold', currentStatus.color)}>
-                  Status raport: {currentStatus.text}
+                  Report status: {currentStatus.text}
                 </span>
               </div>
             </div>
@@ -472,7 +453,7 @@ export default function DashboardPage() {
                 <span className="text-sm font-semibold">{countdown}</span>
               </div>
               <p className="text-xs text-muted-foreground">
-                până la publicare automată
+                until auto-publish
               </p>
             </div>
             <Button
@@ -488,7 +469,7 @@ export default function DashboardPage() {
       </Card>
 
       <div className="space-y-2">
-        <h2 className="text-lg font-semibold tracking-tight">Quick Stats - Azi</h2>
+        <h2 className="text-lg font-semibold tracking-tight">Quick Stats - Today</h2>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {quickStats.map((stat) => (
             <Card key={stat.title}>
@@ -501,7 +482,7 @@ export default function DashboardPage() {
               <CardContent>
                 <div className="text-2xl font-bold">{stat.value}</div>
                 {reportStatus === 'draft' && (
-                  <p className="text-xs text-yellow-500">date nefinalizate</p>
+                  <p className="text-xs text-yellow-500">incomplete data</p>
                 )}
               </CardContent>
             </Card>
@@ -512,12 +493,12 @@ export default function DashboardPage() {
       <Card>
         <CardContent className="flex flex-col items-start gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h3 className="font-semibold">Raportul zilei</h3>
+            <h3 className="font-semibold">Today's report</h3>
             <p className="text-sm text-muted-foreground">
               Stare:{' '}
               {reportStatus === 'draft'
                 ? 'Draft salvat, netrimis.'
-                : 'Niciun draft activ.'}
+                : 'No active draft.'}
             </p>
           </div>
           <Button
@@ -525,7 +506,7 @@ export default function DashboardPage() {
             onClick={() => router.push('/dashboard/report')}
             className="w-full shrink-0 sm:w-auto"
           >
-            Editează raportul de azi
+            Edit today's report
           </Button>
         </CardContent>
       </Card>
@@ -534,19 +515,19 @@ export default function DashboardPage() {
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <CardTitle>Istoric personal</CardTitle>
-              <CardDescription>Sumarul activității tale.</CardDescription>
+              <CardTitle>Personal history</CardTitle>
+              <CardDescription>Summary of your activity.</CardDescription>
             </div>
             <Button variant="link" className="pr-0">
-              Vezi istoricul complet
+              View full history
             </Button>
           </div>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="7">
             <TabsList className="mb-4">
-              <TabsTrigger value="7">Ultimele 7 zile</TabsTrigger>
-              <TabsTrigger value="month">Luna curentă</TabsTrigger>
+              <TabsTrigger value="7">Last 7 days</TabsTrigger>
+              <TabsTrigger value="month">Current month</TabsTrigger>
             </TabsList>
             <TabsContent value="7">
               <ResponsiveContainer width="100%" height={200}>
@@ -567,13 +548,13 @@ export default function DashboardPage() {
                   <Legend iconSize={10} />
                   <Bar
                     dataKey="calls"
-                    name="Apeluri"
+                    name="Calls"
                     fill="hsl(var(--chart-1))"
                     radius={[4, 4, 0, 0]}
                   />
                   <Bar
                     dataKey="sales"
-                    name="Vânzări"
+                    name="Sales"
                     fill="hsl(var(--chart-2))"
                     radius={[4, 4, 0, 0]}
                   />
@@ -599,13 +580,13 @@ export default function DashboardPage() {
                   <Legend iconSize={10} />
                   <Bar
                     dataKey="calls"
-                    name="Apeluri"
+                    name="Calls"
                     fill="hsl(var(--chart-1))"
                     radius={[4, 4, 0, 0]}
                   />
                   <Bar
                     dataKey="sales"
-                    name="Vânzări"
+                    name="Sales"
                     fill="hsl(var(--chart-2))"
                     radius={[4, 4, 0, 0]}
                   />
@@ -616,31 +597,6 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Notificări personale</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col gap-4">
-            {notifications.map((notification, index) => (
-              <React.Fragment key={notification.id}>
-                <div className="flex items-start gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
-                    <Bell className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm">{notification.text}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {notification.time}
-                    </p>
-                  </div>
-                </div>
-                {index < notifications.length - 1 && <Separator />}
-              </React.Fragment>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
