@@ -48,6 +48,7 @@ const features = [
 const pricingPlans = [
   {
     name: "Starter",
+    planCode: "STARTER",
     price: "$29",
     description: "For individuals and small teams just getting started.",
     features: [
@@ -61,6 +62,7 @@ const pricingPlans = [
   },
   {
     name: "Pro",
+    planCode: "PRO",
     price: "$79",
     description: "For growing teams that need more power and automation.",
     features: [
@@ -75,6 +77,7 @@ const pricingPlans = [
   },
   {
     name: "Enterprise",
+    planCode: "ENTERPRISE",
     price: "Custom",
     description: "For large organizations with specific needs.",
     features: [
@@ -251,12 +254,13 @@ export default function LandingPage() {
                 to track activity, manage performance, and drive growth with
                 unprecedented transparency.
               </p>
-              <Link
-                href="/login"
+              <button
+                type="button"
+                onClick={scrollToPricing}
                 className="relative z-20 mt-10 inline-block rounded-full bg-sky-500 px-10 py-3 text-lg font-bold text-white shadow-lg transition-transform hover:scale-105"
               >
                 Join Now
-              </Link>
+              </button>
             </div>
           </div>
 
@@ -369,7 +373,7 @@ export default function LandingPage() {
                     ))}
                   </ul>
                   <Link
-                    href="#"
+                    href={`/signup/create-account?plan=${plan.planCode}`}
                     className={`mt-10 block w-full rounded-md px-6 py-3 text-center font-semibold transition-colors ${
                       plan.popular
                         ? 'bg-[#67C6EE] text-white hover:bg-opacity-90'

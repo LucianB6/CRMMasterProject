@@ -572,7 +572,7 @@ export default function DailyReportPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Valori Financiare</CardTitle>
+              <CardTitle>Financial Values</CardTitle>
               <CardDescription>Financial totals for today.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">

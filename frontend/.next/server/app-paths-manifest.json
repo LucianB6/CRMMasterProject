@@ -1,4 +1,8 @@
 {
-  "/dashboard/goals/page": "app/dashboard/goals/page.js",
-  "/dashboard/ai-assistant/page": "app/dashboard/ai-assistant/page.js"
+  "/page": "app/page.js",
+  "/signup/google-onboarding-company/page": "app/signup/google-onboarding-company/page.js",
+  "/dashboard/manager/history/page": "app/dashboard/manager/history/page.js",
+  "/dashboard/settings/page": "app/dashboard/settings/page.js",
+  "/dashboard/profile/page": "app/dashboard/profile/page.js",
+  "/dashboard/manager/overview/page": "app/dashboard/manager/overview/page.js"
 }
