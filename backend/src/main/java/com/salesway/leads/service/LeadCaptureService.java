@@ -12,6 +12,8 @@ import com.salesway.leads.entity.LeadAnswer;
 import com.salesway.leads.entity.LeadForm;
 import com.salesway.leads.entity.LeadFormQuestion;
 import com.salesway.leads.entity.LeadStandardFields;
+import com.salesway.leads.enums.LeadEventType;
+import com.salesway.leads.enums.LeadSource;
 import com.salesway.leads.repository.LeadAnswerRepository;
 import com.salesway.leads.repository.LeadFormQuestionRepository;
 import com.salesway.leads.repository.LeadFormRepository;
@@ -40,7 +42,9 @@ public class LeadCaptureService {
     private final LeadRepository leadRepository;
     private final LeadStandardFieldsRepository standardFieldsRepository;
     private final LeadAnswerRepository answerRepository;
+    private final LeadEventService leadEventService;
     private final ObjectMapper objectMapper;
+    private final int dedupeWindowDays;
 
     public LeadCaptureService(
             LeadFormRepository leadFormRepository,
@@ -48,14 +52,18 @@ public class LeadCaptureService {
             LeadRepository leadRepository,
             LeadStandardFieldsRepository standardFieldsRepository,
             LeadAnswerRepository answerRepository,
-            ObjectMapper objectMapper
+            LeadEventService leadEventService,
+            ObjectMapper objectMapper,
+            @org.springframework.beans.factory.annotation.Value("${app.leads.dedupe-window-days:7}") int dedupeWindowDays
     ) {
         this.leadFormRepository = leadFormRepository;
         this.questionRepository = questionRepository;
         this.leadRepository = leadRepository;
         this.standardFieldsRepository = standardFieldsRepository;
         this.answerRepository = answerRepository;
+        this.leadEventService = leadEventService;
         this.objectMapper = objectMapper;
+        this.dedupeWindowDays = dedupeWindowDays;
     }
 
     @Transactional(readOnly = true)
@@ -109,20 +117,36 @@ public class LeadCaptureService {
             validateAnswerValue(question, answerItem.getValue());
         }
 
+        String normalizedEmail = request.getStandard().getEmail().trim().toLowerCase();
+        String normalizedPhone = request.getStandard().getPhone().trim();
+        Lead duplicateCandidate = findDuplicateCandidate(form.getCompany().getId(), normalizedEmail, normalizedPhone);
+
         Lead lead = new Lead();
         lead.setCompany(form.getCompany());
         lead.setLeadForm(form);
-        lead.setSource("form");
+        applyTracking(lead, request.getTracking());
+        if (lead.getSource() == null) {
+            lead.setSource(LeadSource.FORM.name());
+        }
         lead.setStatus("new");
         lead.setSubmittedAt(Instant.now());
+        lead.setLastActivityAt(lead.getSubmittedAt());
+        if (duplicateCandidate != null) {
+            lead.setDuplicateOfLeadId(duplicateCandidate.getId());
+            lead.setDuplicateGroupId(
+                    duplicateCandidate.getDuplicateGroupId() != null
+                            ? duplicateCandidate.getDuplicateGroupId()
+                            : duplicateCandidate.getId()
+            );
+        }
         Lead savedLead = leadRepository.save(lead);
 
         LeadStandardFields standardFields = new LeadStandardFields();
         standardFields.setLead(savedLead);
         standardFields.setFirstName(request.getStandard().getFirstName());
         standardFields.setLastName(request.getStandard().getLastName());
-        standardFields.setEmail(request.getStandard().getEmail());
-        standardFields.setPhone(request.getStandard().getPhone());
+        standardFields.setEmail(normalizedEmail);
+        standardFields.setPhone(normalizedPhone);
         standardFieldsRepository.save(standardFields);
 
         for (PublicLeadSubmitRequest.Answer answerItem : request.getAnswers()) {
@@ -138,7 +162,51 @@ public class LeadCaptureService {
             answerRepository.save(answer);
         }
 
+        leadEventService.appendSystemEvent(
+                savedLead,
+                LeadEventType.LEAD_CREATED,
+                "Lead captured from public form",
+                Map.of(
+                        "source", savedLead.getSource(),
+                        "isDuplicate", savedLead.getDuplicateGroupId() != null
+                )
+        );
+        leadRepository.save(savedLead);
+
         return new PublicLeadSubmitResponse(savedLead.getId(), savedLead.getSubmittedAt(), savedLead.getStatus());
+    }
+
+    private Lead findDuplicateCandidate(UUID companyId, String email, String phone) {
+        Instant since = Instant.now().minusSeconds((long) dedupeWindowDays * 24L * 3600L);
+        return standardFieldsRepository.findRecentPotentialDuplicates(companyId, since, email, phone)
+                .stream()
+                .map(LeadStandardFields::getLead)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private void applyTracking(Lead lead, PublicLeadSubmitRequest.Tracking tracking) {
+        if (tracking == null) {
+            return;
+        }
+        lead.setSource(LeadSource.normalize(tracking.getSource()));
+        lead.setCampaign(trimToNull(tracking.getCampaign()));
+        lead.setAdSet(trimToNull(tracking.getAdSet()));
+        lead.setAdId(trimToNull(tracking.getAdId()));
+        lead.setUtmSource(trimToNull(tracking.getUtmSource()));
+        lead.setUtmCampaign(trimToNull(tracking.getUtmCampaign()));
+        lead.setUtmMedium(trimToNull(tracking.getUtmMedium()));
+        lead.setUtmContent(trimToNull(tracking.getUtmContent()));
+        lead.setLandingPage(trimToNull(tracking.getLandingPage()));
+        lead.setReferrer(trimToNull(tracking.getReferrer()));
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private void validateAnswerValue(LeadFormQuestion question, JsonNode value) {

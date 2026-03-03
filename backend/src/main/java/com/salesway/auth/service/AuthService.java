@@ -36,6 +36,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.Instant;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -116,6 +117,8 @@ public class AuthService {
         CompanyMembership membership;
 
         if (hasText(request.getInviteToken())) {
+            user.setFirstName(request.getFirstName());
+            user.setLastName(request.getLastName());
             membership = acceptAgentInvitation(user, claims.email(), request.getInviteToken().trim());
         } else if (request.getSignupIntent() == GoogleSignupIntent.MANAGER) {
             membership = createManagerWorkspace(user, request.getCompanyName(), request.getPlanCode());
@@ -179,6 +182,19 @@ public class AuthService {
             }
         } else if (hasText(request.getCompanyName()) || hasText(request.getPlanCode())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "companyName/planCode allowed only with signupIntent=MANAGER");
+        }
+
+        if (hasInvite) {
+            if (!hasText(request.getFirstName()) || !hasText(request.getLastName())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "firstName and lastName are required for invite acceptance");
+            }
+            String firstName = request.getFirstName().trim();
+            String lastName = request.getLastName().trim();
+            if (firstName.length() > 255 || lastName.length() > 255) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "firstName/lastName too long");
+            }
+            request.setFirstName(firstName);
+            request.setLastName(lastName);
         }
     }
 
@@ -258,21 +274,21 @@ public class AuthService {
     }
 
     private CompanyMembership acceptAgentInvitation(User user, String googleEmail, String inviteToken) {
-        Invitation invitation = invitationRepository.findByToken(inviteToken)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid invite token"));
+        Invitation invitation = invitationRepository.findByTokenForUpdate(inviteToken)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "invite invalid"));
 
         if (invitation.getStatus() != InvitationStatus.PENDING) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invitation is no longer usable");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "invite already used");
         }
 
         if (invitation.getExpiresAt().isBefore(Instant.now())) {
             invitation.setStatus(InvitationStatus.EXPIRED);
             invitationRepository.save(invitation);
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invitation expired");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "invite expired");
         }
 
         if (!invitation.getInvitedEmail().equalsIgnoreCase(googleEmail.trim())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invitation email mismatch");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "google email mismatch");
         }
 
         CompanyMembership membership = companyMembershipRepository
@@ -286,8 +302,17 @@ public class AuthService {
                     return newMembership;
                 });
 
+        CompanyMembership managerMembership = companyMembershipRepository
+                .findFirstByCompanyIdAndRoleInAndStatusIn(
+                        invitation.getCompany().getId(),
+                        EnumSet.of(MembershipRole.MANAGER, MembershipRole.ADMIN),
+                        EnumSet.of(MembershipStatus.ACTIVE)
+                )
+                .orElse(null);
+
         membership.setRole(MembershipRole.AGENT);
         membership.setStatus(MembershipStatus.ACTIVE);
+        membership.setManagerMembership(managerMembership);
         membership = companyMembershipRepository.save(membership);
 
         invitation.setStatus(InvitationStatus.ACCEPTED);
@@ -360,20 +385,25 @@ public class AuthService {
     }
 
     private Optional<CompanyMembership> getPreferredActiveMembership(User user) {
-        Optional<CompanyMembership> managerOrAdmin = companyMembershipRepository
-                .findFirstByUserIdAndRoleInAndStatusIn(
+        List<CompanyMembership> managerOrAdmin = companyMembershipRepository
+                .findByUserIdAndRoleInAndStatusInOrderByUpdatedAtDescCreatedAtDescIdDesc(
                         user.getId(),
                         EnumSet.of(MembershipRole.ADMIN, MembershipRole.MANAGER),
                         EnumSet.of(MembershipStatus.ACTIVE)
                 );
-        if (managerOrAdmin.isPresent()) {
-            return managerOrAdmin;
+        if (!managerOrAdmin.isEmpty()) {
+            return Optional.of(managerOrAdmin.get(0));
         }
 
-        return companyMembershipRepository.findFirstByUserIdAndStatusIn(
-                user.getId(),
-                EnumSet.of(MembershipStatus.ACTIVE)
-        );
+        List<CompanyMembership> activeMemberships = companyMembershipRepository
+                .findByUserIdAndStatusInOrderByUpdatedAtDescCreatedAtDescIdDesc(
+                        user.getId(),
+                        EnumSet.of(MembershipStatus.ACTIVE)
+                );
+        if (activeMemberships.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(activeMemberships.get(0));
     }
 
     private CreationContext resolveCreationContext(SignupRequest request, CompanyMembership creatorMembership) {

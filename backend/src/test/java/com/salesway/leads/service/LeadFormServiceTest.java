@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.salesway.companies.entity.Company;
 import com.salesway.companies.repository.CompanyRepository;
+import com.salesway.leads.dto.LeadQuestionReorderRequest;
 import com.salesway.leads.dto.LeadQuestionRequest;
 import com.salesway.leads.entity.LeadForm;
 import com.salesway.leads.entity.LeadFormQuestion;
@@ -17,9 +18,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -30,6 +34,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class LeadFormServiceTest {
 
     @Mock
@@ -155,6 +160,28 @@ class LeadFormServiceTest {
                     assertThat(rse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
                     assertThat(rse.getReason()).contains("optionsJson invalid JSON");
                 });
+    }
+
+    @Test
+    void reorderQuestions_incompleteOrderedIds_returnsBadRequest() {
+        LeadFormQuestion q1 = new LeadFormQuestion();
+        q1.setId(UUID.randomUUID());
+        q1.setLeadForm(form);
+        q1.setIsActive(true);
+
+        LeadFormQuestion q2 = new LeadFormQuestion();
+        q2.setId(UUID.randomUUID());
+        q2.setLeadForm(form);
+        q2.setIsActive(true);
+
+        when(questionRepository.findByLeadFormIdAndIsActiveTrue(form.getId())).thenReturn(List.of(q1, q2));
+
+        LeadQuestionReorderRequest request = new LeadQuestionReorderRequest();
+        request.setOrderedQuestionIds(List.of(q1.getId()));
+
+        assertThatThrownBy(() -> leadFormService.reorderQuestions(request))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
     }
 
     private LeadQuestionRequest baseRequest(String type) {

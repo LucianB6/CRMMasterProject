@@ -8,6 +8,8 @@ import com.salesway.leads.entity.Lead;
 import com.salesway.leads.entity.LeadAnswer;
 import com.salesway.leads.entity.LeadForm;
 import com.salesway.leads.entity.LeadFormQuestion;
+import com.salesway.leads.entity.LeadStandardFields;
+import com.salesway.leads.enums.LeadSource;
 import com.salesway.leads.repository.LeadAnswerRepository;
 import com.salesway.leads.repository.LeadFormQuestionRepository;
 import com.salesway.leads.repository.LeadFormRepository;
@@ -19,6 +21,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -31,10 +35,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class LeadCaptureServiceTest {
 
     @Mock
@@ -47,6 +53,8 @@ class LeadCaptureServiceTest {
     private LeadStandardFieldsRepository standardFieldsRepository;
     @Mock
     private LeadAnswerRepository answerRepository;
+    @Mock
+    private LeadEventService leadEventService;
 
     private LeadCaptureService service;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -63,7 +71,9 @@ class LeadCaptureServiceTest {
                 leadRepository,
                 standardFieldsRepository,
                 answerRepository,
-                objectMapper
+                leadEventService,
+                objectMapper,
+                7
         );
 
         Company company = new Company();
@@ -103,6 +113,8 @@ class LeadCaptureServiceTest {
             }
             return lead;
         });
+        when(standardFieldsRepository.findRecentPotentialDuplicates(any(), any(), any(), any()))
+                .thenReturn(List.of());
     }
 
     @Test
@@ -143,6 +155,43 @@ class LeadCaptureServiceTest {
         assertThat(response.status()).isEqualTo("new");
     }
 
+    @Test
+    void submitWithTrackingAndDuplicate_marksDuplicateAndPersistsSource() {
+        when(questionRepository.findByLeadFormIdAndIsActiveTrue(form.getId()))
+                .thenReturn(List.of(shortTextQuestion, singleSelectQuestion));
+
+        Lead existingLead = new Lead();
+        UUID existingLeadId = UUID.randomUUID();
+        existingLead.setId(existingLeadId);
+        existingLead.setSubmittedAt(Instant.now().minusSeconds(3600));
+        Lead duplicateLead = new Lead();
+        duplicateLead.setId(existingLeadId);
+        duplicateLead.setDuplicateGroupId(existingLeadId);
+        LeadStandardFields duplicateStandard = new LeadStandardFields();
+        duplicateStandard.setLead(duplicateLead);
+
+        when(standardFieldsRepository.findRecentPotentialDuplicates(any(), any(), any(), any()))
+                .thenReturn(List.of(duplicateStandard));
+
+        PublicLeadSubmitRequest request = baseRequest(List.of(
+                answer(shortTextQuestion.getId(), "Acme SRL"),
+                answer(singleSelectQuestion.getId(), "Facebook")
+        ));
+        PublicLeadSubmitRequest.Tracking tracking = new PublicLeadSubmitRequest.Tracking();
+        tracking.setSource("meta");
+        tracking.setCampaign("camp-1");
+        request.setTracking(tracking);
+
+        service.submitLead("slug", request);
+
+        ArgumentCaptor<Lead> leadCaptor = ArgumentCaptor.forClass(Lead.class);
+        verify(leadRepository, atLeastOnce()).save(leadCaptor.capture());
+        Lead persisted = leadCaptor.getAllValues().get(0);
+        assertThat(persisted.getSource()).isEqualTo(LeadSource.META.name());
+        assertThat(persisted.getDuplicateGroupId()).isEqualTo(existingLeadId);
+        assertThat(persisted.getDuplicateOfLeadId()).isEqualTo(existingLeadId);
+    }
+
 
     @Test
     void submitSelectWithInvalidOptionsJsonInQuestion_returnsBadRequest() {
@@ -181,6 +230,7 @@ class LeadCaptureServiceTest {
                     assertThat(rse.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
                     assertThat(rse.getReason()).contains("not in options");
                 });
+        verify(leadEventService, never()).appendSystemEvent(any(), any(), any(), any());
     }
 
     @Test

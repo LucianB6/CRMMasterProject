@@ -22,7 +22,7 @@ class ApiExceptionHandlerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().get("message")).contains("questionType invalid");
+        assertThat(response.getBody().get("message")).asString().contains("questionType invalid");
     }
 
 
@@ -36,7 +36,7 @@ class ApiExceptionHandlerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().get("message")).contains("answers[].value invalid JSON type");
+        assertThat(response.getBody().get("message")).asString().contains("answers[].value invalid JSON type");
     }
 
     @Test
@@ -54,7 +54,7 @@ class ApiExceptionHandlerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().get("message")).contains("Invalid page");
+        assertThat(response.getBody().get("message")).asString().contains("Invalid page");
     }
 
     @Test
@@ -71,6 +71,6 @@ class ApiExceptionHandlerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().get("message")).contains("invalid parameter type: page");
+        assertThat(response.getBody().get("message")).asString().contains("invalid parameter type: page");
     }
 }

@@ -1,15 +1,15 @@
 package com.salesway.leads.dto;
 
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotEmpty;
 
 import java.util.List;
 import java.util.UUID;
 
 public class LeadQuestionReorderRequest {
     @Valid
-    @NotEmpty
     private List<Item> items;
+
+    private List<UUID> orderedQuestionIds;
 
     public List<Item> getItems() {
         return items;
@@ -17,6 +17,14 @@ public class LeadQuestionReorderRequest {
 
     public void setItems(List<Item> items) {
         this.items = items;
+    }
+
+    public List<UUID> getOrderedQuestionIds() {
+        return orderedQuestionIds;
+    }
+
+    public void setOrderedQuestionIds(List<UUID> orderedQuestionIds) {
+        this.orderedQuestionIds = orderedQuestionIds;
     }
 
     public static class Item {

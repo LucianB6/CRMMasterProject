@@ -1,9 +1,10 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useCallback, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
-import { useCallback, useState } from 'react';
+
 import { Button } from '../../../../components/ui/button';
 import {
   Card,
@@ -12,13 +13,6 @@ import {
   CardHeader,
   CardTitle,
 } from '../../../../components/ui/card';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../../../../components/ui/select';
 import {
   Form,
   FormControl,
@@ -31,42 +25,44 @@ import { Input } from '../../../../components/ui/input';
 import { useToast } from '../../../../hooks/use-toast';
 import { apiFetch } from '../../../../lib/api';
 
-const createAgentSchema = z
-  .object({
-    email: z
-      .string()
-      .email('Please enter a valid email address.')
-      .max(255, 'Email must be at most 255 characters.'),
-    password: z
-      .string()
-      .min(8, 'Password must be at least 8 characters.')
-      .max(255, 'Password must be at most 255 characters.'),
-    retypePassword: z
-      .string()
-      .min(8, 'Password confirmation must be at least 8 characters.')
-      .max(255, 'Password confirmation must be at most 255 characters.'),
-    firstName: z.string().min(1, 'First name is required.').max(255),
-    lastName: z.string().min(1, 'Last name is required.').max(255),
-    role: z.enum(['AGENT', 'MANAGER']),
-  })
-  .refine((data) => data.password === data.retypePassword, {
-    message: 'Parolele nu se potrivesc.',
-    path: ['retypePassword'],
-  });
+const createInviteSchema = z.object({
+  email: z
+    .string()
+    .email('Please enter a valid email address.')
+    .max(255, 'Email must be at most 255 characters.'),
+});
+
+type CreateInviteValues = z.infer<typeof createInviteSchema>;
+
+type ManagerInvitationResponse = {
+  invitationId: string;
+  inviteToken: string;
+  inviteLink: string;
+  expiresAt: string;
+  status: string;
+};
+
+const formatExpiry = (value: string) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat('en-US', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date);
+};
 
 export default function CreateAgentPage() {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [createdInvite, setCreatedInvite] = useState<ManagerInvitationResponse | null>(null);
 
-  const form = useForm<z.infer<typeof createAgentSchema>>({
-    resolver: zodResolver(createAgentSchema),
+  const form = useForm<CreateInviteValues>({
+    resolver: zodResolver(createInviteSchema),
     defaultValues: {
       email: '',
-      password: '',
-      retypePassword: '',
-      firstName: '',
-      lastName: '',
-      role: 'AGENT',
     },
   });
 
@@ -77,38 +73,51 @@ export default function CreateAgentPage() {
     return window.localStorage.getItem('salesway_token');
   }, []);
 
+  const copyToClipboard = useCallback(async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast({
+        title: 'Copied',
+        description: `${label} copied to clipboard.`,
+      });
+    } catch {
+      toast({
+        title: 'Copy failed',
+        description: `Unable to copy ${label.toLowerCase()}.`,
+        variant: 'destructive',
+      });
+    }
+  }, [toast]);
+
   const onSubmit = useCallback(
-    async (values: z.infer<typeof createAgentSchema>) => {
+    async (values: CreateInviteValues) => {
       try {
         setIsSubmitting(true);
         const token = getAuthToken();
-        const data = await apiFetch<{ email: string }>('/manager/agents', {
+        const data = await apiFetch<ManagerInvitationResponse>('/manager/invitations', {
           method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+          headers: {
+            'Content-Type': 'application/json',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
           body: JSON.stringify({
             email: values.email,
-            password: values.password,
-            retypePassword: values.retypePassword,
-            firstName: values.firstName,
-            lastName: values.lastName,
-            role: values.role,
           }),
         });
+
+        setCreatedInvite(data);
         toast({
-          title: 'Account creat cu succes!',
-          description: `Accountul pentru ${data.email} a fost creat.`,
+          title: 'Invitation created',
+          description: `Invite prepared for ${values.email}.`,
         });
-        form.reset();
+        form.reset({ email: values.email });
       } catch (error) {
         toast({
           title: 'Error',
           description:
             error instanceof Error
               ? error.message
-              : 'Unable to create agent.',
+              : 'Unable to create invitation.',
           variant: 'destructive',
         });
       } finally {
@@ -121,58 +130,31 @@ export default function CreateAgentPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="font-headline text-2xl">Create Agent Account</h1>
+        <h1 className="font-headline text-2xl">Invite Agent</h1>
         <p className="text-muted-foreground">
-          Add a new member to your sales team.
+          Generate a single-use invitation for a new agent.
         </p>
       </header>
+
       <Card className="max-w-2xl">
         <CardHeader>
-          <CardTitle>Agent Details</CardTitle>
+          <CardTitle>Invitation Details</CardTitle>
           <CardDescription>
-            Fill in the details below to create a new account.
+            The invited user must sign in with Google using the same email.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="firstName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>First Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Alex" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="lastName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Last Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Popescu" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
               <FormField
                 control={form.control}
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email Address</FormLabel>
+                    <FormLabel>Agent Email Address</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="alex.popescu@exemplu.com"
+                        placeholder="agent@example.com"
                         {...field}
                         type="email"
                       />
@@ -181,72 +163,62 @@ export default function CreateAgentPage() {
                   </FormItem>
                 )}
               />
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="password"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Password</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="Enter a password"
-                          {...field}
-                          type="password"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="retypePassword"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Confirm password</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="Re-enter the password"
-                          {...field}
-                          type="password"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <FormField
-                control={form.control}
-                name="role"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Rol</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select role" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="AGENT">Agent</SelectItem>
-                        <SelectItem value="MANAGER">Manager</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+
               <div className="flex justify-end">
                 <Button type="submit" disabled={isSubmitting}>
-                  Create Account
+                  {isSubmitting ? 'Generating...' : 'Generate Invitation'}
                 </Button>
               </div>
             </form>
           </Form>
         </CardContent>
       </Card>
+
+      {createdInvite && (
+        <Card className="max-w-2xl">
+          <CardHeader>
+            <CardTitle>Invitation Ready</CardTitle>
+            <CardDescription>
+              Status: {createdInvite.status}. Expires at {formatExpiry(createdInvite.expiresAt)}.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Invite Link</p>
+              <Input value={createdInvite.inviteLink} readOnly />
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => copyToClipboard(createdInvite.inviteLink, 'Invite link')}
+                >
+                  Copy Link
+                </Button>
+                <a
+                  href={createdInvite.inviteLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium"
+                >
+                  Open Link
+                </a>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Invite Token</p>
+              <Input value={createdInvite.inviteToken} readOnly />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => copyToClipboard(createdInvite.inviteToken, 'Invite token')}
+              >
+                Copy Token
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
