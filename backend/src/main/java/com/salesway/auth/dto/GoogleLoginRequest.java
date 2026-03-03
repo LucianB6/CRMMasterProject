@@ -18,6 +18,12 @@ public class GoogleLoginRequest {
     @Size(max = 255)
     private String companyName;
 
+    @Size(max = 255)
+    private String firstName;
+
+    @Size(max = 255)
+    private String lastName;
+
     public String getIdToken() {
         return idToken;
     }
@@ -56,5 +62,21 @@ public class GoogleLoginRequest {
 
     public void setCompanyName(String companyName) {
         this.companyName = companyName;
+    }
+
+    public String getFirstName() {
+        return firstName;
+    }
+
+    public void setFirstName(String firstName) {
+        this.firstName = firstName;
+    }
+
+    public String getLastName() {
+        return lastName;
+    }
+
+    public void setLastName(String lastName) {
+        this.lastName = lastName;
     }
 }

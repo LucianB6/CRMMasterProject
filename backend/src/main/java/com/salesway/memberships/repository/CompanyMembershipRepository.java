@@ -21,11 +21,28 @@ public interface CompanyMembershipRepository extends JpaRepository<CompanyMember
             Collection<MembershipStatus> statuses
     );
 
+    List<CompanyMembership> findByUserIdAndRoleInAndStatusInOrderByUpdatedAtDescCreatedAtDescIdDesc(
+            UUID userId,
+            Collection<MembershipRole> roles,
+            Collection<MembershipStatus> statuses
+    );
+
     Optional<CompanyMembership> findFirstByUserId(UUID userId);
+
+    List<CompanyMembership> findByUserIdAndStatusInOrderByUpdatedAtDescCreatedAtDescIdDesc(
+            UUID userId,
+            Collection<MembershipStatus> statuses
+    );
 
     Optional<CompanyMembership> findByCompanyIdAndId(UUID companyId, UUID membershipId);
 
     Optional<CompanyMembership> findByCompanyIdAndUserId(UUID companyId, UUID userId);
+
+    Optional<CompanyMembership> findFirstByCompanyIdAndRoleInAndStatusIn(
+            UUID companyId,
+            Collection<MembershipRole> roles,
+            Collection<MembershipStatus> statuses
+    );
 
     List<CompanyMembership> findByCompanyIdAndRoleAndStatusIn(
             UUID companyId,

@@ -1,5 +1,7 @@
 package com.salesway.leads.dto;
 
+import com.fasterxml.jackson.databind.JsonNode;
+
 import java.util.UUID;
 
 public record LeadAnswerResponse(
@@ -7,7 +9,9 @@ public record LeadAnswerResponse(
         String questionLabelSnapshot,
         String questionTypeSnapshot,
         Boolean requiredSnapshot,
-        String optionsSnapshot,
-        String answerValue
+        String optionsSnapshotJson,
+        String answerValueJson,
+        JsonNode optionsSnapshot,
+        JsonNode answerValue
 ) {
 }

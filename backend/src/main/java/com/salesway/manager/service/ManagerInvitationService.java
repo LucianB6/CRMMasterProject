@@ -1,11 +1,15 @@
 package com.salesway.manager.service;
 
 import com.salesway.common.enums.MembershipRole;
+import com.salesway.email.dto.InvitationEmailPayload;
+import com.salesway.email.service.EmailService;
 import com.salesway.invitations.entity.Invitation;
 import com.salesway.invitations.enums.InvitationStatus;
 import com.salesway.invitations.repository.InvitationRepository;
 import com.salesway.manager.dto.ManagerInviteCreateResponse;
 import com.salesway.memberships.entity.CompanyMembership;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -19,30 +23,35 @@ import java.util.Base64;
 
 @Service
 public class ManagerInvitationService {
+    private static final Logger LOG = LoggerFactory.getLogger(ManagerInvitationService.class);
     private static final int TOKEN_BYTES = 32;
     private static final long INVITE_TTL_DAYS = 7;
 
     private final ManagerAccessService managerAccessService;
     private final InvitationRepository invitationRepository;
+    private final EmailService emailService;
     private final SecureRandom secureRandom = new SecureRandom();
     private final String inviteBaseUrl;
 
     public ManagerInvitationService(
             ManagerAccessService managerAccessService,
             InvitationRepository invitationRepository,
+            EmailService emailService,
             @Value("${app.auth.invite-base-url:http://localhost:3000/invite/accept}") String inviteBaseUrl
     ) {
         this.managerAccessService = managerAccessService;
         this.invitationRepository = invitationRepository;
+        this.emailService = emailService;
         this.inviteBaseUrl = inviteBaseUrl;
     }
 
     @Transactional
     public ManagerInviteCreateResponse createInvite(String emailRaw) {
         CompanyMembership managerMembership = managerAccessService.getManagerMembership();
+        String senderEmail = managerMembership.getUser().getEmail();
         String invitedEmail = normalizeEmail(emailRaw);
 
-        if (managerMembership.getUser().getEmail().equalsIgnoreCase(invitedEmail)) {
+        if (senderEmail.equalsIgnoreCase(invitedEmail)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot invite your own email");
         }
 
@@ -56,6 +65,7 @@ public class ManagerInvitationService {
 
         if (existingPending != null) {
             if (existingPending.getExpiresAt().isAfter(Instant.now())) {
+                sendInviteEmail(existingPending, senderEmail);
                 return toResponse(existingPending);
             }
             existingPending.setStatus(InvitationStatus.EXPIRED);
@@ -70,6 +80,7 @@ public class ManagerInvitationService {
         invitation.setStatus(InvitationStatus.PENDING);
         invitation.setExpiresAt(Instant.now().plus(INVITE_TTL_DAYS, ChronoUnit.DAYS));
         invitation = invitationRepository.save(invitation);
+        sendInviteEmail(invitation, senderEmail);
 
         return toResponse(invitation);
     }
@@ -96,5 +107,21 @@ public class ManagerInvitationService {
         byte[] bytes = new byte[TOKEN_BYTES];
         secureRandom.nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private void sendInviteEmail(Invitation invitation, String senderEmail) {
+        String inviteLink = inviteBaseUrl + "?token=" + invitation.getToken();
+        try {
+            emailService.sendInvitationEmail(new InvitationEmailPayload(
+                    invitation.getInvitedEmail(),
+                    senderEmail,
+                    invitation.getCompany().getName(),
+                    invitation.getExpiresAt(),
+                    inviteLink
+            ));
+            LOG.info("Invitation email processed for {}", invitation.getInvitedEmail());
+        } catch (RuntimeException ex) {
+            LOG.error("Invitation email processing failed for {}", invitation.getInvitedEmail(), ex);
+        }
     }
 }

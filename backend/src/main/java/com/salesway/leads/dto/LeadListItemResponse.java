@@ -10,6 +10,11 @@ public record LeadListItemResponse(
         String firstName,
         String lastName,
         String email,
-        String phone
+        String phone,
+        UUID assignedToUserId,
+        Instant lastActivityAt,
+        String source,
+        boolean isDuplicate,
+        UUID duplicateGroupId
 ) {
 }

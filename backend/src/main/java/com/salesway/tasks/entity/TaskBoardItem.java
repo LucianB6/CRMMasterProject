@@ -17,6 +17,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
+import java.util.UUID;
 
 @Entity
 @Table(name = "task_board_items", indexes = {
@@ -27,6 +28,12 @@ public class TaskBoardItem extends AuditedEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "membership_id", nullable = false)
     private CompanyMembership membership;
+
+    @Column(name = "lead_id")
+    private UUID leadId;
+
+    @Column(name = "assignee_user_id")
+    private UUID assigneeUserId;
 
     @NotBlank
     @Size(max = 255)
@@ -50,6 +57,22 @@ public class TaskBoardItem extends AuditedEntity {
 
     public void setMembership(CompanyMembership membership) {
         this.membership = membership;
+    }
+
+    public UUID getLeadId() {
+        return leadId;
+    }
+
+    public void setLeadId(UUID leadId) {
+        this.leadId = leadId;
+    }
+
+    public UUID getAssigneeUserId() {
+        return assigneeUserId;
+    }
+
+    public void setAssigneeUserId(UUID assigneeUserId) {
+        this.assigneeUserId = assigneeUserId;
     }
 
     public String getTitle() {

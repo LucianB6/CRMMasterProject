@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.LinkedHashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -112,16 +113,24 @@ public class LeadFormService {
     @Transactional
     public void reorderQuestions(LeadQuestionReorderRequest request) {
         LeadForm form = getOrCreateFormForManager();
-        Map<UUID, Integer> orderMap = request.getItems().stream()
-                .collect(Collectors.toMap(LeadQuestionReorderRequest.Item::getQuestionId, LeadQuestionReorderRequest.Item::getDisplayOrder));
-        List<LeadFormQuestion> questions = questionRepository.findByLeadFormIdAndIdIn(form.getId(), orderMap.keySet());
-        if (questions.size() != orderMap.size()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "One or more questions do not belong to this form");
+        List<LeadFormQuestion> activeQuestions = questionRepository.findByLeadFormIdAndIsActiveTrue(form.getId());
+        Set<UUID> activeIds = activeQuestions.stream().map(LeadFormQuestion::getId).collect(Collectors.toSet());
+        List<UUID> orderedIds = resolveOrderedIds(request);
+        if (orderedIds.size() != activeIds.size() || !new HashSet<>(orderedIds).containsAll(activeIds)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "orderedQuestionIds must include all active question ids exactly once");
         }
-        for (LeadFormQuestion question : questions) {
-            question.setDisplayOrder(orderMap.get(question.getId()));
+
+        Map<UUID, LeadFormQuestion> byId = activeQuestions.stream()
+                .collect(Collectors.toMap(LeadFormQuestion::getId, q -> q));
+        for (int index = 0; index < orderedIds.size(); index++) {
+            UUID questionId = orderedIds.get(index);
+            LeadFormQuestion question = byId.get(questionId);
+            if (question == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "questionId does not belong to this form: " + questionId);
+            }
+            question.setDisplayOrder(index + 1);
         }
-        questionRepository.saveAll(questions);
+        questionRepository.saveAll(activeQuestions);
     }
 
     @Transactional
@@ -232,5 +241,28 @@ public class LeadFormService {
         } catch (JsonProcessingException exception) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to serialize optionsJson", exception);
         }
+    }
+
+    private List<UUID> resolveOrderedIds(LeadQuestionReorderRequest request) {
+        if (request.getOrderedQuestionIds() != null && !request.getOrderedQuestionIds().isEmpty()) {
+            return request.getOrderedQuestionIds();
+        }
+        if (request.getItems() == null || request.getItems().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "orderedQuestionIds is required");
+        }
+
+        Map<Integer, UUID> byOrder = new LinkedHashMap<>();
+        for (LeadQuestionReorderRequest.Item item : request.getItems()) {
+            if (item.getQuestionId() == null || item.getDisplayOrder() == null || item.getDisplayOrder() < 1) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "items must include questionId and displayOrder >= 1");
+            }
+            if (byOrder.put(item.getDisplayOrder(), item.getQuestionId()) != null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "items contain duplicate displayOrder");
+            }
+        }
+        return byOrder.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(Map.Entry::getValue)
+                .toList();
     }
 }
