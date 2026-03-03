@@ -11,6 +11,7 @@ import {
   Bot,
   ListTodo,
   Target,
+  ClipboardList,
 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import * as React from 'react';
@@ -59,6 +60,11 @@ const managerMenuItems = [
     href: '/dashboard/manager/forecast',
     label: 'Sales forecast',
     icon: LineChart,
+  },
+  {
+    href: '/dashboard/manager/leads',
+    label: 'Leads',
+    icon: ClipboardList,
   },
   { href: '/dashboard/manager/reports', label: 'Team Reports', icon: FileText },
   { href: '/dashboard/notifications', label: 'Notifications', icon: Bell },
@@ -256,9 +262,9 @@ export default function DashboardLayout({
         </SidebarFooter>
       </Sidebar>
 
-      <SidebarInset>
+      <SidebarInset className="min-w-0 overflow-x-hidden">
         <DashboardHeader showNotifications={isManager} />
-        <main className="h-full flex-1 overflow-y-auto p-4 md:p-6">
+        <main className="flex h-full min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 md:p-6">
           {children}
         </main>
       </SidebarInset>

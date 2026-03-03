@@ -9,7 +9,7 @@ import * as z from "zod";
 
 import { Logo } from "../../components/logo";
 import { ApiError, apiFetch } from "../../lib/api";
-import { completeGoogleAuth, mapInternalAuthError } from "../../lib/auth/google-auth";
+import { mapInternalAuthError } from "../../lib/auth/google-auth";
 import { Button } from "../../components/ui/button";
 import {
   Card,
@@ -51,16 +51,18 @@ function LoginPageContent() {
   const { toast } = useToast();
 
   const googleButtonRef = React.useRef<HTMLDivElement>(null);
-  const [inviteToken, setInviteToken] = React.useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isGooglePending, setIsGooglePending] = React.useState(false);
   const [isGoogleReady, setIsGoogleReady] = React.useState(false);
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
-    const token = new URLSearchParams(window.location.search).get("inviteToken");
-    setInviteToken(token);
-  }, []);
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("inviteToken") ?? params.get("token");
+    if (!token) return;
+    const query = new URLSearchParams({ inviteToken: token });
+    router.replace(`/invite/accept?${query.toString()}`);
+  }, [router]);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -129,15 +131,13 @@ function LoginPageContent() {
 
       setIsGooglePending(true);
       try {
-        const payload = inviteToken
-          ? await completeGoogleAuth({ kind: "invite", idToken, inviteToken })
-          : await apiFetch<{ token: string }>("/auth/google", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json"
-              },
-              body: JSON.stringify({ idToken })
-            });
+        const payload = await apiFetch<{ token: string }>("/auth/google", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ idToken })
+        });
 
         toast({ title: "Authentication successful", description: "Redirecting..." });
         await finishAuth(payload.token);
@@ -151,7 +151,7 @@ function LoginPageContent() {
         setIsGooglePending(false);
       }
     },
-    [inviteToken, isGooglePending, toast]
+    [isGooglePending, toast]
   );
 
   React.useEffect(() => {
@@ -176,7 +176,7 @@ function LoginPageContent() {
         type: "standard",
         shape: "pill",
         size: "large",
-        text: inviteToken ? "continue_with" : "signin_with",
+        text: "signin_with",
         width: 320
       });
       setIsGoogleReady(true);
@@ -203,7 +203,7 @@ function LoginPageContent() {
     return () => {
       script.onload = null;
     };
-  }, [inviteToken, onGoogleCredential]);
+  }, [onGoogleCredential]);
 
   const onSubmit = async (values: LoginFormValues) => {
     setIsSubmitting(true);
@@ -240,9 +240,7 @@ function LoginPageContent() {
           <Logo className="mb-4 text-[#67C6EE]" />
           <CardTitle className="text-2xl text-[#67C6EE]">Welcome Back</CardTitle>
           <CardDescription>
-            {inviteToken
-              ? "Continue with Google to accept your invitation."
-              : "Sign in to your workspace or create a new manager account."}
+            Sign in to your workspace or create a new manager account.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -260,56 +258,50 @@ function LoginPageContent() {
             )}
           </div>
 
-          {!inviteToken && (
-            <>
-              <div className="my-4 text-center text-xs uppercase tracking-wide text-muted-foreground">
-                or continue with email
-              </div>
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Email</FormLabel>
-                        <FormControl>
-                          <Input placeholder="manager@example.com" {...field} type="email" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="password"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Password</FormLabel>
-                        <FormControl>
-                          <Input placeholder="••••••••" {...field} type="password" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <Button
-                    type="submit"
-                    className="w-full bg-[#67C6EE] text-white hover:bg-[#67C6EE]/90"
-                    disabled={isSubmitting}
-                  >
-                    {isSubmitting ? "Signing In..." : "Sign In"}
-                  </Button>
-                </form>
-              </Form>
-            </>
-          )}
+          <div className="my-4 text-center text-xs uppercase tracking-wide text-muted-foreground">
+            or continue with email
+          </div>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input placeholder="manager@example.com" {...field} type="email" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Password</FormLabel>
+                    <FormControl>
+                      <Input placeholder="••••••••" {...field} type="password" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <Button
+                type="submit"
+                className="w-full bg-[#67C6EE] text-white hover:bg-[#67C6EE]/90"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? "Signing In..." : "Sign In"}
+              </Button>
+            </form>
+          </Form>
 
-          {!inviteToken && (
-            <Button asChild variant="outline" className="mt-4 w-full">
-              <Link href="/signup/choose-plan">Create Manager Account</Link>
-            </Button>
-          )}
+          <Button asChild variant="outline" className="mt-4 w-full">
+            <Link href="/signup/choose-plan">Create Manager Account</Link>
+          </Button>
         </CardContent>
       </Card>
     </div>

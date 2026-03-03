@@ -8,8 +8,7 @@ import { useForm } from "react-hook-form";
 import * as z from "zod";
 
 import { Logo } from "../../../components/logo";
-import { ApiError, apiFetch } from "../../../lib/api";
-import { completeGoogleAuth, mapInternalAuthError } from "../../../lib/auth/google-auth";
+import { mapInternalAuthError } from "../../../lib/auth/google-auth";
 import {
   type PlanCode,
   resolveSelectedPlanCode,
@@ -67,7 +66,6 @@ function CreateAccountContent() {
 
   const googleButtonRef = React.useRef<HTMLDivElement>(null);
   const [selectedPlanCode, setSelectedPlanCode] = React.useState<PlanCode | null>(null);
-  const [inviteToken, setInviteToken] = React.useState<string | null>(null);
   const [isGooglePending, setIsGooglePending] = React.useState(false);
   const [isGoogleReady, setIsGoogleReady] = React.useState(false);
   const [isSubmittingInternal, setIsSubmittingInternal] = React.useState(false);
@@ -86,9 +84,10 @@ function CreateAccountContent() {
   React.useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    const nextInviteToken = params.get("inviteToken");
+    const nextInviteToken = params.get("inviteToken") ?? params.get("token");
     if (nextInviteToken) {
-      setInviteToken(nextInviteToken);
+      const query = new URLSearchParams({ inviteToken: nextInviteToken });
+      router.replace(`/invite/accept?${query.toString()}`);
       return;
     }
 
@@ -101,31 +100,6 @@ function CreateAccountContent() {
     setSelectedPlanCode(resolvedPlan);
     writeOnboardingState({ selectedPlanCode: resolvedPlan });
   }, [router]);
-
-  const resolveLandingRoute = async (token: string) => {
-    try {
-      await apiFetch("/manager/overview/agents", {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`
-        },
-        cache: "no-store"
-      });
-      return { route: "/dashboard/manager/overview", role: "manager" };
-    } catch (error) {
-      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
-        return { route: "/dashboard", role: "agent" };
-      }
-    }
-    return { route: "/dashboard", role: "agent" };
-  };
-
-  const finishAuth = async (token: string) => {
-    localStorage.setItem("salesway_token", token);
-    const { route, role } = await resolveLandingRoute(token);
-    localStorage.setItem("userRole", role);
-    router.push(route);
-  };
 
   const onGoogleCredential = React.useCallback(
     async (credentialResponse: { credential?: string }) => {
@@ -142,17 +116,6 @@ function CreateAccountContent() {
 
       setIsGooglePending(true);
       try {
-        if (inviteToken) {
-          const payload = await completeGoogleAuth({
-            kind: "invite",
-            idToken,
-            inviteToken
-          });
-          toast({ title: "Invitation accepted", description: "Redirecting..." });
-          await finishAuth(payload.token);
-          return;
-        }
-
         if (!selectedPlanCode) {
           router.replace("/signup/choose-plan");
           return;
@@ -175,7 +138,7 @@ function CreateAccountContent() {
         setIsGooglePending(false);
       }
     },
-    [inviteToken, isGooglePending, router, selectedPlanCode, toast]
+    [isGooglePending, router, selectedPlanCode, toast]
   );
 
   React.useEffect(() => {
@@ -200,7 +163,7 @@ function CreateAccountContent() {
         type: "standard",
         shape: "pill",
         size: "large",
-        text: inviteToken ? "continue_with" : "signup_with",
+        text: "signup_with",
         width: 320
       });
       setIsGoogleReady(true);
@@ -227,7 +190,7 @@ function CreateAccountContent() {
     return () => {
       script.onload = null;
     };
-  }, [inviteToken, onGoogleCredential]);
+  }, [onGoogleCredential]);
 
   const onSubmitInternal = async (values: InternalSignupValues) => {
     if (!selectedPlanCode) {
@@ -254,28 +217,20 @@ function CreateAccountContent() {
     }
   };
 
-  const showManagerOnboarding = !inviteToken;
-
   return (
     <div className="flex min-h-screen w-full items-center justify-center bg-[#67C6EE] px-4 py-6 font-body">
       <Card className="w-full max-w-md">
         <CardHeader className="items-center text-center">
           <Logo className="mb-4 text-[#67C6EE]" />
-          <CardTitle className="text-2xl text-[#67C6EE]">
-            {inviteToken ? "Accept Invitation" : "Create Account"}
-          </CardTitle>
+          <CardTitle className="text-2xl text-[#67C6EE]">Create Account</CardTitle>
           <CardDescription>
-            {inviteToken
-              ? "Use Google to join the company from your invitation."
-              : "Step 2 of 2: create your account using email/password or Google."}
+            Step 2 of 2: create your account using email/password or Google.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {showManagerOnboarding && (
-            <p className="mb-4 text-center text-sm text-muted-foreground">
-              Selected plan: <span className="font-semibold">{selectedPlanCode ?? "-"}</span>
-            </p>
-          )}
+          <p className="mb-4 text-center text-sm text-muted-foreground">
+            Selected plan: <span className="font-semibold">{selectedPlanCode ?? "-"}</span>
+          </p>
 
           <div className="mb-4 flex flex-col items-center gap-2">
             <div ref={googleButtonRef} className="min-h-10" />
@@ -291,100 +246,94 @@ function CreateAccountContent() {
             )}
           </div>
 
-          {showManagerOnboarding && (
-            <>
-              <div className="my-4 text-center text-xs uppercase tracking-wide text-muted-foreground">
-                or continue with email
+          <div className="my-4 text-center text-xs uppercase tracking-wide text-muted-foreground">
+            or continue with email
+          </div>
+
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmitInternal)} className="space-y-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="firstName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>First Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="John" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="lastName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Last Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Doe" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input placeholder="john.doe@example.com" {...field} type="email" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Password</FormLabel>
+                      <FormControl>
+                        <Input placeholder="••••••••" {...field} type="password" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="confirmPassword"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Confirm Password</FormLabel>
+                      <FormControl>
+                        <Input placeholder="••••••••" {...field} type="password" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
 
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmitInternal)} className="space-y-4">
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <FormField
-                      control={form.control}
-                      name="firstName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>First Name</FormLabel>
-                          <FormControl>
-                            <Input placeholder="John" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="lastName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Last Name</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Doe" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  <FormField
-                    control={form.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Email</FormLabel>
-                        <FormControl>
-                          <Input placeholder="john.doe@example.com" {...field} type="email" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <FormField
-                      control={form.control}
-                      name="password"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Password</FormLabel>
-                          <FormControl>
-                            <Input placeholder="••••••••" {...field} type="password" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="confirmPassword"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Confirm Password</FormLabel>
-                          <FormControl>
-                            <Input placeholder="••••••••" {...field} type="password" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  <Button
-                    type="submit"
-                    className="w-full bg-[#67C6EE] text-white hover:bg-[#67C6EE]/90"
-                    disabled={isSubmittingInternal}
-                  >
-                    {isSubmittingInternal ? "Continuing..." : "Continue"}
-                  </Button>
-                </form>
-              </Form>
-            </>
-          )}
+              <Button
+                type="submit"
+                className="w-full bg-[#67C6EE] text-white hover:bg-[#67C6EE]/90"
+                disabled={isSubmittingInternal}
+              >
+                {isSubmittingInternal ? "Continuing..." : "Continue"}
+              </Button>
+            </form>
+          </Form>
 
           <Button asChild variant="outline" className="mt-4 w-full">
-            <Link href={inviteToken ? "/login" : "/signup/choose-plan"}>
-              {inviteToken ? "Back to Login" : "Back to Plan Selection"}
-            </Link>
+            <Link href="/signup/choose-plan">Back to Plan Selection</Link>
           </Button>
         </CardContent>
       </Card>

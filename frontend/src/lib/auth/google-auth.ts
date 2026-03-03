@@ -21,6 +21,8 @@ type InviteContext = {
   kind: "invite";
   idToken: string;
   inviteToken: string;
+  firstName: string;
+  lastName: string;
 };
 
 export type GoogleAuthContext = ManagerContext | InviteContext;
@@ -38,6 +40,9 @@ const mapAuthError = (error: unknown, fallback: string) => {
         403,
         "Nu ai acces inca. Completeaza onboarding manager sau foloseste invitatia corecta."
       );
+    }
+    if (error.status === 404) {
+      return new AuthUiError(404, "Invitation token is invalid or no longer available.");
     }
     if (error.status === 409) {
       return new AuthUiError(
@@ -64,7 +69,9 @@ export const completeGoogleAuth = async (
         },
         body: JSON.stringify({
           idToken: context.idToken,
-          inviteToken: context.inviteToken
+          inviteToken: context.inviteToken,
+          firstName: context.firstName,
+          lastName: context.lastName
         })
       });
     }
