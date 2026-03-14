@@ -12,13 +12,6 @@ import {
   YAxis,
 } from 'recharts';
 import { BrainCircuit, Loader2, Sparkles, TrendingUp } from 'lucide-react';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '../../../../components/ui/card';
 import { Button } from '../../../../components/ui/button';
 import { Badge } from '../../../../components/ui/badge';
 import { cn } from '../../../../lib/utils';
@@ -488,59 +481,79 @@ export default function ExpectedSalesPage() {
 
 
   return (
-    <div className="space-y-6">
+    <div className="w-full min-w-0 max-w-none space-y-8">
       <header>
-        <h1 className="font-headline text-2xl">Expected Sales (AI Forecast)</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-3xl font-black tracking-tight text-slate-800">
+          Expected Sales (AI Forecast)
+        </h1>
+        <p className="mt-1 font-medium text-slate-500">
           Use AI to forecast future sales performance based on historical data.
         </p>
       </header>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Sales forecast</CardTitle>
-          <CardDescription>
+      <div className="rounded-[28px] border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/40">
+        <div className="mb-4">
+          <h2 className="text-xl font-bold text-slate-800">Sales forecast</h2>
+          <p className="text-sm font-medium text-slate-500">
             Select the forecast interval (max {MAX_HORIZON_DAYS} days).
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-5 md:items-end">
+          </p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5 md:items-end">
           <div className="space-y-2">
-            <Label htmlFor="train-from">Training: from</Label>
+            <Label htmlFor="train-from" className="text-xs font-bold uppercase tracking-widest text-slate-500">
+              Training: from
+            </Label>
             <Input
               id="train-from"
               type="date"
               value={trainFrom}
               onChange={(event) => setTrainFrom(event.target.value)}
+              className="border-slate-200 bg-slate-50 focus:border-[#38bdf8] focus:ring-[#38bdf8]/20"
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="train-to">Training: to</Label>
+            <Label htmlFor="train-to" className="text-xs font-bold uppercase tracking-widest text-slate-500">
+              Training: to
+            </Label>
             <Input
               id="train-to"
               type="date"
               value={trainTo}
               onChange={(event) => setTrainTo(event.target.value)}
+              className="border-slate-200 bg-slate-50 focus:border-[#38bdf8] focus:ring-[#38bdf8]/20"
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="forecast-from">Forecast: from</Label>
+            <Label htmlFor="forecast-from" className="text-xs font-bold uppercase tracking-widest text-slate-500">
+              Forecast: from
+            </Label>
             <Input
               id="forecast-from"
               type="date"
               value={forecastFrom}
               onChange={(event) => setForecastFrom(event.target.value)}
+              className="border-slate-200 bg-slate-50 focus:border-[#38bdf8] focus:ring-[#38bdf8]/20"
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="forecast-to">Forecast: to</Label>
+            <Label htmlFor="forecast-to" className="text-xs font-bold uppercase tracking-widest text-slate-500">
+              Forecast: to
+            </Label>
             <Input
               id="forecast-to"
               type="date"
               value={forecastTo}
               onChange={(event) => setForecastTo(event.target.value)}
+              className="border-slate-200 bg-slate-50 focus:border-[#38bdf8] focus:ring-[#38bdf8]/20"
             />
           </div>
-          <Button type="button" onClick={handleGenerateForecast} disabled={isGenerating}>
+          <Button
+            type="button"
+            onClick={handleGenerateForecast}
+            disabled={isGenerating}
+            className="bg-[#38bdf8] text-white hover:bg-[#0ea5e9]"
+          >
             {isGenerating ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -553,92 +566,90 @@ export default function ExpectedSalesPage() {
               </>
             )}
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {errorMessage && (
-        <Card className="border border-destructive/40 bg-destructive/5">
-          <CardContent className="py-4 text-sm text-destructive">
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
             {errorMessage}
-          </CardContent>
-        </Card>
+        </div>
       )}
 
       {isInitializing && (
-        <Card className="flex items-center justify-center py-12">
-          <div className="text-center text-muted-foreground">
+        <div className="flex items-center justify-center rounded-[28px] border border-slate-100 bg-white py-12 shadow-xl shadow-slate-200/40">
+          <div className="text-center text-slate-500">
             <Loader2 className="mx-auto h-10 w-10 animate-spin" />
             <p className="mt-4">
               Loading available models and forecasts...
             </p>
           </div>
-        </Card>
+        </div>
       )}
 
       {!isInitializing && (
         <div className="space-y-6">
-          <Card className="bg-gradient-to-br from-primary/5 via-background to-background">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Sparkles className="h-6 w-6 text-accent" />
+          <div className="rounded-[28px] border border-slate-100 bg-gradient-to-br from-blue-50 via-white to-white p-6 shadow-xl shadow-slate-200/40">
+            <div className="mb-5">
+              <h2 className="flex items-center gap-2 text-xl font-bold text-slate-800">
+                <Sparkles className="h-6 w-6 text-[#38bdf8]" />
                 <span>Forecast Results</span>
-              </CardTitle>
-              <CardDescription>
+              </h2>
+              <p className="text-sm font-medium text-slate-500">
                 Latest predictions for the horizon of {horizonLabelDays} days.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
+              </p>
+            </div>
+            <div className="space-y-6">
               <div className="grid gap-4 md:grid-cols-[1.2fr_1fr]">
-                <div className="space-y-2 rounded-lg border bg-card p-4">
+                <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4">
                   <div className="flex items-start justify-between">
-                    <h3 className="text-lg font-semibold">Primary Forecast</h3>
+                    <h3 className="text-lg font-semibold text-slate-800">Primary Forecast</h3>
                     <Badge
                       className={cn(
-                        'text-primary-foreground',
+                        'text-white',
                         getConfidenceBadgeColor(forecast?.confidence)
                       )}
                     >
                       Confidence: {forecast?.confidence ?? 'Medium'}
                     </Badge>
                   </div>
-                  <p className="text-2xl font-bold text-primary">
+                  <p className="text-2xl font-bold text-[#0ea5e9]">
                     {forecast?.prediction ?? 'Waiting for results.'}
                   </p>
                 </div>
-                <div className="space-y-2 rounded-lg border bg-card p-4">
-                  <h3 className="text-lg font-semibold">Analysis Summary</h3>
-                  <p className="text-muted-foreground">
+                <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4">
+                  <h3 className="text-lg font-semibold text-slate-800">Analysis Summary</h3>
+                  <p className="text-slate-500">
                     {forecast?.summary ??
                       'Generate a forecast to see detailed analysis.'}
                   </p>
                 </div>
               </div>
 
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
           {dailyPredictions.length > 0 ? (
-            <>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Sales Forecast Chart</CardTitle>
-                  <CardDescription>
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+              <div className="rounded-[28px] border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/40">
+                <div className="mb-4">
+                  <h3 className="text-lg font-bold text-slate-800">Sales Forecast Chart</h3>
+                  <p className="text-sm font-medium text-slate-500">
                     View forecasted sales over the selected interval.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
+                  </p>
+                </div>
+                <div>
                   <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
                       <XAxis
                         dataKey="date"
-                        stroke="#888888"
+                        stroke="#94a3b8"
                         fontSize={12}
                         tickLine={false}
                         axisLine={false}
                       />
                       <YAxis
-                        stroke="#888888"
+                        stroke="#94a3b8"
                         fontSize={12}
                         tickLine={false}
                         axisLine={false}
@@ -648,8 +659,9 @@ export default function ExpectedSalesPage() {
                       />
                       <Tooltip
                         contentStyle={{
-                          backgroundColor: 'hsl(var(--card))',
-                          borderColor: 'hsl(var(--border))',
+                          borderRadius: 12,
+                          border: '1px solid #e2e8f0',
+                          backgroundColor: '#ffffff',
                         }}
                         formatter={(value: number, name: string) => [
                           `${value.toLocaleString('en-US')} RON`,
@@ -659,26 +671,26 @@ export default function ExpectedSalesPage() {
                       <Legend wrapperStyle={{ fontSize: '0.8rem' }} />
                       <Bar
                         dataKey="forecast"
-                        name="Sales Prognozate"
-                        fill="hsl(var(--chart-2))"
+                        name="Forecasted Sales"
+                        fill="#38bdf8"
                         radius={[4, 4, 0, 0]}
                       />
                     </BarChart>
                   </ResponsiveContainer>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Forecast details</CardTitle>
-                  <CardDescription>
+              <div className="rounded-[28px] border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/40">
+                <div className="mb-4">
+                  <h3 className="text-lg font-bold text-slate-800">Forecast details</h3>
+                  <p className="text-sm font-medium text-slate-500">
                     List of predictions for each day in the interval.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
+                  </p>
+                </div>
+                <div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm">
-                      <thead className="text-xs uppercase text-muted-foreground">
+                      <thead className="text-xs uppercase text-slate-500">
                         <tr>
                           <th className="py-2 pr-4">Date</th>
                           <th className="py-2 pr-4">Forecast value</th>
@@ -688,11 +700,11 @@ export default function ExpectedSalesPage() {
                       </thead>
                       <tbody>
                         {dailyPredictions.map((prediction) => (
-                          <tr key={prediction.id} className="border-t">
+                          <tr key={prediction.id} className="border-t border-slate-100">
                             <td className="py-2 pr-4">
                               {formatDisplayDate(prediction.prediction_date)}
                             </td>
-                            <td className="py-2 pr-4 font-medium text-primary">
+                            <td className="py-2 pr-4 font-semibold text-[#0ea5e9]">
                               {formatCurrency(
                                 Number(prediction.predicted_revenue ?? 0)
                               )}
@@ -712,17 +724,17 @@ export default function ExpectedSalesPage() {
                       </tbody>
                     </table>
                   </div>
-                </CardContent>
-              </Card>
-            </>
+                </div>
+              </div>
+            </div>
           ) : (
-            <Card className="flex flex-col items-center justify-center gap-4 py-16 text-center">
-              <TrendingUp className="h-16 w-16 text-muted-foreground" />
-              <h3 className="text-xl font-semibold">No forecasts yet</h3>
-              <p className="text-muted-foreground">
+            <div className="flex flex-col items-center justify-center gap-4 rounded-[28px] border border-slate-100 bg-white py-16 text-center shadow-xl shadow-slate-200/40">
+              <TrendingUp className="h-16 w-16 text-slate-400" />
+              <h3 className="text-xl font-semibold text-slate-800">No forecasts yet</h3>
+              <p className="text-slate-500">
                 Generate a forecast or adjust filters to see data.
               </p>
-            </Card>
+            </div>
           )}
         </div>
       )}

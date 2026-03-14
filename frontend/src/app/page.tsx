@@ -2,9 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Check, Menu } from "lucide-react";
+import { Check, Layers, Menu } from "lucide-react";
 
-import { Logo } from "../components/logo";
 import { Button } from "../components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "../components/ui/sheet";
 
@@ -141,26 +140,31 @@ const scrollToPricing = () => {
 
 export default function LandingPage() {
   return (
-    <div className="font-body bg-[#F3F6F8]">
-      <header className="sticky top-0 z-50 border-b border-white/30 bg-[#67C6EE]/40 shadow-sm backdrop-blur-sm">
+    <div className="bg-gradient-to-br from-[#f0f9ff] via-[#e0f2fe] to-[#bae6fd] font-body">
+      <header className="sticky top-0 z-50 border-b border-slate-200/70 bg-white/55 shadow-sm backdrop-blur-sm">
         <nav className="container mx-auto flex h-20 items-center justify-between px-6">
-          <Logo className="text-white" />
+          <div className="flex items-center gap-3 p-6">
+            <div className="rounded-lg bg-white p-2 shadow-inner">
+              <Layers className="h-6 w-6 text-[#38bdf8]" />
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">SalesWay</h1>
+          </div>
           <div className="hidden items-center gap-8 text-sm font-medium md:flex">
             <Link
               href="#features"
-              className="text-white/80 transition-colors hover:text-white"
+              className="text-slate-700 transition-colors hover:text-black"
             >
               Features
             </Link>
             <Link
               href="#pricing"
-              className="text-white/80 transition-colors hover:text-white"
+              className="text-slate-700 transition-colors hover:text-black"
             >
               Pricing
             </Link>
             <Link
               href="#"
-              className="text-white/80 transition-colors hover:text-white"
+              className="text-slate-700 transition-colors hover:text-black"
             >
               Contact
             </Link>
@@ -168,7 +172,7 @@ export default function LandingPage() {
           <div className="hidden items-center gap-2 md:flex md:gap-4">
             <Link
               href="/login"
-              className="hidden h-10 items-center justify-center rounded-full px-5 text-sm font-semibold text-white transition-colors hover:bg-white/20 sm:flex"
+              className="hidden h-10 items-center justify-center rounded-full px-5 text-sm font-semibold text-slate-800 transition-colors hover:bg-black/5 sm:flex"
             >
               Login
             </Link>
@@ -195,27 +199,32 @@ export default function LandingPage() {
               </SheetTrigger>
               <SheetContent
                 side="right"
-                className="flex w-[280px] flex-col border-l-white/30 bg-[#67C6EE] p-6 text-white"
+                className="flex w-[280px] flex-col border-l-slate-200 bg-white p-6 text-slate-900"
               >
                 <div className="mb-8">
-                  <Logo className="text-white" />
+                  <div className="flex items-center gap-3 p-2">
+                    <div className="rounded-lg bg-white p-2 shadow-inner">
+                      <Layers className="h-6 w-6 text-[#38bdf8]" />
+                    </div>
+                    <h1 className="text-2xl font-bold tracking-tight text-slate-900">SalesWay</h1>
+                  </div>
                 </div>
                 <nav className="flex flex-col gap-6 text-lg">
                   <Link
                     href="#features"
-                    className="font-medium text-white/80 transition-colors hover:text-white"
+                    className="font-medium text-slate-700 transition-colors hover:text-black"
                   >
                     Features
                   </Link>
                   <Link
                     href="#pricing"
-                    className="font-medium text-white/80 transition-colors hover:text-white"
+                    className="font-medium text-slate-700 transition-colors hover:text-black"
                   >
                     Pricing
                   </Link>
                   <Link
                     href="#"
-                    className="font-medium text-white/80 transition-colors hover:text-white"
+                    className="font-medium text-slate-700 transition-colors hover:text-black"
                   >
                     Contact
                   </Link>
@@ -223,7 +232,7 @@ export default function LandingPage() {
                 <div className="mt-auto flex flex-col gap-4 pt-8">
                   <Link
                     href="/login"
-                    className="flex h-12 items-center justify-center rounded-full border border-white/50 px-5 text-base font-semibold text-white transition-colors hover:bg-white/20"
+                    className="flex h-12 items-center justify-center rounded-full border border-slate-200 px-5 text-base font-semibold text-slate-800 transition-colors hover:bg-slate-50"
                   >
                     Login
                   </Link>
@@ -242,14 +251,14 @@ export default function LandingPage() {
       </header>
 
       <main className="min-h-screen -mt-20 bg-transparent">
-        <section className="relative overflow-hidden bg-[#67C6EE] text-white">
+        <section className="relative overflow-hidden bg-transparent text-slate-900">
           <div className="container mx-auto max-w-[1200px] px-6 pb-6 pt-40">
             <div className="text-center">
-              <h1 className="text-4xl font-extrabold !leading-tight text-white drop-shadow-xl md:text-6xl lg:text-7xl">
+              <h1 className="text-4xl font-extrabold !leading-tight text-slate-900 drop-shadow-[0_16px_38px_rgba(15,23,42,0.45)] [text-shadow:0_3px_10px_rgba(15,23,42,0.35)] md:text-6xl lg:text-7xl">
                 Empower Your <br />
                 Sales Team, Effortlessly.
               </h1>
-              <p className="mx-auto mt-6 max-w-3xl text-lg text-white/90 drop-shadow-md md:text-xl">
+              <p className="mx-auto mt-6 max-w-3xl text-lg text-slate-600 md:text-xl">
                 SalesWay is the all-in-one workspace for service-based companies
                 to track activity, manage performance, and drive growth with
                 unprecedented transparency.
@@ -257,7 +266,7 @@ export default function LandingPage() {
               <button
                 type="button"
                 onClick={scrollToPricing}
-                className="relative z-20 mt-10 inline-block rounded-full bg-sky-500 px-10 py-3 text-lg font-bold text-white shadow-lg transition-transform hover:scale-105"
+                className="relative z-20 mt-10 inline-block rounded-full bg-white px-10 py-3 text-lg font-bold text-[#67C6EE] shadow-lg transition-transform hover:scale-105"
               >
                 Join Now
               </button>
@@ -284,7 +293,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section id="features" className="bg-white py-12 sm:py-24">
+        <section id="features" className="bg-transparent py-12 sm:py-24">
           <div className="container mx-auto px-6">
             <div className="text-center">
               <h2 className="text-4xl font-extrabold text-[#6CD3FF] md:text-5xl">
@@ -323,13 +332,13 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section id="pricing" className="bg-[#67C6EE] py-12 sm:py-24">
+        <section id="pricing" className="bg-transparent py-12 sm:py-24">
           <div className="container mx-auto px-6">
             <div className="text-center">
-              <h2 className="text-4xl font-extrabold text-white md:text-5xl">
+              <h2 className="text-4xl font-extrabold text-slate-900 md:text-5xl">
                 Flexible Pricing for Every Team
               </h2>
-              <p className="mx-auto mt-4 max-w-2xl text-lg text-white/90">
+              <p className="mx-auto mt-4 max-w-2xl text-lg text-slate-600">
                 Choose the plan that fits your needs and start empowering your
                 sales team today.
               </p>
@@ -346,7 +355,7 @@ export default function LandingPage() {
                   }`}
                 >
                   {plan.popular && (
-                    <div className="absolute top-0 -translate-y-1/2 rounded-full bg-[#67C6EE] px-4 py-1 text-sm font-semibold text-white">
+                    <div className="absolute top-0 -translate-y-1/2 rounded-full bg-[#38bdf8] px-4 py-1 text-sm font-semibold text-white">
                       Most Popular
                     </div>
                   )}
@@ -388,7 +397,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section id="reviews" className="bg-white py-12 sm:py-24">
+        <section id="reviews" className="bg-transparent py-12 sm:py-24">
           <div className="container mx-auto px-6">
             <div className="text-center">
               <h2 className="text-4xl font-extrabold text-[#67C6EE] md:text-5xl">
@@ -422,8 +431,8 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <footer className="bg-[#67C6EE] py-12">
-          <div className="container mx-auto px-6 text-center text-sm text-white/90">
+        <footer className="bg-transparent py-12">
+          <div className="container mx-auto px-6 text-center text-sm text-slate-600">
             <p>&copy; {new Date().getFullYear()} SalesWay. All rights reserved.</p>
           </div>
         </footer>

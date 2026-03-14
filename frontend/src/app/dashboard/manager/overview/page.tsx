@@ -3,23 +3,22 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Bar,
+  Area,
+  AreaChart,
   BarChart,
   CartesianGrid,
-  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
-import { DollarSign, Phone, Target, TrendingUp } from 'lucide-react';
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from '../../../../components/ui/card';
+  BadgeDollarSign,
+  Calendar,
+  Phone,
+  Target,
+  TrendingUp,
+} from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -76,6 +75,7 @@ export default function ManagerOverviewPage() {
   const [teamPerformance, setTeamPerformance] = useState<ChartPoint[]>([]);
   const [agentPerformance, setAgentPerformance] = useState<ChartPoint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeMetric, setActiveMetric] = useState<'calls' | 'sales'>('calls');
 
   const getAuthToken = useCallback(() => {
     if (typeof window === 'undefined') {
@@ -129,6 +129,26 @@ export default function ManagerOverviewPage() {
   const chartData = useMemo(() => {
     return selectedAgentId === 'all' ? teamPerformance : agentPerformance;
   }, [agentPerformance, selectedAgentId, teamPerformance]);
+
+  const chartSummary = useMemo(() => {
+    if (chartData.length === 0) {
+      return { average: 0, peak: 0, total: 0 };
+    }
+    const values = chartData.map((point) =>
+      activeMetric === 'calls' ? point.calls : point.sales
+    );
+    const total = values.reduce((acc, value) => acc + value, 0);
+    const peak = Math.max(...values);
+    const average = total / values.length;
+    return { average, peak, total };
+  }, [activeMetric, chartData]);
+
+  const selectedAgentLabel = useMemo(() => {
+    if (selectedAgentId === 'all') return 'All agents';
+    return agents.find((agent) => agent.membership_id === selectedAgentId)?.email ?? 'Selected agent';
+  }, [agents, selectedAgentId]);
+
+  const rangeLabel = rangePreset === 'month' ? 'Last month' : 'Last year';
 
   useEffect(() => {
     const fetchAgents = async () => {
@@ -234,162 +254,185 @@ export default function ManagerOverviewPage() {
   }, [buildDateRange, formatDayLabel, getAuthToken, rangePreset, selectedAgentId, router, toast]);
 
   return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="font-headline text-2xl">Team overview</h1>
-        <p className="text-muted-foreground">
-          Analyze overall performance or filter by a specific agent.
-        </p>
-      </header>
+    <div className="w-full min-w-0 max-w-none space-y-8">
+      <div className="flex w-full flex-col gap-6 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h2 className="text-3xl font-black tracking-tight text-slate-800">Team Overview</h2>
+          <p className="mt-1 font-medium text-slate-500">
+            Analyze team performance with real-time metrics from your reports database.
+          </p>
+        </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Filter</CardTitle>
-          <CardDescription>
-            Select &quot;All agents&quot; to see aggregated data or choose an agent to
-            view individual performance.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
-            <SelectTrigger className="w-full sm:w-[280px]">
-              <SelectValue placeholder="Select an option" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All agents</SelectItem>
-              {agents.map((agent) => (
-                <SelectItem key={agent.membership_id} value={agent.membership_id}>
-                  {agent.email}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm md:w-auto">
+          <div className="min-w-0 flex-1 md:min-w-[220px]">
+            <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
+              <SelectTrigger className="h-10 border-none bg-slate-50 px-3 font-bold text-slate-700 shadow-none">
+                <SelectValue placeholder="All agents" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All agents</SelectItem>
+                {agents.map((agent) => (
+                  <SelectItem key={agent.membership_id} value={agent.membership_id}>
+                    {agent.email}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="h-6 w-px bg-slate-200" />
           <Tabs value={rangePreset} onValueChange={(value) => setRangePreset(value as 'month' | 'year')}>
-            <TabsList>
-              <TabsTrigger value="month">Last month</TabsTrigger>
-              <TabsTrigger value="year">Last year</TabsTrigger>
+            <TabsList className="h-auto rounded-xl bg-slate-100 p-1">
+              <TabsTrigger value="month" className="rounded-lg px-4 py-1.5 text-xs font-bold data-[state=active]:bg-white data-[state=active]:text-[#38bdf8]">
+                LAST MONTH
+              </TabsTrigger>
+              <TabsTrigger value="year" className="rounded-lg px-4 py-1.5 text-xs font-bold data-[state=active]:bg-white data-[state=active]:text-[#38bdf8]">
+                LAST YEAR
+              </TabsTrigger>
             </TabsList>
           </Tabs>
-        </CardContent>
-      </Card>
-
-      <div className="space-y-2">
-        <h2 className="text-lg font-semibold tracking-tight">
-          Quick Stats - {rangePreset === 'year' ? 'last year' : 'last month'}
-        </h2>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Calls made
-              </CardTitle>
-              <Phone className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{currentStats.calls}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Conversions</CardTitle>
-              <Target className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {currentStats.conversions}
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Closed sales
-              </CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{currentStats.sales}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Sales value
-              </CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{currentStats.value}</div>
-            </CardContent>
-          </Card>
         </div>
-        {isLoading && (
-          <p className="text-sm text-muted-foreground">
-            Updating data...
-          </p>
-        )}
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Team performance</CardTitle>
-          <CardDescription>
-            {rangePreset === 'year' ? 'Last year' : 'Last month'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="calls">
-            <TabsList className="mb-4">
-              <TabsTrigger value="calls">Calls</TabsTrigger>
-              <TabsTrigger value="sales">Sales</TabsTrigger>
-            </TabsList>
-            <TabsContent value="calls">
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="day" stroke="#888888" fontSize={12} />
-                  <YAxis stroke="#888888" fontSize={12} allowDecimals={false} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'hsl(var(--card))',
-                      borderColor: 'hsl(var(--border))',
-                    }}
-                  />
-                  <Legend iconSize={10} />
-                  <Bar
-                    dataKey="calls"
-                    name="Calls"
-                    fill="hsl(var(--chart-1))"
-                    radius={[4, 4, 0, 0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </TabsContent>
-            <TabsContent value="sales">
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="day" stroke="#888888" fontSize={12} />
-                  <YAxis stroke="#888888" fontSize={12} allowDecimals={false} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'hsl(var(--card))',
-                      borderColor: 'hsl(var(--border))',
-                    }}
-                  />
-                  <Legend iconSize={10} />
-                  <Bar
-                    dataKey="sales"
-                    name="Sales"
-                    fill="hsl(var(--chart-2))"
-                    radius={[4, 4, 0, 0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
+      <div className="grid w-full grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <OverviewStatCard label="Calls made" value={currentStats.calls} icon={<Phone className="h-5 w-5" />} tone="blue" />
+        <OverviewStatCard label="Conversions" value={currentStats.conversions} icon={<Target className="h-5 w-5" />} tone="emerald" />
+        <OverviewStatCard label="Closed sales" value={currentStats.sales} icon={<TrendingUp className="h-5 w-5" />} tone="orange" />
+        <OverviewStatCard label="Sales value" value={currentStats.value} icon={<BadgeDollarSign className="h-5 w-5" />} tone="indigo" isCurrency />
+      </div>
+
+      {isLoading && (
+        <p className="text-sm text-slate-500">Refreshing overview data...</p>
+      )}
+
+      <div className="w-full overflow-hidden rounded-[32px] border border-slate-100 bg-white shadow-xl shadow-slate-200/50">
+        <div className="p-8">
+          <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-xl font-bold text-slate-800">Team Performance</h3>
+              <p className="text-sm font-medium text-slate-400">
+                {selectedAgentLabel} • {rangeLabel}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveMetric('calls')}
+                className={`rounded-xl px-5 py-2 text-sm font-bold transition-all ${
+                  activeMetric === 'calls'
+                    ? 'bg-[#38bdf8] text-white shadow-lg shadow-blue-200'
+                    : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
+                }`}
+              >
+                Calls
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveMetric('sales')}
+                className={`rounded-xl px-5 py-2 text-sm font-bold transition-all ${
+                  activeMetric === 'sales'
+                    ? 'bg-[#38bdf8] text-white shadow-lg shadow-blue-200'
+                    : 'bg-slate-50 text-slate-500 hover:bg-slate-100'
+                }`}
+              >
+                Sales
+              </button>
+            </div>
+          </div>
+
+          <div className="h-[320px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="overviewFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.35} />
+                    <stop offset="95%" stopColor="#38bdf8" stopOpacity={0.03} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
+                <XAxis dataKey="day" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
+                <YAxis stroke="#94a3b8" fontSize={11} allowDecimals={false} tickLine={false} axisLine={false} />
+                <Tooltip
+                  contentStyle={{
+                    borderRadius: 12,
+                    border: '1px solid #e2e8f0',
+                    backgroundColor: '#ffffff',
+                  }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey={activeMetric}
+                  stroke="#38bdf8"
+                  strokeWidth={3}
+                  fill="url(#overviewFill)"
+                  name={activeMetric === 'calls' ? 'Calls' : 'Sales'}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-around gap-4 border-t border-slate-100 bg-slate-50/60 p-6">
+          <ChartSummaryItem label="Daily average" value={chartSummary.average.toFixed(1)} />
+          <ChartSummaryItem label="Peak activity" value={String(chartSummary.peak)} />
+          <ChartSummaryItem label="Total period" value={String(chartSummary.total)} />
+          <ChartSummaryItem label="Range" value={rangeLabel} icon={<Calendar className="h-3.5 w-3.5 text-slate-400" />} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OverviewStatCard({
+  label,
+  value,
+  icon,
+  tone,
+  isCurrency = false,
+}: {
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+  tone: 'blue' | 'emerald' | 'orange' | 'indigo';
+  isCurrency?: boolean;
+}) {
+  const colorMap = {
+    blue: 'bg-blue-50 text-blue-600 border-blue-100',
+    emerald: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+    orange: 'bg-orange-50 text-orange-600 border-orange-100',
+    indigo: 'bg-indigo-50 text-indigo-600 border-indigo-100',
+  };
+
+  const formattedValue = isCurrency
+    ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(value)
+    : new Intl.NumberFormat('en-US').format(value);
+
+  return (
+    <div className="group cursor-default rounded-[28px] border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/40 transition-all hover:scale-[1.01]">
+      <div className="mb-4 flex items-start justify-between">
+        <div className={`rounded-2xl border p-3 ${colorMap[tone]}`}>{icon}</div>
+      </div>
+      <p className="mb-1 text-xs font-bold uppercase tracking-widest text-slate-400">{label}</p>
+      <p className="text-2xl font-black text-slate-900">{formattedValue}</p>
+    </div>
+  );
+}
+
+function ChartSummaryItem({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value: string;
+  icon?: React.ReactNode;
+}) {
+  return (
+    <div className="text-center">
+      <p className="mb-1 flex items-center justify-center gap-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+        {icon}
+        {label}
+      </p>
+      <p className="text-lg font-black text-slate-700">{value}</p>
     </div>
   );
 }

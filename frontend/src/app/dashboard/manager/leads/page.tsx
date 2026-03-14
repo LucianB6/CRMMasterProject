@@ -1,10 +1,24 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Calendar,
+  Filter,
+  Mail,
+  MoreHorizontal,
+  Phone,
+  RefreshCw,
+  Search,
+  TrendingUp,
+} from 'lucide-react';
 
 import { ApiError } from '../../../../lib/api';
+import { apiFetch } from '../../../../lib/api';
 import {
   fetchManagerLeads,
   type LeadSort,
@@ -15,13 +29,6 @@ import {
 } from '../../../../lib/leads';
 import { useToast } from '../../../../hooks/use-toast';
 import { Button } from '../../../../components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '../../../../components/ui/card';
 import { Input } from '../../../../components/ui/input';
 import { Label } from '../../../../components/ui/label';
 import {
@@ -31,15 +38,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../../../components/ui/select';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '../../../../components/ui/table';
-import { Badge } from '../../../../components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '../../../../components/ui/alert';
 
 type HasOpenTasksFilter = 'any' | 'true' | 'false';
@@ -95,6 +93,15 @@ const parsePositiveInt = (value: string | null, fallback: number) => {
   const parsed = Number(value);
   if (!Number.isInteger(parsed)) return fallback;
   return parsed;
+};
+
+const toSafeNumber = (value: unknown, fallback: number) => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return fallback;
 };
 
 const parseQueryParams = (searchParams: URLSearchParams): LeadsFiltersState => {
@@ -209,6 +216,43 @@ const resolveLeadName = (lead: ManagerLead) => {
   return 'Unknown lead';
 };
 
+const statusLabel = (status: LeadStatus) => {
+  switch (status) {
+    case 'new':
+      return 'New';
+    case 'contacted':
+      return 'Contacted';
+    case 'qualified':
+      return 'Qualified';
+    case 'lost':
+      return 'Lost';
+    default:
+      return status;
+  }
+};
+
+const normalizeLeadStatus = (status: string): LeadStatus => {
+  if (VALID_STATUSES.includes(status as LeadStatus)) {
+    return status as LeadStatus;
+  }
+  return 'new';
+};
+
+const statusClasses = (status: LeadStatus) => {
+  switch (status) {
+    case 'new':
+      return 'border-blue-200 bg-blue-100 text-blue-700';
+    case 'contacted':
+      return 'border-sky-200 bg-sky-100 text-sky-700';
+    case 'qualified':
+      return 'border-cyan-200 bg-cyan-100 text-cyan-700';
+    case 'lost':
+      return 'border-slate-200 bg-slate-100 text-slate-600';
+    default:
+      return 'border-blue-200 bg-blue-100 text-blue-700';
+  }
+};
+
 const parseApiError = (error: unknown): ParsedApiError => {
   if (!(error instanceof ApiError)) {
     return {
@@ -258,6 +302,8 @@ export default function ManagerLeadsPage() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [userRole, setUserRole] = useState<'manager' | 'agent'>('agent');
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const [filters, setFilters] = useState<LeadsFiltersState>(DEFAULT_FILTERS);
   const [searchInput, setSearchInput] = useState('');
@@ -277,6 +323,35 @@ export default function ManagerLeadsPage() {
   });
 
   const lastQueryRef = useRef('');
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const role = window.localStorage.getItem('userRole');
+    setUserRole(role === 'manager' ? 'manager' : 'agent');
+  }, []);
+
+  useEffect(() => {
+    const loadCurrentUser = async () => {
+      const token = getAuthToken();
+      if (!token) return;
+
+      try {
+        const data = await apiFetch<{
+          user_id?: string | null;
+          userId?: string | null;
+        }>('/auth/me', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        setCurrentUserId(data.user_id ?? data.userId ?? null);
+      } catch {
+        setCurrentUserId(null);
+      }
+    };
+
+    void loadCurrentUser();
+  }, []);
 
   useEffect(() => {
     const parsed = parseQueryParams(new URLSearchParams(searchParams.toString()));
@@ -352,6 +427,25 @@ export default function ManagerLeadsPage() {
         getAuthToken()
       );
 
+      if (userRole === 'agent') {
+        const filteredContent = data.content.filter(
+          (lead) => !lead.assignedToUserId || (currentUserId && lead.assignedToUserId === currentUserId)
+        );
+
+        setPageData({
+          ...data,
+          content: filteredContent,
+          numberOfElements: filteredContent.length,
+          totalElements: filteredContent.length,
+          totalPages: filteredContent.length > 0 ? 1 : 0,
+          number: 0,
+          first: true,
+          last: true,
+          empty: filteredContent.length === 0,
+        });
+        return;
+      }
+
       setPageData(data);
     } catch (error) {
       const parsed = parseApiError(error);
@@ -364,7 +458,7 @@ export default function ManagerLeadsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [filters, toast]);
+  }, [currentUserId, filters, toast, userRole]);
 
   useEffect(() => {
     void loadLeads();
@@ -399,22 +493,36 @@ export default function ManagerLeadsPage() {
   };
 
   const hasResults = pageData.content.length > 0;
+  const safePageNumber = Math.max(0, toSafeNumber(pageData.number, 0));
+  const safePageSize = Math.max(1, toSafeNumber(pageData.size, DEFAULT_FILTERS.size));
+  const safeTotalElements = Math.max(0, toSafeNumber(pageData.totalElements, 0));
+  const safeTotalPages = Math.max(0, toSafeNumber(pageData.totalPages, 0));
+  const safeNumberOfElements = Math.max(
+    0,
+    toSafeNumber(pageData.numberOfElements, pageData.content.length)
+  );
+  const displayedResultsLabel =
+    safeNumberOfElements === 1 ? '1 rezultat afișat' : `${safeNumberOfElements} rezultate afișate`;
 
-  const fromItem = pageData.totalElements === 0 ? 0 : pageData.number * pageData.size + 1;
-  const toItem = Math.min(pageData.totalElements, (pageData.number + 1) * pageData.size);
+  const fallbackFromItem = safeNumberOfElements === 0 ? 0 : safePageNumber * safePageSize + 1;
+  const fallbackToItem =
+    safeNumberOfElements === 0 ? 0 : fallbackFromItem + safeNumberOfElements - 1;
+  const fromItem = safeTotalElements === 0 ? fallbackFromItem : safePageNumber * safePageSize + 1;
+  const toItem =
+    safeTotalElements === 0
+      ? fallbackToItem
+      : Math.min(safeTotalElements, (safePageNumber + 1) * safePageSize);
 
-  const canGoPrevious = pageData.number > 0;
-  const canGoNext = pageData.number + 1 < pageData.totalPages;
+  const canGoPrevious = safePageNumber > 0;
+  const canGoNext = safePageNumber + 1 < safeTotalPages;
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col gap-6 overflow-hidden">
-      <Card className="flex min-h-0 w-full max-w-full flex-1 flex-col">
-        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-auto bg-slate-50 p-8">
+      <div className="mx-auto flex w-full max-w-[1700px] min-w-0 flex-1 flex-col gap-6">
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
           <div>
-          <CardTitle>Lead List</CardTitle>
-          <CardDescription>
-            Showing {fromItem}-{toItem} of {pageData.totalElements} leads.
-          </CardDescription>
+            <h2 className="text-2xl font-bold text-slate-800">Leads Active</h2>
+            <p className="text-slate-500">{displayedResultsLabel}</p>
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -425,246 +533,286 @@ export default function ManagerLeadsPage() {
                 setSearchInput('');
                 setFilters(DEFAULT_FILTERS);
               }}
+              className="border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
             >
               Reset
             </Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => void loadLeads()}>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => void loadLeads()}
+              className="bg-blue-600 text-white hover:bg-blue-700"
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
               Refresh
             </Button>
           </div>
-        </CardHeader>
-        <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
-          {validationErrors.length > 0 && (
-            <Alert variant="destructive">
-              <AlertTitle>Invalid filter values</AlertTitle>
-              <AlertDescription>{validationErrors.join(' ')}</AlertDescription>
-            </Alert>
-          )}
+        </div>
 
-          {serverError && (
-            <Alert variant="destructive">
-              <AlertTitle>{serverError.message}</AlertTitle>
-              {serverError.fieldErrors.length > 0 && (
-                <AlertDescription>{serverError.fieldErrors.join(' | ')}</AlertDescription>
-              )}
-            </Alert>
-          )}
+        {validationErrors.length > 0 && (
+          <Alert variant="destructive">
+            <AlertTitle>Invalid filter values</AlertTitle>
+            <AlertDescription>{validationErrors.join(' ')}</AlertDescription>
+          </Alert>
+        )}
 
-          <div className="min-h-0 w-full max-w-full flex-1 overflow-auto rounded-md border">
-            <Table className="min-w-[1500px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="min-w-[260px]">Lead</TableHead>
-                  <TableHead className="min-w-[130px]">Status</TableHead>
-                  <TableHead className="min-w-[130px]">Source</TableHead>
-                  <TableHead className="min-w-[210px]">Assigned To</TableHead>
-                  <TableHead className="min-w-[170px]">
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1"
-                    onClick={() => onToggleSort('submittedAt')}
-                  >
-                    Submitted
-                    {renderSortIcon('submittedAt')}
-                  </button>
-                  </TableHead>
-                  <TableHead className="min-w-[170px]">
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1"
-                    onClick={() => onToggleSort('lastActivityAt')}
-                  >
-                    Last Activity
-                    {renderSortIcon('lastActivityAt')}
-                  </button>
-                  </TableHead>
-                  <TableHead className="min-w-[290px]">Contact</TableHead>
-                  <TableHead className="min-w-[140px]">Duplicate</TableHead>
-                </TableRow>
-                <TableRow>
-                  <TableHead>
-                  <Input
-                    className="h-8 w-full min-w-[220px]"
-                    placeholder="Search..."
-                    value={searchInput}
-                    onChange={(event) => setSearchInput(event.target.value)}
-                  />
-                  </TableHead>
-                  <TableHead>
-                  <Select
-                    value={filters.status || 'all'}
-                    onValueChange={(value) =>
-                      updateFilters({
-                        status: value === 'all' ? '' : (value as LeadStatus),
-                        page: 0,
-                      })
-                    }
-                  >
-                    <SelectTrigger className="h-8 w-[130px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All</SelectItem>
-                      {VALID_STATUSES.map((status) => (
-                        <SelectItem key={status} value={status}>
-                          {status}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  </TableHead>
-                  <TableHead>
-                  <Select
-                    value={filters.source || 'all'}
-                    onValueChange={(value) =>
-                      updateFilters({
-                        source: value === 'all' ? '' : (value as LeadSource),
-                        page: 0,
-                      })
-                    }
-                  >
-                    <SelectTrigger className="h-8 w-[130px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All</SelectItem>
-                      {VALID_SOURCES.map((source) => (
-                        <SelectItem key={source} value={source}>
-                          {source}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  </TableHead>
-                  <TableHead>
-                  <div className="flex min-w-[170px] flex-col gap-1">
-                    <Select
-                      value={filters.assignedToMode}
-                      onValueChange={(value) =>
-                        updateFilters({
-                          assignedToMode: value as AssignedToMode,
-                          page: 0,
-                        })
-                      }
-                    >
-                      <SelectTrigger className="h-8 w-[160px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Any</SelectItem>
-                        <SelectItem value="me">Me</SelectItem>
-                        <SelectItem value="manual">Manual</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {filters.assignedToMode === 'manual' && (
-                      <Input
-                        className="h-8 w-[200px]"
-                        placeholder="UUID"
-                        value={filters.assignedToManual}
-                        onChange={(event) =>
-                          updateFilters({ assignedToManual: event.target.value, page: 0 })
-                        }
-                      />
-                    )}
-                  </div>
-                  </TableHead>
-                  <TableHead>
-                  <Input
-                    className="h-8 w-[150px]"
-                    type="date"
-                    value={filters.createdFrom}
-                    onChange={(event) =>
-                      updateFilters({ createdFrom: event.target.value, page: 0 })
-                    }
-                  />
-                  </TableHead>
-                  <TableHead>
-                  <Input
-                    className="h-8 w-[150px]"
-                    type="date"
-                    value={filters.createdTo}
-                    onChange={(event) =>
-                      updateFilters({ createdTo: event.target.value, page: 0 })
-                    }
-                  />
-                  </TableHead>
-                  <TableHead />
-                  <TableHead>
-                  <Select
-                    value={filters.hasOpenTasks}
-                    onValueChange={(value) =>
-                      updateFilters({
-                        hasOpenTasks: value as HasOpenTasksFilter,
-                        page: 0,
-                      })
-                    }
-                  >
-                    <SelectTrigger className="h-8 w-[130px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="any">All</SelectItem>
-                      <SelectItem value="true">Open tasks</SelectItem>
-                      <SelectItem value="false">No open tasks</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-              {isLoading && (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground">
-                    Loading leads...
-                  </TableCell>
-                </TableRow>
-              )}
+        {serverError && (
+          <Alert variant="destructive">
+            <AlertTitle>{serverError.message}</AlertTitle>
+            {serverError.fieldErrors.length > 0 && (
+              <AlertDescription>{serverError.fieldErrors.join(' | ')}</AlertDescription>
+            )}
+          </Alert>
+        )}
 
-              {!isLoading && !hasResults && (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground">
-                    No leads found for the current filters.
-                  </TableCell>
-                </TableRow>
-              )}
-
-              {!isLoading &&
-                pageData.content.map((lead) => (
-                  <TableRow key={lead.leadId}>
-                    <TableCell className="min-w-[260px]">
-                      <div className="font-medium">{resolveLeadName(lead)}</div>
-                      <div className="break-all text-xs text-muted-foreground">{lead.leadId}</div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{lead.status}</Badge>
-                    </TableCell>
-                    <TableCell>{lead.source ?? '-'}</TableCell>
-                    <TableCell className="min-w-[210px] break-all text-xs">
-                      {lead.assignedToUserId ?? '-'}
-                    </TableCell>
-                    <TableCell>{formatDateTime(lead.submittedAt)}</TableCell>
-                    <TableCell>{formatDateTime(lead.lastActivityAt)}</TableCell>
-                    <TableCell className="min-w-[290px]">
-                      <div>{lead.email ?? '-'}</div>
-                      <div className="text-xs text-muted-foreground">{lead.phone ?? '-'}</div>
-                    </TableCell>
-                    <TableCell>
-                      {lead.isDuplicate ? (
-                        <Badge variant="secondary">Group {lead.duplicateGroupId ?? '-'}</Badge>
-                      ) : (
-                        '-'
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+        <div className="grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-5">
+          <div className="relative md:col-span-2">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              className="h-10 border-slate-200 pl-9"
+              placeholder="Caută lead după nume, email sau telefon..."
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+            />
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <Select
+            value={filters.status || 'all'}
+            onValueChange={(value) =>
+              updateFilters({
+                status: value === 'all' ? '' : (value as LeadStatus),
+                page: 0,
+              })
+            }
+          >
+            <SelectTrigger className="h-10 border-slate-200">
+              <SelectValue placeholder="Status: Toate" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Status: Toate</SelectItem>
+              {VALID_STATUSES.map((status) => (
+                <SelectItem key={status} value={status}>
+                  {statusLabel(status)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={filters.source || 'all'}
+            onValueChange={(value) =>
+              updateFilters({
+                source: value === 'all' ? '' : (value as LeadSource),
+                page: 0,
+              })
+            }
+          >
+            <SelectTrigger className="h-10 border-slate-200">
+              <SelectValue placeholder="Sursă: Toate" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Sursă: Toate</SelectItem>
+              {VALID_SOURCES.map((source) => (
+                <SelectItem key={source} value={source}>
+                  {source}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3">
+            <Filter className="h-4 w-4 text-slate-500" />
+            <Select
+              value={filters.assignedToMode}
+              onValueChange={(value) =>
+                updateFilters({
+                  assignedToMode: value as AssignedToMode,
+                  page: 0,
+                })
+              }
+            >
+              <SelectTrigger className="h-10 border-0 bg-transparent px-0 text-slate-600 shadow-none focus:ring-0">
+                <SelectValue placeholder="Filtre avansate: Assigned by" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Assigned by: Any</SelectItem>
+                <SelectItem value="me">Assigned by: Me</SelectItem>
+                <SelectItem value="manual">Assigned by: Manual</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {filters.assignedToMode === 'manual' && (
+          <div className="rounded-xl border border-slate-200 bg-white p-3">
+            <Input
+              className="h-10 border-slate-200"
+              placeholder="Assigned user UUID"
+              value={filters.assignedToManual}
+              onChange={(event) =>
+                updateFilters({ assignedToManual: event.target.value, page: 0 })
+              }
+            />
+          </div>
+        )}
+
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="min-w-[1300px] w-full border-collapse text-left">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50/70">
+                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Lead Info
+                  </th>
+                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Status
+                  </th>
+                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Source
+                  </th>
+                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Assigned To
+                  </th>
+                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1"
+                      onClick={() => onToggleSort('submittedAt')}
+                    >
+                      Submitted
+                      {renderSortIcon('submittedAt')}
+                    </button>
+                  </th>
+                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1"
+                      onClick={() => onToggleSort('lastActivityAt')}
+                    >
+                      Last Activity
+                      {renderSortIcon('lastActivityAt')}
+                    </button>
+                  </th>
+                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Contact
+                  </th>
+                  <th className="px-6 py-4" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {isLoading && (
+                  <tr>
+                    <td colSpan={8} className="px-6 py-6 text-center text-sm text-slate-500">
+                      Loading leads...
+                    </td>
+                  </tr>
+                )}
+
+                {!isLoading && !hasResults && (
+                  <tr>
+                    <td colSpan={8} className="px-6 py-6 text-center text-sm text-slate-500">
+                      No leads found for the current filters.
+                    </td>
+                  </tr>
+                )}
+
+                {!isLoading &&
+                  pageData.content.map((lead) => {
+                    const normalizedStatus = normalizeLeadStatus(lead.status);
+                    return (
+                      <tr key={lead.leadId} className="transition-colors hover:bg-blue-50/30">
+                        <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-blue-100 bg-blue-50 text-sm font-bold text-blue-600">
+                            {resolveLeadName(lead)
+                              .split(' ')
+                              .filter(Boolean)
+                              .slice(0, 2)
+                              .map((token) => token[0]?.toUpperCase())
+                              .join('') || 'L'}
+                          </div>
+                          <div>
+                            <Link
+                              href={`/manager/leads/${encodeURIComponent(lead.leadId)}`}
+                              className="font-semibold text-slate-900 underline-offset-4 hover:underline"
+                            >
+                              {resolveLeadName(lead)}
+                            </Link>
+                            <p className="break-all text-[10px] uppercase tracking-wide text-slate-400">
+                              {lead.leadId}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span
+                          className={`rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase ${statusClasses(normalizedStatus)}`}
+                        >
+                          {statusLabel(normalizedStatus)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium text-slate-700">{lead.source ?? '-'}</span>
+                          <span className="text-xs text-slate-400">
+                            {lead.isDuplicate
+                              ? `Duplicate group ${lead.duplicateGroupId ?? '-'}`
+                              : 'Marketing Lead'}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-slate-600">
+                        <span className="break-all">{lead.assignedToUserId ?? '-'}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                          <Calendar className="h-3.5 w-3.5" />
+                          <span>{formatDateTime(lead.submittedAt)}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-blue-600">
+                          <TrendingUp className="h-3.5 w-3.5" />
+                          <span>{formatDateTime(lead.lastActivityAt)}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col gap-1">
+                          <a
+                            href={lead.email ? `mailto:${lead.email}` : undefined}
+                            className="flex items-center gap-2 text-xs text-slate-600 hover:text-blue-600"
+                          >
+                            <Mail className="h-3.5 w-3.5 text-slate-400" />
+                            <span className="max-w-[200px] truncate">{lead.email ?? '-'}</span>
+                          </a>
+                          <a
+                            href={lead.phone ? `tel:${lead.phone}` : undefined}
+                            className="flex items-center gap-2 text-xs text-slate-600 hover:text-blue-600"
+                          >
+                            <Phone className="h-3.5 w-3.5 text-slate-400" />
+                            <span>{lead.phone ?? '-'}</span>
+                          </a>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <Link
+                          href={`/manager/leads/${encodeURIComponent(lead.leadId)}`}
+                          className="inline-flex rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Link>
+                      </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between border-t border-slate-200 bg-slate-50/40 px-6 py-4">
             <div className="flex items-center gap-2">
               <Label htmlFor="page-size" className="text-sm">
-                Rows per page
+                Rows
               </Label>
               <Select
                 value={String(filters.size)}
@@ -688,8 +836,8 @@ export default function ManagerLeadsPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">
-                Page {pageData.totalPages === 0 ? 0 : pageData.number + 1} / {pageData.totalPages}
+              <span className="text-sm text-slate-500">
+                Page {safeTotalPages === 0 ? 0 : safePageNumber + 1} / {safeTotalPages}
               </span>
               <Button
                 type="button"
@@ -711,8 +859,8 @@ export default function ManagerLeadsPage() {
               </Button>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

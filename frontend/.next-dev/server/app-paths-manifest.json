@@ -1,0 +1,4 @@
+{
+  "/dashboard/notifications/page": "app/dashboard/notifications/page.js",
+  "/dashboard/manager/create-agent/page": "app/dashboard/manager/create-agent/page.js"
+}
