@@ -1,0 +1,371 @@
+{
+  "info": {
+    "_postman_id": "d8a78e9c-4a44-4dc8-a2f2-2cdd2ad3f5c0",
+    "name": "SalesWay - AI Insights Only",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Colecție strictă pentru testarea endpoint-ului GET /manager/leads/{leadId}/ai-insights."
+  },
+  "item": [
+    {
+      "name": "1. Auth & Bootstrap",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.environment.set('jwt', json.token);",
+                  "pm.environment.set('userId', json.userId);",
+                  "try {",
+                  "  const payloadPart = json.token.split('.')[1];",
+                  "  const normalized = payloadPart.replace(/-/g, '+').replace(/_/g, '/');",
+                  "  const decoded = JSON.parse(atob(normalized));",
+                  "  if (decoded.companyId) pm.environment.set('companyId', decoded.companyId);",
+                  "} catch (e) {",
+                  "  console.warn('Nu s-a putut extrage companyId din JWT', e);",
+                  "}",
+                  "pm.test('JWT setat', () => pm.expect(pm.environment.get('jwt')).to.be.a('string').and.not.empty);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resolve Lead ID (latest)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "X-Company-Id",
+                "value": "{{companyId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/manager/leads?page=0&size=1&sort=submittedAt,desc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "manager",
+                "leads"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "1"
+                },
+                {
+                  "key": "sort",
+                  "value": "submittedAt,desc"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('Exista lead in companie', function () {",
+                  "  pm.expect(json.content).to.be.an('array');",
+                  "  pm.expect(json.content.length).to.be.above(0);",
+                  "});",
+                  "if (json.content && json.content.length > 0) {",
+                  "  pm.environment.set('leadId', json.content[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Scenario Prep",
+      "item": [
+        {
+          "name": "Add Context Note",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "X-Company-Id",
+                "value": "{{companyId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Lead interesat de implementare rapidă, are buget aprobat, dar are obiecție pe onboarding. Nota AI {{ts}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/manager/leads/{{leadId}}/notes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "manager",
+                "leads",
+                "{{leadId}}",
+                "notes"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('ts', Date.now().toString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. AI Insights",
+      "item": [
+        {
+          "name": "Get AI Insights",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "X-Company-Id",
+                "value": "{{companyId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/manager/leads/{{leadId}}/ai-insights",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "manager",
+                "leads",
+                "{{leadId}}",
+                "ai-insights"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('Scor intre 0 si 100', function () {",
+                  "  pm.expect(json.score).to.be.a('number');",
+                  "  pm.expect(json.score).to.be.within(0, 100);",
+                  "});",
+                  "pm.test('recommendedAction text', function () {",
+                  "  pm.expect(json.recommendedAction).to.be.a('string').and.not.empty;",
+                  "});",
+                  "pm.test('suggestedApproach text', function () {",
+                  "  pm.expect(json.suggestedApproach).to.be.a('string').and.not.empty;",
+                  "});",
+                  "pm.test('scoreFactors array', function () {",
+                  "  pm.expect(json.scoreFactors).to.be.an('array').and.not.empty;",
+                  "});",
+                  "pm.test('generatedAt exists', function () {",
+                  "  pm.expect(json.generatedAt).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get AI Insights Again (stability check)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "X-Company-Id",
+                "value": "{{companyId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/manager/leads/{{leadId}}/ai-insights",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "manager",
+                "leads",
+                "{{leadId}}",
+                "ai-insights"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('Contract neschimbat', function () {",
+                  "  pm.expect(json).to.have.property('score');",
+                  "  pm.expect(json).to.have.property('recommendedAction');",
+                  "  pm.expect(json).to.have.property('suggestedApproach');",
+                  "  pm.expect(json).to.have.property('scoreFactors');",
+                  "  pm.expect(json).to.have.property('generatedAt');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Negative",
+      "item": [
+        {
+          "name": "AI Insights Unauthorized",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/manager/leads/{{leadId}}/ai-insights",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "manager",
+                "leads",
+                "{{leadId}}",
+                "ai-insights"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 401', function () { pm.response.to.have.status(401); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "AI Insights Lead Not Found",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "X-Company-Id",
+                "value": "{{companyId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/manager/leads/00000000-0000-0000-0000-000000000000/ai-insights",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "manager",
+                "leads",
+                "00000000-0000-0000-0000-000000000000",
+                "ai-insights"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 404', function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

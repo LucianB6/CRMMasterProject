@@ -76,6 +76,8 @@ public class AppProperties {
         private String baseUrl = "https://api.openai.com/v1";
         private String chatModel = "gpt-4o-mini";
         private String embeddingModel = "text-embedding-3-small";
+        private String vectorStoreId;
+        private int vectorSearchMaxResults = 5;
 
         public String getApiKey() {
             return apiKey;
@@ -107,6 +109,22 @@ public class AppProperties {
 
         public void setEmbeddingModel(String embeddingModel) {
             this.embeddingModel = embeddingModel;
+        }
+
+        public String getVectorStoreId() {
+            return vectorStoreId;
+        }
+
+        public void setVectorStoreId(String vectorStoreId) {
+            this.vectorStoreId = vectorStoreId;
+        }
+
+        public int getVectorSearchMaxResults() {
+            return vectorSearchMaxResults;
+        }
+
+        public void setVectorSearchMaxResults(int vectorSearchMaxResults) {
+            this.vectorSearchMaxResults = vectorSearchMaxResults;
         }
     }
 }

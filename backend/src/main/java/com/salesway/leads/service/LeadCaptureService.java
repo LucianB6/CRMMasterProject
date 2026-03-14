@@ -159,6 +159,7 @@ public class LeadCaptureService {
             answer.setQuestionTypeSnapshot(question.getQuestionType());
             answer.setRequiredSnapshot(question.getRequired());
             answer.setOptionsSnapshot(question.getOptionsJson());
+            answer.setDisplayOrderSnapshot(question.getDisplayOrder());
             answerRepository.save(answer);
         }
 

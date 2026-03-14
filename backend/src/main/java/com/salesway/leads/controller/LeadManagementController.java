@@ -3,10 +3,17 @@ package com.salesway.leads.controller;
 import com.salesway.leads.dto.LeadDetailResponse;
 import com.salesway.leads.dto.LeadEventResponse;
 import com.salesway.leads.dto.LeadListItemResponse;
+import com.salesway.leads.dto.LeadActivityResponse;
+import com.salesway.leads.dto.LeadAiInsightsResponse;
+import com.salesway.leads.dto.LeadAiInsightFeedbackRequest;
 import com.salesway.leads.dto.LeadAssigneeUpdateRequest;
+import com.salesway.leads.dto.LeadCallCreateRequest;
+import com.salesway.leads.dto.LeadDetailAnswerItemResponse;
 import com.salesway.leads.dto.LeadNoteRequest;
+import com.salesway.leads.dto.LeadTaskCreateRequest;
 import com.salesway.leads.dto.LeadStageUpdateRequest;
 import com.salesway.leads.dto.LeadStatusUpdateRequest;
+import com.salesway.leads.service.LeadDetailsService;
 import com.salesway.tasks.dto.TaskBoardResponse;
 import com.salesway.leads.service.LeadManagementService;
 import jakarta.validation.Valid;
@@ -28,9 +35,14 @@ import java.util.UUID;
 @RequestMapping("/manager/leads")
 public class LeadManagementController {
     private final LeadManagementService leadManagementService;
+    private final LeadDetailsService leadDetailsService;
 
-    public LeadManagementController(LeadManagementService leadManagementService) {
+    public LeadManagementController(
+            LeadManagementService leadManagementService,
+            LeadDetailsService leadDetailsService
+    ) {
         this.leadManagementService = leadManagementService;
+        this.leadDetailsService = leadDetailsService;
     }
 
     @GetMapping
@@ -63,6 +75,11 @@ public class LeadManagementController {
     @GetMapping("/{leadId}")
     public ResponseEntity<LeadDetailResponse> getDetail(@PathVariable("leadId") UUID leadId) {
         return ResponseEntity.ok(leadManagementService.getLead(leadId));
+    }
+
+    @GetMapping("/{leadId}/answers")
+    public ResponseEntity<List<LeadDetailAnswerItemResponse>> getAnswers(@PathVariable("leadId") UUID leadId) {
+        return ResponseEntity.ok(leadDetailsService.getAnswers(leadId));
     }
 
     @PatchMapping("/{leadId}/status")
@@ -111,8 +128,53 @@ public class LeadManagementController {
         return ResponseEntity.noContent().build();
     }
 
+    @GetMapping("/{leadId}/activities")
+    public ResponseEntity<Page<LeadActivityResponse>> getActivities(
+            @PathVariable("leadId") UUID leadId,
+            @RequestParam(name = "page", defaultValue = "0") int page,
+            @RequestParam(name = "size", defaultValue = "20") int size
+    ) {
+        return ResponseEntity.ok(leadDetailsService.getActivities(leadId, page, size));
+    }
+
+    @PostMapping("/{leadId}/calls")
+    public ResponseEntity<LeadActivityResponse> addCall(
+            @PathVariable("leadId") UUID leadId,
+            @Valid @RequestBody LeadCallCreateRequest request
+    ) {
+        return ResponseEntity.ok(leadDetailsService.addCall(leadId, request));
+    }
+
+    @PostMapping("/{leadId}/tasks")
+    public ResponseEntity<LeadActivityResponse> addTask(
+            @PathVariable("leadId") UUID leadId,
+            @Valid @RequestBody LeadTaskCreateRequest request
+    ) {
+        return ResponseEntity.ok(leadDetailsService.addTask(leadId, request));
+    }
+
     @GetMapping("/{leadId}/tasks")
     public ResponseEntity<List<TaskBoardResponse>> getLeadTasks(@PathVariable("leadId") UUID leadId) {
         return ResponseEntity.ok(leadManagementService.getLeadTasks(leadId));
+    }
+
+    @GetMapping("/{leadId}/ai-insights")
+    public ResponseEntity<LeadAiInsightsResponse> getAiInsights(@PathVariable("leadId") UUID leadId) {
+        return ResponseEntity.ok(leadDetailsService.getAiInsights(leadId));
+    }
+
+    @PostMapping("/{leadId}/ai-insights/regenerate")
+    public ResponseEntity<LeadAiInsightsResponse> regenerateAiInsights(@PathVariable("leadId") UUID leadId) {
+        return ResponseEntity.ok(leadDetailsService.regenerateAiInsights(leadId));
+    }
+
+    @PatchMapping("/{leadId}/ai-insights/{insightId}/feedback")
+    public ResponseEntity<Void> updateAiInsightFeedback(
+            @PathVariable("leadId") UUID leadId,
+            @PathVariable("insightId") UUID insightId,
+            @Valid @RequestBody LeadAiInsightFeedbackRequest request
+    ) {
+        leadDetailsService.updateInsightFeedback(leadId, insightId, request);
+        return ResponseEntity.noContent().build();
     }
 }

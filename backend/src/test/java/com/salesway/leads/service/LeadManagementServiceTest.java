@@ -3,9 +3,12 @@ package com.salesway.leads.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.salesway.common.enums.MembershipRole;
 import com.salesway.common.enums.MembershipStatus;
+import com.salesway.leads.dto.LeadNoteRequest;
 import com.salesway.companies.entity.Company;
 import com.salesway.leads.entity.Lead;
 import com.salesway.leads.entity.PipelineStage;
+import com.salesway.leads.enums.LeadEventType;
+import com.salesway.leads.enums.LeadNoteCategory;
 import com.salesway.leads.repository.LeadAnswerRepository;
 import com.salesway.leads.repository.LeadRepository;
 import com.salesway.leads.repository.LeadStandardFieldsRepository;
@@ -175,5 +178,24 @@ class LeadManagementServiceTest {
 
         verify(leadRepository).save(lead);
         assertThat(lead.getStage()).isEqualTo(stage);
+    }
+
+    @Test
+    void addNote_persistsCategoryInEventPayload() {
+        UUID leadId = UUID.randomUUID();
+        Lead lead = new Lead();
+        lead.setId(leadId);
+        when(leadRepository.findByIdAndCompanyId(leadId, companyId)).thenReturn(Optional.of(lead));
+
+        LeadNoteRequest request = new LeadNoteRequest();
+        request.setText("Buget confirmat 5000 EUR");
+        request.setCategory(LeadNoteCategory.TYPE_CONFIRMATION);
+
+        leadManagementService.addNote(leadId, request);
+
+        ArgumentCaptor<java.util.Map<String, Object>> payloadCaptor = ArgumentCaptor.forClass(java.util.Map.class);
+        verify(leadEventService).appendEvent(eq(lead), eq(LeadEventType.NOTE_ADDED), eq("Lead note added"), payloadCaptor.capture());
+        assertThat(payloadCaptor.getValue()).containsEntry("text", "Buget confirmat 5000 EUR");
+        assertThat(payloadCaptor.getValue()).containsEntry("category", "TYPE_CONFIRMATION");
     }
 }

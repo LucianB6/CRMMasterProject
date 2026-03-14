@@ -2,9 +2,13 @@ package com.salesway.leads.controller;
 
 import com.salesway.leads.dto.LeadFormResponse;
 import com.salesway.leads.dto.LeadFormUpdateRequest;
+import com.salesway.leads.dto.LeadCampaignCreateRequest;
+import com.salesway.leads.dto.LeadCampaignResponse;
+import com.salesway.leads.dto.LeadCampaignUpdateRequest;
 import com.salesway.leads.dto.LeadQuestionReorderRequest;
 import com.salesway.leads.dto.LeadQuestionRequest;
 import com.salesway.leads.dto.LeadQuestionResponse;
+import com.salesway.leads.service.LeadCampaignService;
 import com.salesway.leads.service.LeadFormService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -24,9 +28,11 @@ import java.util.UUID;
 @RequestMapping("/manager/lead-form")
 public class LeadFormController {
     private final LeadFormService leadFormService;
+    private final LeadCampaignService leadCampaignService;
 
-    public LeadFormController(LeadFormService leadFormService) {
+    public LeadFormController(LeadFormService leadFormService, LeadCampaignService leadCampaignService) {
         this.leadFormService = leadFormService;
+        this.leadCampaignService = leadCampaignService;
     }
 
     @GetMapping
@@ -61,6 +67,37 @@ public class LeadFormController {
     @DeleteMapping("/questions/{questionId}")
     public ResponseEntity<Void> deactivateQuestion(@PathVariable("questionId") UUID questionId) {
         leadFormService.deactivateQuestion(questionId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{formId}/campaigns")
+    public ResponseEntity<java.util.List<LeadCampaignResponse>> getCampaigns(@PathVariable("formId") UUID formId) {
+        return ResponseEntity.ok(leadCampaignService.getCampaigns(formId));
+    }
+
+    @PostMapping("/{formId}/campaigns")
+    public ResponseEntity<LeadCampaignResponse> createCampaign(
+            @PathVariable("formId") UUID formId,
+            @Valid @RequestBody LeadCampaignCreateRequest request
+    ) {
+        return ResponseEntity.ok(leadCampaignService.createCampaign(formId, request));
+    }
+
+    @PatchMapping("/{formId}/campaigns/{campaignId}")
+    public ResponseEntity<LeadCampaignResponse> updateCampaign(
+            @PathVariable("formId") UUID formId,
+            @PathVariable("campaignId") UUID campaignId,
+            @Valid @RequestBody LeadCampaignUpdateRequest request
+    ) {
+        return ResponseEntity.ok(leadCampaignService.updateCampaign(formId, campaignId, request));
+    }
+
+    @DeleteMapping("/{formId}/campaigns/{campaignId}")
+    public ResponseEntity<Void> deleteCampaign(
+            @PathVariable("formId") UUID formId,
+            @PathVariable("campaignId") UUID campaignId
+    ) {
+        leadCampaignService.deleteCampaign(formId, campaignId);
         return ResponseEntity.noContent().build();
     }
 }

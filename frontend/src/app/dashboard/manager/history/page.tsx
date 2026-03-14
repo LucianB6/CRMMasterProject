@@ -24,13 +24,6 @@ import {
 } from 'date-fns';
 import { enUS } from 'date-fns/locale';
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '../../../../components/ui/card';
-import {
   Table,
   TableBody,
   TableCell,
@@ -55,6 +48,7 @@ import {
   Phone,
   RefreshCw,
   CalendarPlus,
+  User,
 } from 'lucide-react';
 
 const metricsConfig = {
@@ -501,92 +495,72 @@ export default function ManagerHistoryPage() {
     return (
       <div className="space-y-6">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Total ({metric.unitLabel})
-              </CardTitle>
-              <Icon className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{totals.totalUnits}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Average / Period
-              </CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {totals.averageUnits.toFixed(1)}
-              </div>
-            </CardContent>
-          </Card>
+          <HistoryMetricCard
+            label={`Total (${metric.unitLabel})`}
+            value={totals.totalUnits.toLocaleString('en-US')}
+            icon={<Icon className="h-5 w-5" />}
+            tone="blue"
+          />
+          <HistoryMetricCard
+            label="Average / Period"
+            value={totals.averageUnits.toFixed(1)}
+            icon={<TrendingUp className="h-5 w-5" />}
+            tone="emerald"
+          />
           {metric.showValue && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Total Value (RON)
-                </CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {totals.totalValue > 0
-                    ? totals.totalValue.toLocaleString('en-US')
-                    : '-'}
-                </div>
-              </CardContent>
-            </Card>
+            <HistoryMetricCard
+              label="Total Value (RON)"
+              value={totals.totalValue > 0 ? totals.totalValue.toLocaleString('en-US') : '-'}
+              icon={<DollarSign className="h-5 w-5" />}
+              tone="indigo"
+            />
           )}
         </div>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>{`Chart ${metric.label} - ${title}`}</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <div className="rounded-[28px] border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/40">
+            <div className="mb-4">
+              <h3 className="text-lg font-bold text-slate-800">{`Chart ${metric.label} - ${title}`}</h3>
+            </div>
+            <div>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={data}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
                   <XAxis
                     dataKey="period"
-                    stroke="#888888"
-                    fontSize={12}
+                    stroke="#94a3b8"
+                    fontSize={11}
                     tickLine={false}
                     axisLine={false}
                   />
                   <YAxis
-                    stroke="#888888"
-                    fontSize={12}
+                    stroke="#94a3b8"
+                    fontSize={11}
                     tickLine={false}
                     axisLine={false}
                     allowDecimals={false}
                   />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: 'hsl(var(--card))',
-                      borderColor: 'hsl(var(--border))',
+                      borderRadius: 12,
+                      border: '1px solid #e2e8f0',
+                      backgroundColor: '#ffffff',
                     }}
                   />
                   <Bar
                     dataKey={metric.dataKey}
                     name={metric.barName}
-                    fill="hsl(var(--primary))"
+                    fill="#38bdf8"
                     radius={[4, 4, 0, 0]}
                   />
                 </BarChart>
               </ResponsiveContainer>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>{`Table ${metric.label} - ${title}`}</CardTitle>
-            </CardHeader>
-            <CardContent>
+            </div>
+          </div>
+          <div className="rounded-[28px] border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/40">
+            <div className="mb-4">
+              <h3 className="text-lg font-bold text-slate-800">{`Table ${metric.label} - ${title}`}</h3>
+            </div>
+            <div>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -615,8 +589,8 @@ export default function ManagerHistoryPage() {
                   ))}
                 </TableBody>
               </Table>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -646,6 +620,18 @@ export default function ManagerHistoryPage() {
   };
 
   const currentData = historyData;
+  const selectedAgentLabel =
+    selectedAgentId === 'all'
+      ? 'All agents'
+      : agents.find((agent) => agent.membership_id === selectedAgentId)?.email ?? 'Selected agent';
+
+  const periodLabelMap: Record<typeof periodKey, string> = {
+    last7Days: 'Last 7 days',
+    currentMonth: 'Current month',
+    currentYear: 'Current year',
+    previousYear: 'Previous year',
+  };
+
   const topStats = useMemo(() => {
     if (selectedAgentId !== 'all') {
       return null;
@@ -654,43 +640,41 @@ export default function ManagerHistoryPage() {
   }, [buildTopStats, periodKey, reportsByPeriod, selectedAgentId]);
 
   return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="font-headline text-2xl">Team History</h1>
-        <p className="text-muted-foreground">
-          Analyze historical team performance or a specific agent.
-        </p>
-      </header>
+    <div className="w-full min-w-0 max-w-none space-y-8">
+      <div className="flex w-full flex-col gap-6 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h2 className="text-3xl font-black tracking-tight text-slate-800">Team History</h2>
+          <p className="mt-1 font-medium text-slate-500">
+            Analyze historical team performance using real values from daily reports.
+          </p>
+        </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Agent Filter</CardTitle>
-          <CardDescription>
-            Select &quot;All Agents&quot; for aggregated data or choose an agent.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
-            <SelectTrigger className="w-full sm:w-[280px]">
-              <SelectValue placeholder="Select an option" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Agents</SelectItem>
-              {agents.map((agent) => (
-                <SelectItem
-                  key={agent.membership_id}
-                  value={agent.membership_id}
-                >
-                  {agent.email}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </CardContent>
-      </Card>
+        <div className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm md:w-auto">
+          <div className="min-w-0 flex-1 md:min-w-[260px]">
+            <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
+              <SelectTrigger className="h-10 border-none bg-slate-50 px-3 font-bold text-slate-700 shadow-none">
+                <SelectValue placeholder="All Agents" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Agents</SelectItem>
+                {agents.map((agent) => (
+                  <SelectItem key={agent.membership_id} value={agent.membership_id}>
+                    {agent.email}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="h-6 w-px bg-slate-200" />
+          <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1 text-xs font-bold text-slate-600">
+            <User className="h-3.5 w-3.5" />
+            {selectedAgentLabel}
+          </div>
+        </div>
+      </div>
 
       {isLoading && (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-slate-500">
           Loading history...
         </p>
       )}
@@ -701,70 +685,14 @@ export default function ManagerHistoryPage() {
         </p>
       ) : (
         <div className="space-y-2">
-          <h2 className="text-lg font-semibold tracking-tight">
+          <h2 className="text-lg font-semibold tracking-tight text-slate-800">
             Team performance leaders
           </h2>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Top Sales</CardTitle>
-                <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {topStats?.sales.sales ?? 0}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {topStats?.sales.email ?? '-'}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Top Calls</CardTitle>
-                <Phone className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {topStats?.calls.calls ?? 0}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {topStats?.calls.email ?? '-'}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Top Sales Follow-up
-                </CardTitle>
-                <RefreshCw className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {topStats?.followUpSales.followUpSales ?? 0}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {topStats?.followUpSales.email ?? '-'}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Top Outbound Bookings
-                </CardTitle>
-                <CalendarPlus className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {topStats?.outboundBookings.outboundBookings ?? 0}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {topStats?.outboundBookings.email ?? '-'}
-                </p>
-              </CardContent>
-            </Card>
+            <HistoryLeaderCard title="Top Sales" value={topStats?.sales.sales ?? 0} subtitle={topStats?.sales.email ?? '-'} icon={<ShoppingCart className="h-5 w-5" />} tone="indigo" />
+            <HistoryLeaderCard title="Top Calls" value={topStats?.calls.calls ?? 0} subtitle={topStats?.calls.email ?? '-'} icon={<Phone className="h-5 w-5" />} tone="blue" />
+            <HistoryLeaderCard title="Top Sales Follow-up" value={topStats?.followUpSales.followUpSales ?? 0} subtitle={topStats?.followUpSales.email ?? '-'} icon={<RefreshCw className="h-5 w-5" />} tone="emerald" />
+            <HistoryLeaderCard title="Top Outbound Bookings" value={topStats?.outboundBookings.outboundBookings ?? 0} subtitle={topStats?.outboundBookings.email ?? '-'} icon={<CalendarPlus className="h-5 w-5" />} tone="orange" />
           </div>
         </div>
       )}
@@ -779,12 +707,13 @@ export default function ManagerHistoryPage() {
           )
         }
       >
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
+        <TabsList className="grid w-full grid-cols-2 rounded-2xl bg-slate-100 p-1 sm:grid-cols-4">
           <TabsTrigger value="last7Days">Last 7 days</TabsTrigger>
           <TabsTrigger value="currentMonth">Current month</TabsTrigger>
           <TabsTrigger value="currentYear">Current year</TabsTrigger>
           <TabsTrigger value="previousYear">Previous year</TabsTrigger>
         </TabsList>
+        <p className="mt-3 text-sm font-medium text-slate-500">{periodLabelMap[periodKey]}</p>
         <TabsContent value="last7Days" className="mt-6">
           {renderPeriodContent(
             'Last 7 days',
@@ -815,5 +744,61 @@ export default function ManagerHistoryPage() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+function HistoryMetricCard({
+  label,
+  value,
+  subtitle,
+  icon,
+  tone,
+}: {
+  label: string;
+  value: string;
+  subtitle?: string;
+  icon: React.ReactNode;
+  tone: 'blue' | 'emerald' | 'orange' | 'indigo';
+}) {
+  const tones = {
+    blue: 'bg-blue-50 text-blue-600 border-blue-100',
+    emerald: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+    orange: 'bg-orange-50 text-orange-600 border-orange-100',
+    indigo: 'bg-indigo-50 text-indigo-600 border-indigo-100',
+  };
+
+  return (
+    <div className="rounded-[24px] border border-slate-100 bg-white p-5 shadow-xl shadow-slate-200/35">
+      <div className="mb-3 flex items-start justify-between">
+        <div className={`rounded-xl border p-2.5 ${tones[tone]}`}>{icon}</div>
+      </div>
+      <p className="mb-1 text-xs font-bold uppercase tracking-widest text-slate-400">{label}</p>
+      <p className="text-2xl font-black text-slate-900">{value}</p>
+      {subtitle ? <p className="mt-1 truncate text-xs font-medium text-slate-500">{subtitle}</p> : null}
+    </div>
+  );
+}
+
+function HistoryLeaderCard({
+  title,
+  value,
+  subtitle,
+  icon,
+  tone,
+}: {
+  title: string;
+  value: number;
+  subtitle: string;
+  icon: React.ReactNode;
+  tone: 'blue' | 'emerald' | 'orange' | 'indigo';
+}) {
+  return (
+    <HistoryMetricCard
+      label={title}
+      value={value.toLocaleString('en-US')}
+      subtitle={subtitle}
+      icon={icon}
+      tone={tone}
+    />
   );
 }

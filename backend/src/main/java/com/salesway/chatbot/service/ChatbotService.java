@@ -117,34 +117,42 @@ public class ChatbotService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "message is required");
         }
         CompanyMembership membership = getMembership();
-        KbDocument document = kbDocumentRepository
-                .findFirstByCompanyIdAndIsActiveTrueOrderByCreatedAtDesc(membership.getCompany().getId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No active knowledge base"));
-
-        List<KbChunk> chunks = kbChunkRepository.findByDocumentIdOrderByChunkIndexAsc(document.getId());
-        if (chunks.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Knowledge base is empty");
-        }
-
-        List<Double> queryEmbedding = openAiClient.embed(request.getMessage());
-        List<ScoredChunk> scoredChunks = chunks.stream()
-                .filter(chunk -> chunk.getEmbeddingText() != null && !chunk.getEmbeddingText().isBlank())
-                .map(chunk -> new ScoredChunk(
-                        chunk,
-                        cosineSimilarity(queryEmbedding, toVector(chunk.getEmbeddingText()))
-                ))
-                .sorted(Comparator.comparingDouble((ScoredChunk item) -> item.score).reversed())
-                .limit(DEFAULT_TOP_K)
-                .toList();
-
-        double bestScore = scoredChunks.isEmpty() ? 0.0 : scoredChunks.get(0).score;
-        boolean useContext = !isVagueMessage(request.getMessage()) && bestScore >= DEFAULT_SIMILARITY_THRESHOLD;
-
         String context = "";
-        if (useContext) {
-            context = scoredChunks.stream()
-                    .map(item -> item.chunk.getContent())
-                    .reduce("", (acc, item) -> acc.isEmpty() ? item : acc + "\n\n---\n\n" + item);
+        boolean useContext = false;
+        if (openAiClient.hasHostedVectorStore()) {
+            List<String> hostedSnippets = findHostedSnippets(request.getMessage());
+            useContext = !isVagueMessage(request.getMessage()) && !hostedSnippets.isEmpty();
+            if (useContext) {
+                context = String.join("\n\n---\n\n", hostedSnippets);
+            }
+        } else {
+            KbDocument document = kbDocumentRepository
+                    .findFirstByCompanyIdAndIsActiveTrueOrderByCreatedAtDesc(membership.getCompany().getId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No active knowledge base"));
+
+            List<KbChunk> chunks = kbChunkRepository.findByDocumentIdOrderByChunkIndexAsc(document.getId());
+            if (chunks.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Knowledge base is empty");
+            }
+
+            List<Double> queryEmbedding = openAiClient.embed(request.getMessage());
+            List<ScoredChunk> scoredChunks = chunks.stream()
+                    .filter(chunk -> chunk.getEmbeddingText() != null && !chunk.getEmbeddingText().isBlank())
+                    .map(chunk -> new ScoredChunk(
+                            chunk,
+                            cosineSimilarity(queryEmbedding, toVector(chunk.getEmbeddingText()))
+                    ))
+                    .sorted(Comparator.comparingDouble((ScoredChunk item) -> item.score).reversed())
+                    .limit(DEFAULT_TOP_K)
+                    .toList();
+
+            double bestScore = scoredChunks.isEmpty() ? 0.0 : scoredChunks.get(0).score;
+            useContext = !isVagueMessage(request.getMessage()) && bestScore >= DEFAULT_SIMILARITY_THRESHOLD;
+            if (useContext) {
+                context = scoredChunks.stream()
+                        .map(item -> item.chunk.getContent())
+                        .reduce("", (acc, item) -> acc.isEmpty() ? item : acc + "\n\n---\n\n" + item);
+            }
         }
 
         ChatConversation conversation = resolveConversation(membership, request.getConversationId());
@@ -177,6 +185,14 @@ public class ChatbotService {
         saveMessage(conversation, ChatRole.ASSISTANT, answer, null);
 
         return new ChatResponse(answer, conversation.getId());
+    }
+
+    private List<String> findHostedSnippets(String query) {
+        try {
+            return openAiClient.searchVectorStore(query, Math.max(DEFAULT_TOP_K, openAiClient.getVectorSearchMaxResults()));
+        } catch (Exception exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Hosted knowledge search failed");
+        }
     }
 
     private ChatConversation resolveConversation(CompanyMembership membership, UUID conversationId) {

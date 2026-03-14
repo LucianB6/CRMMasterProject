@@ -1,7 +1,8 @@
 'use client';
 
 import {
-  LayoutGrid,
+  LayoutDashboard,
+  History,
   LineChart,
   FileText,
   Users,
@@ -9,25 +10,12 @@ import {
   UserPlus,
   Calendar,
   Bot,
-  ListTodo,
-  Target,
-  ClipboardList,
+  Layers,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import * as React from 'react';
-
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-  SidebarProvider,
-  SidebarInset,
-  SidebarHeader,
-  SidebarFooter,
-} from '../../components/ui/sidebar';
-import { Logo } from '../../components/logo';
 import { DashboardHeader } from '../../components/dashboard/header';
 import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar';
 import { PlaceHolderImages } from '../../lib/placeholder-images';
@@ -37,15 +25,13 @@ import { apiFetch } from '../../lib/api';
 const managerAvatar = PlaceHolderImages.find((img) => img.id === 'avatar-4');
 
 const agentMenuItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutGrid },
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dashboard/history', label: 'History', icon: LineChart },
   { href: '/dashboard/report', label: 'Daily Report', icon: FileText },
   { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar },
-  { href: '/dashboard/tasks', label: 'Tasks', icon: ListTodo },
-  { href: '/dashboard/goals', label: 'Goals', icon: Target },
 ];
 
-const managerMenuItems = [
+const managerMenuItemsTop = [
   {
     href: '/dashboard/manager/overview',
     label: 'Overview',
@@ -54,30 +40,41 @@ const managerMenuItems = [
   {
     href: '/dashboard/manager/history',
     label: 'Team history',
-    icon: LineChart,
+    icon: History,
   },
   {
     href: '/dashboard/manager/forecast',
     label: 'Sales forecast',
     icon: LineChart,
   },
-  {
-    href: '/dashboard/manager/leads',
-    label: 'Leads',
-    icon: ClipboardList,
-  },
-  { href: '/dashboard/manager/reports', label: 'Team Reports', icon: FileText },
-  { href: '/dashboard/notifications', label: 'Notifications', icon: Bell },
-  {
-    href: '/dashboard/manager/create-agent',
-    label: 'Create employee account',
-    icon: UserPlus,
-  },
 ];
 
 const toolsMenuItems = [
   { href: '/dashboard/ai-assistant', label: 'AI Assistant', icon: Bot },
 ];
+
+type NavItemProps = {
+  href: string;
+  label: string;
+  active?: boolean;
+  icon: LucideIcon;
+};
+
+function NavItem({ href, icon: Icon, label, active = false }: NavItemProps) {
+  return (
+    <Link
+      href={href}
+      className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-all ${
+        active
+          ? 'bg-white text-[#38bdf8] shadow-sm font-bold'
+          : 'text-blue-50 hover:bg-white/10 font-medium'
+      }`}
+    >
+      <Icon size={20} />
+      <span className="text-sm">{label}</span>
+    </Link>
+  );
+}
 
 function DashboardSkeleton() {
   return (
@@ -163,6 +160,9 @@ export default function DashboardLayout({
 
     void fetchUser();
   }, []);
+  const leadsSectionActive =
+    pathname.startsWith('/dashboard/manager/leads') ||
+    pathname.startsWith('/dashboard/manager/lead-form');
 
   if (!userRole) {
     return <DashboardSkeleton />;
@@ -171,78 +171,111 @@ export default function DashboardLayout({
   const isManager = userRole === 'manager';
 
   return (
-    <SidebarProvider>
-      <Sidebar>
-        <SidebarHeader>
-          <Logo href={isManager ? '/dashboard/manager/overview' : '/dashboard'} />
-        </SidebarHeader>
+    <div className="flex h-screen w-full overflow-hidden">
+      <aside className="hidden h-full w-64 flex-col bg-[#38bdf8] text-white shadow-xl md:flex">
+        <div className="flex items-center gap-3 p-6">
+          <div className="rounded-lg bg-white p-2 shadow-inner">
+            <Layers className="h-6 w-6 text-[#38bdf8]" />
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight">SalesWay</h1>
+        </div>
 
-        <SidebarContent>
+        <nav className="flex-1 space-y-1 px-4 py-4">
+          <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-blue-100 opacity-70">
+            {isManager ? 'Manager' : 'Personal'}
+          </p>
+
           {isManager ? (
-            <SidebarMenu>
-              <p className="px-2 py-2 text-xs font-semibold text-sidebar-foreground/70">
-                Manager
-              </p>
-              {managerMenuItems.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={pathname.startsWith(item.href)}
-                    tooltip={item.label}
-                  >
-                    <a href={item.href}>
-                      <item.icon />
-                      <span>{item.label}</span>
-                    </a>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+            <>
+              {managerMenuItemsTop.map((item) => (
+                <NavItem
+                  key={item.href}
+                  href={item.href}
+                  icon={item.icon}
+                  label={item.label}
+                  active={pathname.startsWith(item.href)}
+                />
               ))}
-            </SidebarMenu>
+
+              <NavItem
+                href="/dashboard/manager/leads"
+                icon={Users}
+                label="Leads"
+                active={leadsSectionActive}
+              />
+              <div className="ml-9 space-y-1 border-l border-white/20 py-1">
+                <Link
+                  href="/dashboard/manager/leads"
+                  className={`ml-2 block rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                    pathname.startsWith('/dashboard/manager/leads')
+                      ? 'bg-white/20'
+                      : 'hover:bg-white/10'
+                  }`}
+                >
+                  Active Leads
+                </Link>
+                <Link
+                  href="/dashboard/manager/lead-form"
+                  className={`ml-2 block rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                    pathname.startsWith('/dashboard/manager/lead-form')
+                      ? 'bg-white/20'
+                      : 'hover:bg-white/10'
+                  }`}
+                >
+                  Form Editor
+                </Link>
+              </div>
+
+            </>
           ) : (
-            <SidebarMenu>
-              <p className="px-2 py-2 text-xs font-semibold text-sidebar-foreground/70">
-                Personal
-              </p>
+            <>
               {agentMenuItems.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={pathname === item.href}
-                    tooltip={item.label}
-                  >
-                    <a href={item.href}>
-                      <item.icon />
-                      <span>{item.label}</span>
-                    </a>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+                <NavItem
+                  key={item.href}
+                  href={item.href}
+                  icon={item.icon}
+                  label={item.label}
+                  active={pathname === item.href}
+                />
               ))}
-            </SidebarMenu>
+            </>
           )}
-          <SidebarMenu>
-            <p className="px-2 py-2 text-xs font-semibold text-sidebar-foreground/70">
+
+          <div className="pt-6">
+            <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-blue-100 opacity-70">
               Tools
             </p>
             {toolsMenuItems.map((item) => (
-              <SidebarMenuItem key={item.href}>
-                <SidebarMenuButton
-                  asChild
-                  isActive={pathname.startsWith(item.href)}
-                  tooltip={item.label}
-                >
-                  <a href={item.href}>
-                    <item.icon />
-                    <span>{item.label}</span>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+              <NavItem
+                key={item.href}
+                href={item.href}
+                icon={item.icon}
+                label={item.label}
+                active={pathname.startsWith(item.href)}
+              />
             ))}
-          </SidebarMenu>
-        </SidebarContent>
+            {isManager && (
+              <>
+                <NavItem
+                  href="/dashboard/notifications"
+                  icon={Bell}
+                  label="Notifications"
+                  active={pathname.startsWith('/dashboard/notifications')}
+                />
+                <NavItem
+                  href="/dashboard/manager/create-agent"
+                  icon={UserPlus}
+                  label="Create account"
+                  active={pathname.startsWith('/dashboard/manager/create-agent')}
+                />
+              </>
+            )}
+          </div>
+        </nav>
 
-        <SidebarFooter>
-          <div className="flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm text-sidebar-foreground">
-            <Avatar className="h-8 w-8">
+        <div className="mt-auto bg-[#0ea5e9] p-4">
+          <div className="flex items-center gap-3 px-2">
+            <Avatar className="h-10 w-10 border border-white/30 bg-white/20">
               {managerAvatar && (
                 <AvatarImage
                   src={managerAvatar.imageUrl}
@@ -250,24 +283,24 @@ export default function DashboardLayout({
                   data-ai-hint={managerAvatar.imageHint}
                 />
               )}
-              <AvatarFallback>{initials}</AvatarFallback>
+              <AvatarFallback className="bg-transparent font-bold text-white">
+                {initials}
+              </AvatarFallback>
             </Avatar>
-            <div className="flex-grow truncate">
-              <p className="font-semibold">{displayName}</p>
-              <p className="text-xs text-sidebar-foreground/70">
-                {isManager ? 'Sales Manager' : 'Sales Agent'}
-              </p>
+            <div className="truncate">
+              <p className="text-sm font-bold leading-tight">{displayName}</p>
+              <p className="text-xs text-blue-100">{isManager ? 'Sales Manager' : 'Sales Agent'}</p>
             </div>
           </div>
-        </SidebarFooter>
-      </Sidebar>
+        </div>
+      </aside>
 
-      <SidebarInset className="min-w-0 overflow-x-hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <DashboardHeader showNotifications={isManager} />
         <main className="flex h-full min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 md:p-6">
           {children}
         </main>
-      </SidebarInset>
-    </SidebarProvider>
+      </div>
+    </div>
   );
 }

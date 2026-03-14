@@ -146,7 +146,7 @@ public class LeadManagementService {
 
         LeadStandardFields standard = standardFieldsRepository.findByLeadId(lead.getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Lead standard fields missing"));
-        List<LeadAnswerResponse> answers = leadAnswerRepository.findByLeadIdOrderByCreatedAtAsc(lead.getId())
+        List<LeadAnswerResponse> answers = leadAnswerRepository.findByLeadIdOrderByDisplayOrderSnapshotAscCreatedAtAsc(lead.getId())
                 .stream().map(this::toAnswerResponse).toList();
         List<UUID> relatedLeadIds = lead.getDuplicateGroupId() == null
                 ? List.of()
@@ -239,11 +239,16 @@ public class LeadManagementService {
         CompanyMembership managerMembership = managerAccessService.getManagerMembership();
         Lead lead = getLeadOrThrow(leadId, managerMembership.getCompany().getId());
         String text = request.getText().trim();
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("text", text);
+        if (request.getCategory() != null) {
+            payload.put("category", request.getCategory().name());
+        }
         leadEventService.appendEvent(
                 lead,
                 LeadEventType.NOTE_ADDED,
                 "Lead note added",
-                Map.of("text", text)
+                payload
         );
         leadRepository.save(lead);
     }

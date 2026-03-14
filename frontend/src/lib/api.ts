@@ -1,4 +1,5 @@
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+const API_PROXY_PREFIX = '/api-proxy';
 
 if (!API_BASE_URL) {
   throw new Error('NEXT_PUBLIC_API_BASE_URL is not set.');
@@ -27,6 +28,9 @@ export const buildUrl = (path: string) => {
     return path;
   }
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  if (typeof window !== 'undefined') {
+    return `${API_PROXY_PREFIX}${normalizedPath}`;
+  }
   return new URL(normalizedPath, API_BASE_URL).toString();
 };
 

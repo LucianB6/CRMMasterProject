@@ -8,4 +8,6 @@ import java.util.UUID;
 
 public interface LeadAnswerRepository extends JpaRepository<LeadAnswer, UUID> {
     List<LeadAnswer> findByLeadIdOrderByCreatedAtAsc(UUID leadId);
+
+    List<LeadAnswer> findByLeadIdOrderByDisplayOrderSnapshotAscCreatedAtAsc(UUID leadId);
 }
