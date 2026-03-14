@@ -43,6 +43,10 @@ public class LeadAnswer extends CreatedOnlyEntity {
     @Column(name = "options_snapshot", columnDefinition = "jsonb")
     private JsonNode optionsSnapshot;
 
+    @NotNull
+    @Column(name = "display_order_snapshot", nullable = false)
+    private Integer displayOrderSnapshot;
+
     public Lead getLead() {
         return lead;
     }
@@ -97,5 +101,13 @@ public class LeadAnswer extends CreatedOnlyEntity {
 
     public void setOptionsSnapshot(JsonNode optionsSnapshot) {
         this.optionsSnapshot = optionsSnapshot;
+    }
+
+    public Integer getDisplayOrderSnapshot() {
+        return displayOrderSnapshot;
+    }
+
+    public void setDisplayOrderSnapshot(Integer displayOrderSnapshot) {
+        this.displayOrderSnapshot = displayOrderSnapshot;
     }
 }

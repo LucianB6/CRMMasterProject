@@ -1,7 +1,10 @@
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/test/java/com/salesway/auth/service/AuthServiceGoogleInviteTest.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/test/java/com/salesway/common/error/ApiExceptionHandlerTest.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/test/java/com/salesway/invitations/service/InvitationPreviewServiceTest.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/test/java/com/salesway/leads/controller/LeadManagementControllerIntegrationTest.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/test/java/com/salesway/leads/service/LeadCampaignServiceTest.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/test/java/com/salesway/leads/service/LeadCaptureServiceTest.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/test/java/com/salesway/leads/service/LeadDetailsServiceTest.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/test/java/com/salesway/leads/service/LeadFormServiceTest.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/test/java/com/salesway/leads/service/LeadManagementServiceTest.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/test/java/com/salesway/leads/service/PipelineStageServiceTest.java

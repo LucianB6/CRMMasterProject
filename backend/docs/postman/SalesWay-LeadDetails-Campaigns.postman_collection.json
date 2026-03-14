@@ -1,0 +1,991 @@
+{
+  "info": {
+    "_postman_id": "1abf66a6-5de6-4bdf-b8e1-bab16f458ca8",
+    "name": "SalesWay - Lead Details & Campaigns",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Colecție pentru validarea endpoint-urilor backend: auth, lead-form campaigns, lead details answers/activities/calls/tasks/ai-insights."
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const reqUrl = pm.request.url.toString();",
+          "const isLogin = reqUrl.includes('/auth/login');",
+          "if (!isLogin && (!pm.environment.get('jwt') || pm.environment.get('jwt').trim() === '')) {",
+          "  conEsole.warn('Lipsește jwt în environment. Rulează mai întâi request-ul Auth/Login.');",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Auth",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const json = pm.response.json();",
+                  "pm.test('Are token', function () {",
+                  "  pm.expect(json.token).to.be.a('string').and.not.empty;",
+                  "});",
+                  "",
+                  "pm.environment.set('jwt', json.token);",
+                  "pm.environment.set('userId', json.userId);",
+                  "",
+                  "try {",
+                  "  const payloadPart = json.token.split('.')[1];",
+                  "  const normalized = payloadPart.replace(/-/g, '+').replace(/_/g, '/');",
+                  "  const decoded = JSON.parse(atob(normalized));",
+                  "  if (decoded.companyId) pm.environment.set('companyId', decoded.companyId);",
+                  "} catch (e) {",
+                  "  console.warn('Nu am putut extrage companyId din JWT:', e);",
+                  "}",
+                  "",
+                  "pm.test('companyId setat', function () {",
+                  "  pm.expect(pm.environment.get('companyId')).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1. Bootstrap IDs",
+      "item": [
+        {
+          "name": "Auth / Me",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "if (json.id) pm.environment.set('userId', json.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resolve Form ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "X-Company-Id",
+                "value": "{{companyId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/manager/lead-form",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "manager",
+                "lead-form"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.environment.set('formId', json.id);",
+                  "pm.test('formId setat', function () {",
+                  "  pm.expect(pm.environment.get('formId')).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resolve Lead ID (first page)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "X-Company-Id",
+                "value": "{{companyId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/manager/leads?page=0&size=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "manager",
+                "leads"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('Exista cel putin un lead', function () {",
+                  "  pm.expect(json.content).to.be.an('array');",
+                  "  pm.expect(json.content.length).to.be.above(0);",
+                  "});",
+                  "if (json.content && json.content.length > 0) {",
+                  "  pm.environment.set('leadId', json.content[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Campaigns",
+      "item": [
+        {
+          "name": "List Campaigns",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "X-Company-Id",
+                "value": "{{companyId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/manager/lead-form/{{formId}}/campaigns",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "manager",
+                "lead-form",
+                "{{formId}}",
+                "campaigns"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('Array campaigns', function () { pm.expect(json).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Campaign",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "X-Company-Id",
+                "value": "{{companyId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman Campaign {{timestamp}}\",\n  \"channel\": \"META\",\n  \"campaignCode\": \"postman-{{timestamp}}\",\n  \"utmSource\": \"facebook\",\n  \"utmMedium\": \"paid_social\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/manager/lead-form/{{formId}}/campaigns",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "manager",
+                "lead-form",
+                "{{formId}}",
+                "campaigns"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('timestamp', Date.now().toString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.environment.set('campaignId', json.id);",
+                  "pm.environment.set('campaignCode', json.campaignCode);",
+                  "pm.test('DTO campanie valid', function () {",
+                  "  pm.expect(json.formId).to.eql(pm.environment.get('formId'));",
+                  "  pm.expect(json.name).to.be.a('string');",
+                  "  pm.expect(json.channel).to.be.oneOf(['META','GOOGLE','ORGANIC','OTHER','FORM']);",
+                  "  pm.expect(json.publicLink).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Duplicate Campaign Code (expect 409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "X-Company-Id",
+                "value": "{{companyId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Duplicate Code\",\n  \"channel\": \"META\",\n  \"campaignCode\": \"{{campaignCode}}\",\n  \"utmSource\": \"facebook\",\n  \"utmMedium\": \"paid_social\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/manager/lead-form/{{formId}}/campaigns",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "manager",
+                "lead-form",
+                "{{formId}}",
+                "campaigns"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Patch Campaign",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "X-Company-Id",
+                "value": "{{companyId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Campaign {{timestamp}}\",\n  \"channel\": \"GOOGLE\",\n  \"utmSource\": \"google\",\n  \"utmMedium\": \"cpc\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/manager/lead-form/{{formId}}/campaigns/{{campaignId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "manager",
+                "lead-form",
+                "{{formId}}",
+                "campaigns",
+                "{{campaignId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('timestamp', Date.now().toString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('Canal updatat', () => pm.expect(json.channel).to.eql('GOOGLE'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Campaign (soft delete)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "X-Company-Id",
+                "value": "{{companyId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/manager/lead-form/{{formId}}/campaigns/{{campaignId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "manager",
+                "lead-form",
+                "{{formId}}",
+                "campaigns",
+                "{{campaignId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Lead Details",
+      "item": [
+        {
+          "name": "Get Lead Answers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "X-Company-Id",
+                "value": "{{companyId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/manager/leads/{{leadId}}/answers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "manager",
+                "leads",
+                "{{leadId}}",
+                "answers"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('Array answers', function () { pm.expect(json).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add Note",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "X-Company-Id",
+                "value": "{{companyId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Notă adăugată din Postman - {{timestamp}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/manager/leads/{{leadId}}/notes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "manager",
+                "leads",
+                "{{leadId}}",
+                "notes"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('timestamp', Date.now().toString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add Call",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "X-Company-Id",
+                "value": "{{companyId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Qualification call {{timestamp}}\",\n  \"description\": \"Discutie despre buget si urgenta.\",\n  \"outcome\": \"connected\",\n  \"durationSeconds\": 420\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/manager/leads/{{leadId}}/calls",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "manager",
+                "leads",
+                "{{leadId}}",
+                "calls"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('timestamp', Date.now().toString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('Activity type call', () => pm.expect(json.type).to.eql('call'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add Task",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "X-Company-Id",
+                "value": "{{companyId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Follow-up task {{timestamp}}\",\n  \"description\": \"Trimite oferta personalizata\",\n  \"dueDate\": \"2026-03-10\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/manager/leads/{{leadId}}/tasks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "manager",
+                "leads",
+                "{{leadId}}",
+                "tasks"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('timestamp', Date.now().toString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "if (json.id) pm.environment.set('taskId', json.id);",
+                  "pm.test('Activity type task', () => pm.expect(json.type).to.eql('task'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Activities",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "X-Company-Id",
+                "value": "{{companyId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/manager/leads/{{leadId}}/activities?page=0&size=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "manager",
+                "leads",
+                "{{leadId}}",
+                "activities"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('Page content array', () => pm.expect(json.content).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Patch Lead Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "X-Company-Id",
+                "value": "{{companyId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"qualified\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/manager/leads/{{leadId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "manager",
+                "leads",
+                "{{leadId}}",
+                "status"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get AI Insights",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "X-Company-Id",
+                "value": "{{companyId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/manager/leads/{{leadId}}/ai-insights",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "manager",
+                "leads",
+                "{{leadId}}",
+                "ai-insights"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('Scor in interval', () => { pm.expect(json.score).to.be.within(0, 100); });",
+                  "pm.test('Payload stabil', () => {",
+                  "  pm.expect(json.recommendedAction).to.be.a('string');",
+                  "  pm.expect(json.suggestedApproach).to.be.a('string');",
+                  "  pm.expect(json.scoreFactors).to.be.an('array');",
+                  "  pm.expect(json.generatedAt).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Negative Cases",
+      "item": [
+        {
+          "name": "Unauthorized (no token) - Leads list",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/manager/leads?page=0&size=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "manager",
+                "leads"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invalid campaign channel (expect 400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "X-Company-Id",
+                "value": "{{companyId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Invalid channel\",\n  \"channel\": \"X\",\n  \"campaignCode\": \"invalid-{{timestamp}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/manager/lead-form/{{formId}}/campaigns",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "manager",
+                "lead-form",
+                "{{formId}}",
+                "campaigns"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('timestamp', Date.now().toString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Not found lead answers (expect 404)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt}}"
+              },
+              {
+                "key": "X-Company-Id",
+                "value": "{{companyId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/manager/leads/00000000-0000-0000-0000-000000000000/answers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "manager",
+                "leads",
+                "00000000-0000-0000-0000-000000000000",
+                "answers"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -10,4 +10,6 @@ public interface LeadFormRepository extends JpaRepository<LeadForm, UUID> {
     Optional<LeadForm> findByCompanyId(UUID companyId);
 
     Optional<LeadForm> findByPublicSlugAndIsActiveTrue(String publicSlug);
+
+    Optional<LeadForm> findByIdAndCompanyId(UUID id, UUID companyId);
 }
