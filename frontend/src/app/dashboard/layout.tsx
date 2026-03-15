@@ -11,6 +11,8 @@ import {
   Calendar,
   Bot,
   Layers,
+  ClipboardList,
+  Target,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import Link from 'next/link';
@@ -25,9 +27,12 @@ import { apiFetch } from '../../lib/api';
 const managerAvatar = PlaceHolderImages.find((img) => img.id === 'avatar-4');
 
 const agentMenuItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
   { href: '/dashboard/history', label: 'History', icon: LineChart },
   { href: '/dashboard/report', label: 'Daily Report', icon: FileText },
+  { href: '/dashboard/tasks', label: 'Tasks', icon: ClipboardList },
+  { href: '/dashboard/goals', label: 'Goals', icon: Target },
+  { href: '/dashboard/manager/leads', label: 'Active Leads', icon: Users },
   { href: '/dashboard/calendar', label: 'Calendar', icon: Calendar },
 ];
 
@@ -168,6 +173,7 @@ export default function DashboardLayout({
   const leadsSectionActive =
     pathname.startsWith('/dashboard/manager/leads') ||
     pathname.startsWith('/dashboard/manager/lead-form');
+  const isDailyReportPage = pathname === '/dashboard/report';
 
   if (!userRole) {
     return <DashboardSkeleton />;
@@ -176,11 +182,19 @@ export default function DashboardLayout({
   const isManager = userRole === 'manager';
 
   return (
-    <div className="flex min-h-screen w-full">
-      <aside className="hidden w-64 flex-col bg-[#38bdf8] text-white shadow-xl md:flex">
+    <div
+      className={`flex w-full ${
+        isDailyReportPage ? 'h-screen overflow-hidden' : 'min-h-screen'
+      }`}
+    >
+      <aside
+        className={`hidden w-64 shrink-0 bg-[#38bdf8] text-white shadow-xl md:sticky md:top-0 md:flex md:h-screen md:flex-col ${
+          isDailyReportPage ? 'h-screen' : ''
+        }`}
+      >
         <Link
           href={isManager ? '/dashboard/manager/overview' : '/dashboard'}
-          className="flex items-center gap-3 p-6 transition-opacity hover:opacity-90"
+          className="shrink-0 flex items-center gap-3 p-6 transition-opacity hover:opacity-90"
         >
           <div className="rounded-lg bg-white p-2 shadow-inner">
             <Layers className="h-6 w-6 text-[#38bdf8]" />
@@ -188,7 +202,11 @@ export default function DashboardLayout({
           <h1 className="text-2xl font-bold tracking-tight">SalesWay</h1>
         </Link>
 
-        <nav className="flex-1 space-y-1 px-4 py-4">
+        <nav
+          className={`flex-1 space-y-1 px-4 py-4 ${
+            isDailyReportPage ? 'overflow-hidden' : 'overflow-y-auto'
+          }`}
+        >
           <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-blue-100 opacity-70">
             {isManager ? 'Manager' : 'Personal'}
           </p>
@@ -281,7 +299,7 @@ export default function DashboardLayout({
           </div>
         </nav>
 
-        <div className="mt-auto bg-[#0ea5e9] p-4">
+        <div className="shrink-0 bg-[#0ea5e9] p-4">
           <div className="flex items-center gap-3 px-2">
             <Avatar className="h-10 w-10 border border-white/30 bg-white/20">
               {managerAvatar && (
@@ -303,9 +321,17 @@ export default function DashboardLayout({
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div
+        className={`flex min-w-0 flex-1 flex-col ${
+          isDailyReportPage ? 'h-screen overflow-hidden' : ''
+        }`}
+      >
         <DashboardHeader showNotifications={isManager} />
-        <main className="min-w-0 flex-1 overflow-x-hidden p-4 md:p-6">
+        <main
+          className={`static min-w-0 flex-1 overflow-x-hidden p-4 md:p-6 ${
+            isDailyReportPage ? 'h-[calc(100svh-4rem)] min-h-0 overflow-hidden p-0 md:p-0' : ''
+          }`}
+        >
           {children}
         </main>
       </div>

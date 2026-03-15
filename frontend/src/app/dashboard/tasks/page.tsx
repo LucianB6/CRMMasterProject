@@ -1,7 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Plus, Calendar as CalendarIcon, MoreHorizontal } from 'lucide-react';
+import {
+  Plus,
+  Calendar as CalendarIcon,
+  MoreHorizontal,
+  CheckCircle2,
+  CircleDashed,
+  Clock3,
+} from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -306,78 +313,110 @@ export default function TasksPage() {
   };
 
   return (
-    <div className="flex h-full flex-col space-y-6">
-      <header className="flex items-center justify-between">
+    <div className="w-full min-w-0 max-w-none space-y-8">
+      <div className="flex w-full flex-col gap-6 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="font-headline text-2xl">Task Planner</h1>
-          <p className="text-muted-foreground">
-            Organize your daily activities with this Kanban board.
+          <h1 className="text-3xl font-black tracking-tight text-slate-800">Task Planner</h1>
+          <p className="mt-1 font-medium text-slate-500">
+            Organizeaza-ti activitatile intr-un board vizual, in acelasi stil cu restul dashboard-ului.
           </p>
         </div>
-        <Button onClick={openDialogForNew}>
+        <Button
+          onClick={openDialogForNew}
+          className="bg-[#38bdf8] text-white hover:bg-sky-500"
+        >
           <Plus className="mr-2 h-4 w-4" /> Add Task
         </Button>
-      </header>
+      </div>
 
-      <div className="grid flex-1 grid-cols-1 items-start gap-6 md:grid-cols-3">
+      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-3">
         {columns.map((status) => (
-          <Card
+          <div
             key={status}
-            className="flex h-full flex-col bg-muted/50"
+            className="overflow-hidden rounded-[28px] border border-slate-100 bg-white shadow-xl shadow-slate-200/40"
             onDragOver={(event) => handleDragOver(status, event)}
             onDrop={(event) => handleDrop(status, event)}
           >
-            <CardHeader>
-              <CardTitle>{statusConfig[status].title}</CardTitle>
-            </CardHeader>
-            <CardContent
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
+              <div>
+                <h2 className="text-lg font-bold text-slate-800">
+                  {statusConfig[status].title}
+                </h2>
+                <p className="text-sm font-medium text-slate-400">
+                  {tasks.filter((task) => task.status === status).length} task-uri
+                </p>
+              </div>
+              <div className="rounded-xl bg-slate-100 p-2 text-slate-500">
+                {status === 'todo' ? (
+                  <CircleDashed className="h-4 w-4" />
+                ) : status === 'in-progress' ? (
+                  <Clock3 className="h-4 w-4" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4" />
+                )}
+              </div>
+            </div>
+            <div
               className={cn(
-                'flex flex-col gap-4',
-                dragOverStatus === status && 'bg-muted/70'
+                'min-h-[420px] space-y-4 p-5 transition-colors',
+                dragOverStatus === status ? 'bg-sky-50/70' : 'bg-slate-50/40'
               )}
             >
               {isLoading ? (
-                <p className="text-sm text-muted-foreground">Loading...</p>
+                <p className="text-sm text-slate-500">Se incarca...</p>
               ) : (
-                tasks
-                  .filter((t) => t.status === status)
-                  .map((task) => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      onEdit={openDialogForEdit}
-                      onDelete={deleteTask}
-                      onDragStart={handleDragStart}
-                      onDragEnd={handleDragEnd}
-                      isDragging={dragTaskId === task.id}
-                    />
-                  ))
+                <>
+                  {tasks
+                    .filter((t) => t.status === status)
+                    .map((task) => (
+                      <TaskCard
+                        key={task.id}
+                        task={task}
+                        onEdit={openDialogForEdit}
+                        onDelete={deleteTask}
+                        onDragStart={handleDragStart}
+                        onDragEnd={handleDragEnd}
+                        isDragging={dragTaskId === task.id}
+                      />
+                    ))}
+                  {tasks.filter((t) => t.status === status).length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-8 text-center text-sm font-medium text-slate-400">
+                      Niciun task in aceasta coloana.
+                    </div>
+                  ) : null}
+                </>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         ))}
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>
-              {editingTask ? 'Edit Task' : 'Create New Task'}
+        <DialogContent className="overflow-hidden rounded-[28px] border border-slate-100 bg-white p-0 shadow-2xl shadow-slate-300/30 sm:max-w-[560px]">
+          <DialogHeader className="border-b border-slate-100 bg-slate-50 px-6 py-5">
+            <DialogTitle className="text-xl font-black text-slate-800">
+              {editingTask ? 'Editeaza task-ul' : 'Adauga task nou'}
             </DialogTitle>
-            <DialogDescription>
-              Fill in the details below for your task.
+            <DialogDescription className="mt-1 font-medium text-slate-500">
+              Completeaza detaliile task-ului in acelasi format ca restul dashboard-ului.
             </DialogDescription>
           </DialogHeader>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5 px-6 py-6">
               <FormField
                 control={form.control}
                 name="title"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Task Title</FormLabel>
+                    <FormLabel className="text-sm font-semibold text-slate-800">
+                      Titlu task
+                    </FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., Send the offer to the client" {...field} />
+                      <Input
+                        placeholder="Ex: Trimite oferta catre client"
+                        className="h-12 rounded-xl border-slate-200 px-4"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -388,10 +427,13 @@ export default function TasksPage() {
                 name="goal"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Goal (Optional)</FormLabel>
+                    <FormLabel className="text-sm font-semibold text-slate-800">
+                      Obiectiv
+                    </FormLabel>
                     <FormControl>
                       <Textarea
-                        placeholder="Briefly describe the goal of this task..."
+                        placeholder="Descrie pe scurt scopul task-ului..."
+                        className="min-h-[110px] rounded-xl border-slate-200 px-4 py-3"
                         {...field}
                       />
                     </FormControl>
@@ -404,10 +446,13 @@ export default function TasksPage() {
                 name="deadline"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Deadline (Optional)</FormLabel>
+                    <FormLabel className="text-sm font-semibold text-slate-800">
+                      Deadline
+                    </FormLabel>
                     <FormControl>
                       <Input
                         type="date"
+                        className="h-12 rounded-xl border-slate-200 px-4"
                         {...field}
                         value={
                           field.value instanceof Date
@@ -425,11 +470,13 @@ export default function TasksPage() {
                 name="status"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Status</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormLabel className="text-sm font-semibold text-slate-800">
+                      Status
+                    </FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a status" />
+                        <SelectTrigger className="h-12 rounded-xl border-slate-200 px-4">
+                          <SelectValue placeholder="Selecteaza un status" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -444,8 +491,18 @@ export default function TasksPage() {
                   </FormItem>
                 )}
               />
-              <DialogFooter>
-                <Button type="submit">Save Task</Button>
+              <DialogFooter className="border-t border-slate-100 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-slate-200 text-slate-700"
+                  onClick={() => setIsDialogOpen(false)}
+                >
+                  Anuleaza
+                </Button>
+                <Button type="submit" className="bg-[#38bdf8] text-white hover:bg-sky-500">
+                  Salveaza task-ul
+                </Button>
               </DialogFooter>
             </form>
           </Form>
@@ -473,7 +530,7 @@ function TaskCard({
   return (
     <Card
       className={cn(
-        'group bg-card cursor-grab active:cursor-grabbing',
+        'group cursor-grab rounded-[24px] border border-slate-100 bg-white shadow-lg shadow-slate-200/30 transition-all active:cursor-grabbing',
         isDragging && 'opacity-60'
       )}
       draggable
@@ -487,7 +544,7 @@ function TaskCard({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6 opacity-50 group-hover:opacity-100"
+                className="h-7 w-7 rounded-full opacity-50 group-hover:bg-slate-100 group-hover:opacity-100"
               >
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
@@ -507,10 +564,10 @@ function TaskCard({
         </div>
         <p className="pr-6 text-sm font-semibold">{task.title}</p>
         {task.goal && (
-          <p className="mt-1 text-xs text-muted-foreground">{task.goal}</p>
+          <p className="mt-2 text-xs leading-5 text-slate-500">{task.goal}</p>
         )}
         {task.deadline && (
-          <Badge variant="outline" className="mt-2 text-xs">
+          <Badge variant="outline" className="mt-3 rounded-full border-slate-200 bg-slate-50 text-xs text-slate-600">
             <CalendarIcon className="mr-1 h-3 w-3" />
             {format(task.deadline, 'd MMM', { locale: enUS })}
           </Badge>
