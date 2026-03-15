@@ -47,6 +47,11 @@ const managerMenuItemsTop = [
     label: 'Sales forecast',
     icon: LineChart,
   },
+  {
+    href: '/dashboard/report',
+    label: 'Daily Report',
+    icon: FileText,
+  },
 ];
 
 const toolsMenuItems = [
@@ -78,8 +83,8 @@ function NavItem({ href, icon: Icon, label, active = false }: NavItemProps) {
 
 function DashboardSkeleton() {
   return (
-    <div className="flex h-screen w-full">
-      <div className="hidden h-full w-64 flex-col border-r bg-muted/40 p-4 md:flex">
+    <div className="flex min-h-screen w-full">
+      <div className="hidden w-64 flex-col border-r bg-muted/40 p-4 md:flex">
         <div className="mb-8">
           <Skeleton className="h-8 w-32" />
         </div>
@@ -171,14 +176,17 @@ export default function DashboardLayout({
   const isManager = userRole === 'manager';
 
   return (
-    <div className="flex h-screen w-full overflow-hidden">
-      <aside className="hidden h-full w-64 flex-col bg-[#38bdf8] text-white shadow-xl md:flex">
-        <div className="flex items-center gap-3 p-6">
+    <div className="flex min-h-screen w-full">
+      <aside className="hidden w-64 flex-col bg-[#38bdf8] text-white shadow-xl md:flex">
+        <Link
+          href={isManager ? '/dashboard/manager/overview' : '/dashboard'}
+          className="flex items-center gap-3 p-6 transition-opacity hover:opacity-90"
+        >
           <div className="rounded-lg bg-white p-2 shadow-inner">
             <Layers className="h-6 w-6 text-[#38bdf8]" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight">SalesWay</h1>
-        </div>
+        </Link>
 
         <nav className="flex-1 space-y-1 px-4 py-4">
           <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-blue-100 opacity-70">
@@ -295,9 +303,9 @@ export default function DashboardLayout({
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col">
         <DashboardHeader showNotifications={isManager} />
-        <main className="flex h-full min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 md:p-6">
+        <main className="min-w-0 flex-1 overflow-x-hidden p-4 md:p-6">
           {children}
         </main>
       </div>

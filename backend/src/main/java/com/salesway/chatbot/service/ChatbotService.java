@@ -163,10 +163,12 @@ public class ChatbotService {
                 .toList();
 
         List<java.util.Map<String, String>> messages = new ArrayList<>();
-        String systemPrompt = "You are a helpful AI assistant. Always respond in English. "
+        String systemPrompt = "You are a helpful AI assistant. "
+                + "Always reply in the same language as the user's latest message. "
+                + "If the user mixes languages, answer in the language of the main question. "
                 + "If the user message is vague or general, ask a short clarifying question before giving advice. "
                 + "Only use the provided context for factual questions about the document. "
-                + "If the answer is not in the context, say you don't have enough information from the document.";
+                + "If the answer is not in the context, say clearly that the document does not provide enough information.";
         messages.add(java.util.Map.of("role", "system", "content", systemPrompt));
 
         for (ChatMessage msg : recentMessages) {

@@ -6,11 +6,23 @@ import {
   CheckCircle2,
   Clock3,
   RefreshCw,
+  Trash2,
   UserCircle2,
 } from 'lucide-react';
 
 import { useToast } from './../../../hooks/use-toast';
 import { apiFetch } from './../../../lib/api';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from './../../../components/ui/alert-dialog';
 import { Button } from './../../../components/ui/button';
 
 type ManagerNotification = {
@@ -40,6 +52,7 @@ export default function NotificationsPage() {
   const { toast } = useToast();
   const [notifications, setNotifications] = useState<ManagerNotification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [deletingNotificationId, setDeletingNotificationId] = useState<string | null>(null);
 
   const getAuthToken = useCallback(() => {
     if (typeof window === 'undefined') {
@@ -108,6 +121,36 @@ export default function NotificationsPage() {
       setIsLoading(false);
     }
   }, [getAuthToken, toast]);
+
+  const deleteNotification = useCallback(
+    async (notificationId: string) => {
+      try {
+        setDeletingNotificationId(notificationId);
+        const token = getAuthToken();
+        await apiFetch(`/manager/notifications/${notificationId}`, {
+          method: 'DELETE',
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        setNotifications((current) =>
+          current.filter((notification) => notification.id !== notificationId)
+        );
+        toast({
+          title: 'Notificare ștearsă',
+          description: 'Notificarea a fost eliminată din listă.',
+        });
+      } catch (error) {
+        toast({
+          title: 'Nu am putut șterge notificarea',
+          description:
+            error instanceof Error ? error.message : 'Delete notification failed.',
+          variant: 'destructive',
+        });
+      } finally {
+        setDeletingNotificationId(null);
+      }
+    },
+    [getAuthToken, toast]
+  );
 
   useEffect(() => {
     void loadNotifications();
@@ -230,6 +273,39 @@ export default function NotificationsPage() {
                           <span>Type {notification.type}</span>
                         </div>
                       </div>
+                    </div>
+                    <div className="flex shrink-0 items-start md:pl-4">
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            disabled={deletingNotificationId === notification.id}
+                            className="text-slate-400 hover:bg-red-50 hover:text-red-600"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            <span className="sr-only">Delete notification</span>
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Ștergi această notificare?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Notificarea va fi eliminată din listă. Acțiunea nu poate fi anulată.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Anulează</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => void deleteNotification(notification.id)}
+                              className="bg-red-600 text-white hover:bg-red-700"
+                            >
+                              Șterge notificarea
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                   </div>
                 );

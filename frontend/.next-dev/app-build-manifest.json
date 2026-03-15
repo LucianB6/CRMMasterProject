@@ -11,15 +11,35 @@
       "static/chunks/main-app.js",
       "static/chunks/app/dashboard/layout.js"
     ],
-    "/dashboard/notifications/page": [
+    "/dashboard/report/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/notifications/page.js"
+      "static/chunks/app/dashboard/report/page.js"
     ],
-    "/dashboard/manager/create-agent/page": [
+    "/dashboard/manager/leads/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/manager/create-agent/page.js"
+      "static/chunks/app/dashboard/manager/leads/page.js"
+    ],
+    "/dashboard/manager/lead-form/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/dashboard/manager/lead-form/page.js"
+    ],
+    "/dashboard/ai-assistant/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/dashboard/ai-assistant/page.js"
+    ],
+    "/dashboard/manager/overview/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/dashboard/manager/overview/page.js"
+    ],
+    "/dashboard/manager/history/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/dashboard/manager/history/page.js"
     ]
   }
 }

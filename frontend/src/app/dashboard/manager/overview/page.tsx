@@ -43,6 +43,20 @@ type DailySummaryResponse = {
   contract_value: number | null;
 };
 
+type PersonalReportResponse = {
+  id: string;
+  reportDate: string;
+  status: 'DRAFT' | 'SUBMITTED' | 'AUTO_SUBMITTED';
+  inputs: {
+    outbound_dials: number | null;
+    sales_call_on_calendar: number | null;
+    sales_one_call_close: number | null;
+    followup_sales: number | null;
+    upsells: number | null;
+    contract_value: number | null;
+  };
+};
+
 type TeamPerformancePoint = {
   report_date: string;
   outbound_dials: number | null;
@@ -65,6 +79,37 @@ type ChartPoint = {
   sales: number;
 };
 
+const mergeSummary = (
+  base: DailySummaryResponse | null,
+  extra: DailySummaryResponse | null
+): DailySummaryResponse => ({
+  outbound_dials: (base?.outbound_dials ?? 0) + (extra?.outbound_dials ?? 0),
+  sales_call_on_calendar:
+    (base?.sales_call_on_calendar ?? 0) + (extra?.sales_call_on_calendar ?? 0),
+  total_sales: (base?.total_sales ?? 0) + (extra?.total_sales ?? 0),
+  contract_value: (base?.contract_value ?? 0) + (extra?.contract_value ?? 0),
+});
+
+const mergeChartPoints = (base: ChartPoint[], extra: ChartPoint[]) => {
+  const byDay = new Map<string, ChartPoint>();
+
+  for (const point of base) {
+    byDay.set(point.day, { ...point });
+  }
+
+  for (const point of extra) {
+    const existing = byDay.get(point.day);
+    if (existing) {
+      existing.calls += point.calls;
+      existing.sales += point.sales;
+      continue;
+    }
+    byDay.set(point.day, { ...point });
+  }
+
+  return Array.from(byDay.values());
+};
+
 export default function ManagerOverviewPage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -76,6 +121,7 @@ export default function ManagerOverviewPage() {
   const [agentPerformance, setAgentPerformance] = useState<ChartPoint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeMetric, setActiveMetric] = useState<'calls' | 'sales'>('calls');
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
 
   const getAuthToken = useCallback(() => {
     if (typeof window === 'undefined') {
@@ -94,9 +140,9 @@ export default function ManagerOverviewPage() {
       )
     );
     if (preset === 'year') {
-      from.setUTCDate(from.getUTCDate() - 364);
+      from.setUTCMonth(0, 1);
     } else {
-      from.setUTCDate(from.getUTCDate() - 29);
+      from.setUTCDate(1);
     }
     const to = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
     const toKey = to.toISOString().slice(0, 10);
@@ -134,21 +180,33 @@ export default function ManagerOverviewPage() {
     if (chartData.length === 0) {
       return { average: 0, peak: 0, total: 0 };
     }
+    const today = new Date();
+    const currentMonthDayCount = today.getUTCDate();
+    const currentYearStart = Date.UTC(today.getUTCFullYear(), 0, 1);
+    const todayUtc = Date.UTC(
+      today.getUTCFullYear(),
+      today.getUTCMonth(),
+      today.getUTCDate()
+    );
+    const currentYearDayCount =
+      Math.floor((todayUtc - currentYearStart) / (1000 * 60 * 60 * 24)) + 1;
     const values = chartData.map((point) =>
       activeMetric === 'calls' ? point.calls : point.sales
     );
     const total = values.reduce((acc, value) => acc + value, 0);
     const peak = Math.max(...values);
-    const average = total / values.length;
+    const divisor = rangePreset === 'year' ? currentYearDayCount : currentMonthDayCount;
+    const average = total / divisor;
     return { average, peak, total };
-  }, [activeMetric, chartData]);
+  }, [activeMetric, chartData, rangePreset]);
 
   const selectedAgentLabel = useMemo(() => {
     if (selectedAgentId === 'all') return 'All agents';
+    if (selectedAgentId === 'self') return currentUserEmail ?? 'Activitatea mea';
     return agents.find((agent) => agent.membership_id === selectedAgentId)?.email ?? 'Selected agent';
-  }, [agents, selectedAgentId]);
+  }, [agents, currentUserEmail, selectedAgentId]);
 
-  const rangeLabel = rangePreset === 'month' ? 'Last month' : 'Last year';
+  const rangeLabel = rangePreset === 'month' ? 'Current month' : 'Current year';
 
   useEffect(() => {
     const fetchAgents = async () => {
@@ -162,6 +220,10 @@ export default function ManagerOverviewPage() {
           headers: { Authorization: `Bearer ${token}` },
         });
         setAgents(data);
+        const me = await apiFetch<{ email?: string | null }>('/auth/me', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setCurrentUserEmail(me.email ?? null);
       } catch (error) {
         if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
           router.replace('/login');
@@ -193,28 +255,96 @@ export default function ManagerOverviewPage() {
         const headers = { Authorization: `Bearer ${token}` };
         const { from, to } = buildDateRange(rangePreset);
 
-        const summaryPath =
-          selectedAgentId === 'all'
-            ? `/manager/overview/summary?from=${from}&to=${to}`
-            : `/manager/overview/agents/${selectedAgentId}/summary?from=${from}&to=${to}`;
-
-        const summaryData = await apiFetch<DailySummaryResponse>(summaryPath, {
-          headers,
-        });
-        setSummary(summaryData);
-
         if (selectedAgentId === 'all') {
-          const performanceData = await apiFetch<TeamPerformancePoint[]>(
-            `/manager/overview/team-performance?from=${from}&to=${to}`,
-            { headers }
+          const [teamSummaryData, performanceData, personalReports] = await Promise.all([
+            apiFetch<DailySummaryResponse>(`/manager/overview/summary?from=${from}&to=${to}`, {
+              headers,
+            }),
+            apiFetch<TeamPerformancePoint[]>(
+              `/manager/overview/team-performance?from=${from}&to=${to}`,
+              { headers }
+            ),
+            apiFetch<PersonalReportResponse[]>(`/reports/daily?from=${from}&to=${to}`, {
+              headers,
+            }),
+          ]);
+
+          const personalSummaryData = personalReports.reduce<DailySummaryResponse>(
+            (acc, report) => ({
+              outbound_dials: (acc.outbound_dials ?? 0) + (report.inputs.outbound_dials ?? 0),
+              sales_call_on_calendar:
+                (acc.sales_call_on_calendar ?? 0) + (report.inputs.sales_call_on_calendar ?? 0),
+              total_sales:
+                (acc.total_sales ?? 0) +
+                (report.inputs.sales_one_call_close ?? 0) +
+                (report.inputs.followup_sales ?? 0),
+              contract_value:
+                (acc.contract_value ?? 0) + (report.inputs.contract_value ?? 0),
+            }),
+            {
+              outbound_dials: 0,
+              sales_call_on_calendar: 0,
+              total_sales: 0,
+              contract_value: 0,
+            }
           );
-          const mapped = performanceData.map((point) => ({
+
+          const teamMapped = performanceData.map((point) => ({
             day: formatDayLabel(point.report_date),
             calls: point.outbound_dials ?? 0,
             sales: point.total_sales ?? 0,
           }));
-          setTeamPerformance(mapped);
+          const personalMapped = personalReports.map((report) => ({
+            day: formatDayLabel(report.reportDate),
+            calls: report.inputs.outbound_dials ?? 0,
+            sales:
+              (report.inputs.sales_one_call_close ?? 0) +
+              (report.inputs.followup_sales ?? 0),
+          }));
+
+          setSummary(mergeSummary(teamSummaryData, personalSummaryData));
+          setTeamPerformance(mergeChartPoints(teamMapped, personalMapped));
+          setAgentPerformance([]);
+        } else if (selectedAgentId === 'self') {
+          const reports = await apiFetch<PersonalReportResponse[]>(
+            `/reports/daily?from=${from}&to=${to}`,
+            { headers }
+          );
+          const summaryData = reports.reduce<DailySummaryResponse>(
+            (acc, report) => ({
+              outbound_dials: (acc.outbound_dials ?? 0) + (report.inputs.outbound_dials ?? 0),
+              sales_call_on_calendar:
+                (acc.sales_call_on_calendar ?? 0) + (report.inputs.sales_call_on_calendar ?? 0),
+              total_sales:
+                (acc.total_sales ?? 0) +
+                (report.inputs.sales_one_call_close ?? 0) +
+                (report.inputs.followup_sales ?? 0),
+              contract_value:
+                (acc.contract_value ?? 0) + (report.inputs.contract_value ?? 0),
+            }),
+            {
+              outbound_dials: 0,
+              sales_call_on_calendar: 0,
+              total_sales: 0,
+              contract_value: 0,
+            }
+          );
+          setSummary(summaryData);
+          const mapped = reports.map((report) => ({
+            day: formatDayLabel(report.reportDate),
+            calls: report.inputs.outbound_dials ?? 0,
+            sales:
+              (report.inputs.sales_one_call_close ?? 0) +
+              (report.inputs.followup_sales ?? 0),
+          }));
+          setAgentPerformance(mapped);
+          setTeamPerformance([]);
         } else {
+          const summaryData = await apiFetch<DailySummaryResponse>(
+            `/manager/overview/agents/${selectedAgentId}/summary?from=${from}&to=${to}`,
+            { headers }
+          );
+          setSummary(summaryData);
           const reports = await apiFetch<ManagerReportResponse[]>(
             `/manager/reports?from=${from}&to=${to}&agent_membership_id=${selectedAgentId}`,
             { headers }
@@ -222,8 +352,7 @@ export default function ManagerOverviewPage() {
           const mapped = reports.map((report) => {
             const totalSales =
               (report.inputs.sales_one_call_close ?? 0) +
-              (report.inputs.followup_sales ?? 0) +
-              (report.inputs.upsells ?? 0);
+              (report.inputs.followup_sales ?? 0);
             return {
               day: formatDayLabel(report.report_date),
               calls: report.inputs.outbound_dials ?? 0,
@@ -231,6 +360,7 @@ export default function ManagerOverviewPage() {
             };
           });
           setAgentPerformance(mapped);
+          setTeamPerformance([]);
         }
       } catch (error) {
         if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
@@ -271,6 +401,7 @@ export default function ManagerOverviewPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All agents</SelectItem>
+                <SelectItem value="self">Activitatea mea</SelectItem>
                 {agents.map((agent) => (
                   <SelectItem key={agent.membership_id} value={agent.membership_id}>
                     {agent.email}
@@ -283,10 +414,10 @@ export default function ManagerOverviewPage() {
           <Tabs value={rangePreset} onValueChange={(value) => setRangePreset(value as 'month' | 'year')}>
             <TabsList className="h-auto rounded-xl bg-slate-100 p-1">
               <TabsTrigger value="month" className="rounded-lg px-4 py-1.5 text-xs font-bold data-[state=active]:bg-white data-[state=active]:text-[#38bdf8]">
-                LAST MONTH
+                CURRENT MONTH
               </TabsTrigger>
               <TabsTrigger value="year" className="rounded-lg px-4 py-1.5 text-xs font-bold data-[state=active]:bg-white data-[state=active]:text-[#38bdf8]">
-                LAST YEAR
+                CURRENT YEAR
               </TabsTrigger>
             </TabsList>
           </Tabs>
