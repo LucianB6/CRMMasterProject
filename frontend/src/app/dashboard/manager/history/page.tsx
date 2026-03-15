@@ -102,6 +102,20 @@ type ManagerAgent = {
   email: string;
 };
 
+type PersonalReportResponse = {
+  id: string;
+  reportDate: string;
+  status: 'DRAFT' | 'SUBMITTED' | 'AUTO_SUBMITTED';
+  inputs: {
+    outbound_dials: number | null;
+    sales_call_booked_from_outbound: number | null;
+    sales_one_call_close: number | null;
+    followup_sales: number | null;
+    upsells: number | null;
+    contract_value: number | null;
+  };
+};
+
 type ManagerReportResponse = {
   report_date: string;
   agent_membership_id?: string | null;
@@ -159,6 +173,7 @@ export default function ManagerHistoryPage() {
     previousYear: [],
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
 
   const getAuthToken = useCallback(() => {
     if (typeof window === 'undefined') {
@@ -362,10 +377,17 @@ export default function ManagerHistoryPage() {
   const fetchAgents = useCallback(async () => {
     try {
       const token = getAuthToken();
-      const data = await apiFetch<ManagerAgent[]>('/manager/overview/agents', {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
+      const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+      const [data, me] = await Promise.all([
+        apiFetch<ManagerAgent[]>('/manager/overview/agents', {
+          headers,
+        }),
+        apiFetch<{ email?: string | null }>('/auth/me', {
+          headers,
+        }),
+      ]);
       setAgents(data);
+      setCurrentUserEmail(me.email ?? null);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Unknown error';
@@ -397,6 +419,35 @@ export default function ManagerHistoryPage() {
     [formatRangeQuery, getAuthToken]
   );
 
+  const fetchPersonalReports = useCallback(
+    async (from: Date, to: Date) => {
+      const token = getAuthToken();
+      const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+      const range = formatRangeQuery(from, to);
+      const query = new URLSearchParams(range);
+      const data = await apiFetch<PersonalReportResponse[]>(
+        `/reports/daily?${query.toString()}`,
+        {
+          headers,
+        }
+      );
+      return data.map<ManagerReportResponse>((report) => ({
+        report_date: report.reportDate,
+        agent_membership_id: 'self',
+        agent_email: currentUserEmail ?? 'Activitatea mea',
+        inputs: {
+          outbound_dials: report.inputs.outbound_dials ?? 0,
+          sales_call_booked_from_outbound: report.inputs.sales_call_booked_from_outbound ?? 0,
+          sales_one_call_close: report.inputs.sales_one_call_close ?? 0,
+          followup_sales: report.inputs.followup_sales ?? 0,
+          upsells: report.inputs.upsells ?? 0,
+          contract_value: report.inputs.contract_value ?? 0,
+        },
+      }));
+    },
+    [currentUserEmail, formatRangeQuery, getAuthToken]
+  );
+
   useEffect(() => {
     void fetchAgents();
   }, [fetchAgents]);
@@ -405,7 +456,8 @@ export default function ManagerHistoryPage() {
     const loadHistory = async () => {
       try {
         setIsLoading(true);
-        const agentId = selectedAgentId === 'all' ? null : selectedAgentId;
+        const agentId =
+          selectedAgentId === 'all' || selectedAgentId === 'self' ? null : selectedAgentId;
 
         const ranges = {
           last7Days: buildRange('last7Days'),
@@ -414,7 +466,7 @@ export default function ManagerHistoryPage() {
           previousYear: buildRange('previousYear'),
         };
 
-        const [last7Reports, monthReports, yearReports, previousYearReports] =
+        const [teamLast7Reports, teamMonthReports, teamYearReports, teamPreviousYearReports] =
           await Promise.all([
             fetchReports(ranges.last7Days.from, ranges.last7Days.to, agentId),
             fetchReports(
@@ -429,6 +481,40 @@ export default function ManagerHistoryPage() {
               agentId
             ),
           ]);
+
+        const shouldUsePersonalOnly = selectedAgentId === 'self';
+        const shouldIncludePersonalInAll = selectedAgentId === 'all';
+
+        const [personalLast7Reports, personalMonthReports, personalYearReports, personalPreviousYearReports] =
+          shouldUsePersonalOnly || shouldIncludePersonalInAll
+            ? await Promise.all([
+                fetchPersonalReports(ranges.last7Days.from, ranges.last7Days.to),
+                fetchPersonalReports(ranges.currentMonth.from, ranges.currentMonth.to),
+                fetchPersonalReports(ranges.currentYear.from, ranges.currentYear.to),
+                fetchPersonalReports(ranges.previousYear.from, ranges.previousYear.to),
+              ])
+            : [[], [], [], []];
+
+        const last7Reports = shouldUsePersonalOnly
+          ? personalLast7Reports
+          : shouldIncludePersonalInAll
+            ? [...teamLast7Reports, ...personalLast7Reports]
+            : teamLast7Reports;
+        const monthReports = shouldUsePersonalOnly
+          ? personalMonthReports
+          : shouldIncludePersonalInAll
+            ? [...teamMonthReports, ...personalMonthReports]
+            : teamMonthReports;
+        const yearReports = shouldUsePersonalOnly
+          ? personalYearReports
+          : shouldIncludePersonalInAll
+            ? [...teamYearReports, ...personalYearReports]
+            : teamYearReports;
+        const previousYearReports = shouldUsePersonalOnly
+          ? personalPreviousYearReports
+          : shouldIncludePersonalInAll
+            ? [...teamPreviousYearReports, ...personalPreviousYearReports]
+            : teamPreviousYearReports;
 
         setHistoryData({
           last7Days: aggregateByDay(
@@ -477,6 +563,7 @@ export default function ManagerHistoryPage() {
     aggregateByMonth,
     aggregateByWeek,
     buildRange,
+    fetchPersonalReports,
     fetchReports,
     selectedAgentId,
     toast,
@@ -623,7 +710,9 @@ export default function ManagerHistoryPage() {
   const selectedAgentLabel =
     selectedAgentId === 'all'
       ? 'All agents'
-      : agents.find((agent) => agent.membership_id === selectedAgentId)?.email ?? 'Selected agent';
+      : selectedAgentId === 'self'
+        ? currentUserEmail ?? 'Activitatea mea'
+        : agents.find((agent) => agent.membership_id === selectedAgentId)?.email ?? 'Selected agent';
 
   const periodLabelMap: Record<typeof periodKey, string> = {
     last7Days: 'Last 7 days',
@@ -657,6 +746,7 @@ export default function ManagerHistoryPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Agents</SelectItem>
+                <SelectItem value="self">Activitatea mea</SelectItem>
                 {agents.map((agent) => (
                   <SelectItem key={agent.membership_id} value={agent.membership_id}>
                     {agent.email}

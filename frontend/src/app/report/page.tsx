@@ -2,32 +2,23 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  BadgeDollarSign,
+  CalendarRange,
   CheckCircle,
   Clock,
   Lock,
-  Pencil
+  Pencil,
+  Phone
 } from "lucide-react";
 import React, { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 
 import { Button } from "../../components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle
-} from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
 import {
   Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage
+  FormDescription
 } from "../../components/ui/form";
 import { Input } from "../../components/ui/input";
 import { Textarea } from "../../components/ui/textarea";
@@ -35,43 +26,42 @@ import { useToast } from "../../hooks/use-toast";
 import { apiFetch } from "../../lib/api";
 import { cn } from "../../lib/utils";
 
-
 const reportSchema = z.object({
-  outbound_dials: z.coerce.number().int().min(0, "Positive value required."),
-  pickups: z.coerce.number().int().min(0, "Positive value required."),
+  outbound_dials: z.coerce.number().int().min(0, "Valoarea trebuie sa fie pozitiva."),
+  pickups: z.coerce.number().int().min(0, "Valoarea trebuie sa fie pozitiva."),
   conversations_30s_plus: z.coerce
     .number()
     .int()
-    .min(0, "Positive value required."),
+    .min(0, "Valoarea trebuie sa fie pozitiva."),
   sales_call_booked_from_outbound: z.coerce
     .number()
     .int()
-    .min(0, "Positive value required."),
+    .min(0, "Valoarea trebuie sa fie pozitiva."),
   sales_call_on_calendar: z.coerce
     .number()
     .int()
-    .min(0, "Positive value required."),
-  no_show: z.coerce.number().int().min(0, "Positive value required."),
+    .min(0, "Valoarea trebuie sa fie pozitiva."),
+  no_show: z.coerce.number().int().min(0, "Valoarea trebuie sa fie pozitiva."),
   reschedule_request: z.coerce
     .number()
     .int()
-    .min(0, "Positive value required."),
-  cancel: z.coerce.number().int().min(0, "Positive value required."),
-  deposits: z.coerce.number().int().min(0, "Positive value required."),
+    .min(0, "Valoarea trebuie sa fie pozitiva."),
+  cancel: z.coerce.number().int().min(0, "Valoarea trebuie sa fie pozitiva."),
+  deposits: z.coerce.number().int().min(0, "Valoarea trebuie sa fie pozitiva."),
   sales_one_call_close: z.coerce
     .number()
     .int()
-    .min(0, "Positive value required."),
-  followup_sales: z.coerce.number().int().min(0, "Positive value required."),
+    .min(0, "Valoarea trebuie sa fie pozitiva."),
+  followup_sales: z.coerce.number().int().min(0, "Valoarea trebuie sa fie pozitiva."),
   upsell_conversation_taken: z.coerce
     .number()
     .int()
-    .min(0, "Positive value required."),
-  upsells: z.coerce.number().int().min(0, "Positive value required."),
-  contract_value: z.coerce.number().min(0, "Value must be positive."),
+    .min(0, "Valoarea trebuie sa fie pozitiva."),
+  upsells: z.coerce.number().int().min(0, "Valoarea trebuie sa fie pozitiva."),
+  contract_value: z.coerce.number().min(0, "Valoarea trebuie sa fie pozitiva."),
   new_cash_collected: z.coerce
     .number()
-    .min(0, "Value must be positive."),
+    .min(0, "Valoarea trebuie sa fie pozitiva."),
   observations: z
     .string()
     .max(1000, "Maxim 1000 de caractere.")
@@ -79,15 +69,16 @@ const reportSchema = z.object({
   confirmation: z
     .boolean()
     .refine((value) => value, {
-      message: "You must confirm the data is correct."
+      message: "Trebuie sa confirmi ca datele sunt corecte."
     })
 });
 
 type ReportStatus = "draft" | "submitted" | "locked";
+
 const statusConfig = {
-  draft: { text: "Draft", icon: Pencil, color: "text-yellow-500" },
-  submitted: { text: "Submitted", icon: CheckCircle, color: "text-green-500" },
-  locked: { text: "Locked", icon: Lock, color: "text-muted-foreground" }
+  draft: { text: "Ciorna", icon: Pencil, color: "text-amber-500" },
+  submitted: { text: "Trimis", icon: CheckCircle, color: "text-emerald-600" },
+  locked: { text: "Blocat", icon: Lock, color: "text-slate-500" }
 };
 
 type ReportFormValues = z.infer<typeof reportSchema>;
@@ -144,6 +135,7 @@ export default function DailyReportPage() {
   const [status, setStatus] = useState<ReportStatus>("draft");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [userRole, setUserRole] = useState<"agent" | "manager">("agent");
   const formattedDate = new Intl.DateTimeFormat("en-US", {
     weekday: "long",
     day: "2-digit",
@@ -158,10 +150,18 @@ export default function DailyReportPage() {
     }
   });
 
-  const resolveStatus = useCallback((apiStatus: ApiReportStatus) => {
+  const resolveStatus = useCallback((apiStatus: ApiReportStatus, reportDate?: string | null) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const normalizedReportDate = reportDate?.slice(0, 10) ?? null;
+
+    if (normalizedReportDate && normalizedReportDate !== today) {
+      return "locked";
+    }
+
     if (apiStatus === "SUBMITTED" || apiStatus === "AUTO_SUBMITTED") {
       return "submitted";
     }
+
     return "draft";
   }, []);
 
@@ -185,12 +185,11 @@ export default function DailyReportPage() {
         observations: data.inputs?.observations ?? baseReportValues.observations
       };
       form.reset(nextValues);
-      setStatus(resolveStatus(data.status));
+      setStatus(resolveStatus(data.status, data.reportDate));
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unknown error";
+      const message = error instanceof Error ? error.message : "Eroare necunoscuta";
       toast({
-        title: "Load error",
+        title: "Eroare la incarcare",
         description: message,
         variant: "destructive"
       });
@@ -198,6 +197,14 @@ export default function DailyReportPage() {
       setIsLoading(false);
     }
   }, [form, getAuthToken, resolveStatus, toast]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const role = window.localStorage.getItem("userRole");
+    setUserRole(role === "manager" ? "manager" : "agent");
+  }, []);
 
   useEffect(() => {
     void fetchTodayReport();
@@ -218,22 +225,20 @@ export default function DailyReportPage() {
           body: JSON.stringify(payload)
         });
         form.reset({ ...values, confirmation });
-        setStatus(resolveStatus(data.status));
+        setStatus(resolveStatus(data.status, data.reportDate));
         toast({
-          title:
-            endpoint === "submit"
-              ? "Report submitted successfully!"
-              : "Draft salvat!",
+          title: endpoint === "submit" ? "Raport trimis cu succes!" : "Ciorna salvata!",
           description:
             endpoint === "submit"
-              ? "Your manager has been notified."
+              ? userRole === "manager"
+                ? "Activitatea ta de azi a fost înregistrată."
+                : "Managerul tau a fost notificat."
               : "Datele tale au fost salvate."
         });
       } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Unknown error";
+        const message = error instanceof Error ? error.message : "Eroare necunoscuta";
         toast({
-          title: "Save error",
+          title: "Eroare la salvare",
           description: message,
           variant: "destructive"
         });
@@ -241,7 +246,7 @@ export default function DailyReportPage() {
         setIsSaving(false);
       }
     },
-    [form, getAuthToken, resolveStatus, toast]
+    [form, getAuthToken, resolveStatus, toast, userRole]
   );
 
   function onSubmit(values: ReportFormValues) {
@@ -252,429 +257,322 @@ export default function DailyReportPage() {
   const { isValid } = form.formState;
   const currentStatusInfo = statusConfig[status];
   const isBusy = isLoading || isSaving;
+  const watchedValues = form.watch();
 
   return (
-    <Form {...form}>
-      <form
-        onSubmit={form.handleSubmit(onSubmit)}
-        className="space-y-6 px-4 pb-10 pt-4 md:px-6"
-      >
-        <header className="sticky top-0 z-20 -mx-4 -mt-4 border-b bg-background/95 px-4 py-3 backdrop-blur-sm md:-mx-6 md:px-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="w-full min-w-0 bg-slate-50 p-8">
+      <div className="mx-auto flex w-full max-w-[1700px] min-w-0 flex-col gap-6">
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="w-full min-w-0 space-y-6">
+          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
             <div>
-              <h1 className="font-headline text-xl">
-                Daily report: {formattedDate}
-              </h1>
-              <div className="flex items-center gap-2 text-sm">
-                <currentStatusInfo.icon
-                  className={cn("h-4 w-4", currentStatusInfo.color)}
-                />
-                <span className={cn("font-semibold", currentStatusInfo.color)}>
-                  Status: {currentStatusInfo.text}
+              <h1 className="text-2xl font-bold text-slate-900">Raport zilnic</h1>
+              <p className="text-slate-500">
+                {userRole === "manager"
+                  ? "Înregistrează-ți activitatea zilnică în același format folosit de agenți."
+                  : "Completează activitatea ta zilnică și trimite raportul către manager."}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-slate-500">
+                <span className="inline-flex items-center gap-2">
+                  <CalendarRange className="h-4 w-4" />
+                  {formattedDate}
                 </span>
-                <span className="text-muted-foreground">|</span>
-                <Clock className="h-4 w-4 text-muted-foreground" />
-                <span className="text-muted-foreground">
-                  Auto-publish at 19:00
+                <span className="inline-flex items-center gap-2">
+                  <currentStatusInfo.icon className={cn("h-4 w-4", currentStatusInfo.color)} />
+                  <span className={cn("font-semibold", currentStatusInfo.color)}>
+                    {currentStatusInfo.text}
+                  </span>
+                </span>
+                <span className="inline-flex items-center gap-2">
+                  <Clock className="h-4 w-4" />
+                  Trimitere automata la 23:59
                 </span>
               </div>
             </div>
+
             <div className="flex w-full gap-2 sm:w-auto">
               <Button
                 variant="outline"
                 type="button"
                 disabled={isReadOnly || isBusy}
                 onClick={() => saveReport("draft", form.getValues())}
+                className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
               >
-                Save draft
+                Salveaza ciorna
               </Button>
-              <Button type="submit" disabled={isReadOnly || !isValid || isBusy}>
-                Submit report
+              <Button
+                type="submit"
+                disabled={isReadOnly || !isValid || isBusy}
+                className="bg-blue-600 text-white hover:bg-blue-700"
+              >
+                Trimite raportul
               </Button>
             </div>
           </div>
-        </header>
 
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Activitate Outbound</CardTitle>
-              <CardDescription>
-                Key indicators tied to outreach effort.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-3">
-              <FormField
-                control={form.control}
-                name="outbound_dials"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Outbound calls made</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min="0"
-                        {...field}
-                        readOnly={isReadOnly}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="pickups"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Calls answered</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min="0"
-                        {...field}
-                        readOnly={isReadOnly}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
+          <div className="grid gap-4 md:grid-cols-4">
+            <MetricSummaryCard
+              label="Outbound"
+              value={watchedValues.outbound_dials ?? 0}
+              icon={<Phone className="h-5 w-5 text-blue-600" />}
+            />
+            <MetricSummaryCard
+              label="Call-uri in calendar"
+              value={watchedValues.sales_call_on_calendar ?? 0}
+              icon={<CalendarRange className="h-5 w-5 text-amber-600" />}
+            />
+            <MetricSummaryCard
+              label="Vanzari totale"
+              value={
+                (watchedValues.sales_one_call_close ?? 0) +
+                (watchedValues.followup_sales ?? 0)
+              }
+              icon={<CheckCircle className="h-5 w-5 text-emerald-600" />}
+            />
+            <MetricSummaryCard
+              label="Valoare contracte"
+              value={watchedValues.contract_value ?? 0}
+              icon={<BadgeDollarSign className="h-5 w-5 text-indigo-600" />}
+              formatter={(value) => `${value} RON`}
+            />
+          </div>
+
+          <SectionCard
+            title="Activitate Outbound"
+            description="Indicatorii principali pentru activitatea de prospectare."
+          >
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <NumericField form={form} name="outbound_dials" label="Apeluri outbound efectuate" readOnly={isReadOnly} />
+              <NumericField form={form} name="pickups" label="Apeluri preluate" readOnly={isReadOnly} />
+              <NumericField
+                form={form}
                 name="conversations_30s_plus"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Conversations &gt; 30s</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min="0"
-                        {...field}
-                        readOnly={isReadOnly}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                label="Conversatii > 30 sec"
+                readOnly={isReadOnly}
               />
-            </CardContent>
-          </Card>
+            </div>
+          </SectionCard>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Sales Call Management</CardTitle>
-              <CardDescription>Results of scheduled calls.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-              <FormField
-                control={form.control}
+          <SectionCard
+            title="Management Sales Call"
+            description="Rezultatele apelurilor programate."
+          >
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <NumericField
+                form={form}
                 name="sales_call_booked_from_outbound"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Outbound</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min="0"
-                        {...field}
-                        readOnly={isReadOnly}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                label="Sales call-uri din outbound"
+                readOnly={isReadOnly}
               />
-              <FormField
-                control={form.control}
+              <NumericField
+                form={form}
                 name="sales_call_on_calendar"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Calls on Calendar</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min="0"
-                        {...field}
-                        readOnly={isReadOnly}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                label="Call-uri in calendar"
+                readOnly={isReadOnly}
               />
-              <FormField
-                control={form.control}
-                name="no_show"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>No Show</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min="0"
-                        {...field}
-                        readOnly={isReadOnly}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
+              <NumericField form={form} name="no_show" label="No-show" readOnly={isReadOnly} />
+              <NumericField
+                form={form}
                 name="reschedule_request"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Reschedule requests</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min="0"
-                        {...field}
-                        readOnly={isReadOnly}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                label="Cereri de reprogramare"
+                readOnly={isReadOnly}
               />
-              <FormField
-                control={form.control}
-                name="cancel"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Cancellations</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min="0"
-                        {...field}
-                        readOnly={isReadOnly}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </CardContent>
-          </Card>
+              <NumericField form={form} name="cancel" label="Anulari" readOnly={isReadOnly} />
+            </div>
+          </SectionCard>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Sales Performance</CardTitle>
-              <CardDescription>
-                Key sales performance indicators.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-3">
-              <FormField
-                control={form.control}
-                name="deposits"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Deposits collected</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min="0"
-                        {...field}
-                        readOnly={isReadOnly}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
+          <SectionCard
+            title="Performanta vanzari"
+            description="Indicatorii principali de performanta in vanzari."
+          >
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <NumericField form={form} name="deposits" label="Depozite colectate" readOnly={isReadOnly} />
+              <NumericField
+                form={form}
                 name="sales_one_call_close"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Sales closed on first call</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min="0"
-                        {...field}
-                        readOnly={isReadOnly}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                label="Vanzari inchise din primul apel"
+                readOnly={isReadOnly}
               />
-              <FormField
-                control={form.control}
+              <NumericField
+                form={form}
                 name="followup_sales"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Follow-up sales</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min="0"
-                        {...field}
-                        readOnly={isReadOnly}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                label="Vanzari din follow-up"
+                readOnly={isReadOnly}
               />
-            </CardContent>
-          </Card>
+            </div>
+          </SectionCard>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Upsell Opportunities</CardTitle>
-              <CardDescription>Tracking additional sales.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-2">
-              <FormField
-                control={form.control}
+          <SectionCard
+            title="Oportunitati de upsell"
+            description="Urmarirea vanzarilor suplimentare."
+          >
+            <div className="grid gap-4 md:grid-cols-1 xl:grid-cols-2">
+              <NumericField
+                form={form}
                 name="upsell_conversation_taken"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Upsell conversations held</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min="0"
-                        {...field}
-                        readOnly={isReadOnly}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                label="Conversatii de upsell"
+                readOnly={isReadOnly}
               />
-              <FormField
-                control={form.control}
-                name="upsells"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Upsell-uri realizate</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min="0"
-                        {...field}
-                        readOnly={isReadOnly}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </CardContent>
-          </Card>
+              <NumericField form={form} name="upsells" label="Upsell-uri realizate" readOnly={isReadOnly} />
+            </div>
+          </SectionCard>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Financial Values</CardTitle>
-              <CardDescription>Financial totals for today.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-2">
-              <FormField
-                control={form.control}
+          <SectionCard
+            title="Valori financiare"
+            description="Totalurile financiare pentru ziua de azi."
+          >
+            <div className="grid gap-4 md:grid-cols-1 xl:grid-cols-2">
+              <NumericField
+                form={form}
                 name="contract_value"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Total contract value (RON)</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        {...field}
-                        readOnly={isReadOnly}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                label="Valoare totala contracte (RON)"
+                readOnly={isReadOnly}
+                step="0.01"
               />
-              <FormField
-                control={form.control}
+              <NumericField
+                form={form}
                 name="new_cash_collected"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>New cash collected (RON)</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        {...field}
-                        readOnly={isReadOnly}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                label="Cash nou colectat (RON)"
+                readOnly={isReadOnly}
+                step="0.01"
               />
-            </CardContent>
-          </Card>
+            </div>
+          </SectionCard>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Section D — Notes</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <FormField
-                control={form.control}
-                name="observations"
-                render={({ field }) => (
-                  <FormItem>
-                    <Textarea
-                      {...field}
-                      placeholder="Add notes, issues encountered, or other context relevant to your manager..."
-                      className="min-h-[100px]"
-                      maxLength={1000}
-                      readOnly={isReadOnly}
-                    />
-                    <FormMessage />
-                  </FormItem>
-                )}
+          <SectionCard title="Notite">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-900" htmlFor="observations">
+                Notite
+              </label>
+              <Textarea
+                id="observations"
+                {...form.register("observations")}
+                placeholder={
+                  userRole === "manager"
+                    ? "Add notes, blockers, or any context relevant to your own activity today..."
+                    : "Add notes, issues encountered, or other context relevant to your manager..."
+                }
+                className="min-h-[120px] border-slate-200"
+                maxLength={1000}
+                readOnly={isReadOnly}
               />
-            </CardContent>
-          </Card>
+              {form.formState.errors.observations ? (
+                <p className="text-sm font-medium text-destructive">
+                  {String(form.formState.errors.observations.message ?? "")}
+                </p>
+              ) : null}
+            </div>
+          </SectionCard>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Section E — Confirmation & Responsibility</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <FormField
-                control={form.control}
-                name="confirmation"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
-                    <FormControl>
-                      <Checkbox
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                        disabled={isReadOnly}
-                      />
-                    </FormControl>
-                    <div className="space-y-1 leading-none">
-                      <FormLabel>
-                        I confirm the entered data is correct and complete.
-                      </FormLabel>
-                      <FormDescription>
-                        By checking this box, you take responsibility
-                        for the information in this report.
-                      </FormDescription>
-                      <FormMessage />
-                    </div>
-                  </FormItem>
-                )}
+          <SectionCard title="Confirmare si responsabilitate">
+            <div className="flex flex-row items-start space-x-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <Checkbox
+                checked={Boolean(form.watch("confirmation"))}
+                onCheckedChange={(checked) =>
+                  form.setValue("confirmation", checked === true, { shouldValidate: true })
+                }
+                disabled={isReadOnly}
               />
-            </CardContent>
-          </Card>
+              <div className="space-y-1 leading-none">
+                <label className="text-sm font-medium text-slate-900">
+                  Confirm ca datele introduse sunt corecte si complete.
+                </label>
+                <FormDescription>
+                  Bifand aceasta casuta, iti asumi responsabilitatea pentru informatiile din acest raport.
+                </FormDescription>
+                {form.formState.errors.confirmation ? (
+                  <p className="text-sm font-medium text-destructive">
+                    {String(form.formState.errors.confirmation.message ?? "")}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </SectionCard>
+          </form>
+        </Form>
+      </div>
+    </div>
+  );
+}
+
+function SectionCard({
+  title,
+  description,
+  children
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="shrink-0 overflow-visible rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-200 px-6 py-4">
+        <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
+        {description ? <p className="mt-1 text-sm text-slate-500">{description}</p> : null}
+      </div>
+      <div className="p-6">{children}</div>
+    </section>
+  );
+}
+
+function MetricSummaryCard({
+  label,
+  value,
+  icon,
+  formatter
+}: {
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+  formatter?: (value: number) => string;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">{label}</p>
+          <p className="mt-2 text-3xl font-bold text-slate-900">
+            {formatter ? formatter(value) : value}
+          </p>
         </div>
-      </form>
-    </Form>
+        <div className="rounded-full bg-slate-50 p-3">{icon}</div>
+      </div>
+    </div>
+  );
+}
+
+function NumericField({
+  form,
+  name,
+  label,
+  readOnly,
+  step
+}: {
+  form: ReturnType<typeof useForm<ReportFormValues>>;
+  name: keyof ReportFormValues;
+  label: string;
+  readOnly: boolean;
+  step?: string;
+}) {
+  return (
+    <div className="space-y-2">
+      <label className="text-sm font-medium text-slate-900" htmlFor={String(name)}>
+        {label}
+      </label>
+      <Input
+        id={String(name)}
+        type="number"
+        min="0"
+        step={step}
+        {...form.register(name)}
+        readOnly={readOnly}
+        className="h-12 border-slate-200 px-4 text-base"
+      />
+      {form.formState.errors[name] ? (
+        <p className="text-sm font-medium text-destructive">
+          {String(form.formState.errors[name]?.message ?? "")}
+        </p>
+      ) : null}
+    </div>
   );
 }

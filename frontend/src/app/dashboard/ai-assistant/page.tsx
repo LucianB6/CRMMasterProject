@@ -3,6 +3,7 @@
 import { Bot, Send } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
+import type { ReactNode } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { ApiError, apiFetch } from '../../../lib/api';
@@ -11,6 +12,32 @@ type ChatMessage = {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+};
+
+const formatAssistantMessage = (value: string) =>
+  value
+    .replace(/\s+([0-9]+\.)\s+\*\*/g, '\n\n$1 **')
+    .replace(/:\s+([0-9]+\.)\s+\*\*/g, ':\n\n$1 **')
+    .trim();
+
+const renderMessageContent = (value: string) => {
+  const lines = value.split('\n');
+
+  return lines.map((line, lineIndex) => {
+    const parts = line.split(/(\*\*.*?\*\*)/g);
+
+    return (
+      <div key={`${line}-${lineIndex}`}>
+        {parts.map((part, partIndex) => {
+          if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
+            return <strong key={`${part}-${partIndex}`}>{part.slice(2, -2)}</strong>;
+          }
+
+          return <span key={`${part}-${partIndex}`}>{part}</span>;
+        })}
+      </div>
+    );
+  }) as ReactNode;
 };
 
 const buildId = () =>
@@ -83,7 +110,7 @@ export default function AiAssistantPage() {
           {
             id: buildId(),
             role: 'assistant',
-            content: response.answer,
+            content: formatAssistantMessage(response.answer),
           },
         ]);
       }
@@ -146,7 +173,7 @@ export default function AiAssistantPage() {
                         : 'border border-slate-200 bg-slate-50 text-slate-700'
                     }`}
                   >
-                    {message.content}
+                    <div className="leading-7">{renderMessageContent(message.content)}</div>
                   </div>
                 </div>
               ))
