@@ -40,9 +40,17 @@ import {
   FormMessage,
 } from '../../../components/ui/form';
 import { Input } from '../../../components/ui/input';
-import { Plus, Target, Trash2 } from 'lucide-react';
+import {
+  Plus,
+  Target,
+  Trash2,
+  Trophy,
+  TrendingUp,
+  CalendarRange,
+} from 'lucide-react';
 import { useToast } from '../../../hooks/use-toast';
 import { apiFetch } from '../../../lib/api';
+import { cn } from '../../../lib/utils';
 
 const availableMetrics = [
   { key: 'outbound_dials', label: 'Calls outbound efectuate' },
@@ -289,33 +297,84 @@ export default function GoalsPage() {
     void fetchGoals();
   }, [fetchGoals]);
 
+  const summary = goals.reduce(
+    (acc, goal) => {
+      let currentValue = 0;
+      if (goal.metricKey === 'total_sales') {
+        currentValue =
+          reportInputs.sales_one_call_close + reportInputs.followup_sales;
+      } else {
+        const reportValue = reportInputs[goal.metricKey as keyof ReportInputs];
+        currentValue = typeof reportValue === 'number' ? reportValue : 0;
+      }
+
+      const progressPercentage =
+        goal.target > 0 ? Math.min((currentValue / goal.target) * 100, 100) : 0;
+
+      acc.total += 1;
+      if (progressPercentage >= 100) {
+        acc.completed += 1;
+      }
+      acc.averageProgress += progressPercentage;
+      return acc;
+    },
+    { total: 0, completed: 0, averageProgress: 0 }
+  );
+
+  const averageProgress =
+    summary.total > 0 ? summary.averageProgress / summary.total : 0;
+
   return (
-    <div className="space-y-6">
-      <header className="flex items-start justify-between sm:items-center">
+    <div className="w-full min-w-0 max-w-none space-y-8">
+      <div className="flex w-full flex-col gap-6 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="font-headline text-2xl">Goals</h1>
-          <p className="text-muted-foreground">
-            Add and track your goals' progress.
+          <h1 className="text-3xl font-black tracking-tight text-slate-800">Goals</h1>
+          <p className="mt-1 font-medium text-slate-500">
+            Defineste-ti obiectivele si urmareste progresul lor in acelasi stil cu restul dashboard-ului.
           </p>
         </div>
-        <Button onClick={() => setIsAddGoalDialogOpen(true)}>
+        <Button
+          onClick={() => setIsAddGoalDialogOpen(true)}
+          className="bg-[#38bdf8] text-white hover:bg-sky-500"
+        >
           <Plus className="mr-0 h-4 w-4 sm:mr-2" />
           <span className="hidden sm:inline">Add Goal</span>
         </Button>
-      </header>
+      </div>
+
+      <div className="grid w-full grid-cols-1 gap-6 sm:grid-cols-3">
+        <GoalSummaryCard
+          label="Obiective active"
+          value={summary.total.toLocaleString('ro-RO')}
+          icon={<Target className="h-5 w-5" />}
+          tone="blue"
+        />
+        <GoalSummaryCard
+          label="Obiective atinse"
+          value={summary.completed.toLocaleString('ro-RO')}
+          icon={<Trophy className="h-5 w-5" />}
+          tone="emerald"
+        />
+        <GoalSummaryCard
+          label="Progres mediu"
+          value={`${averageProgress.toFixed(0)}%`}
+          icon={<TrendingUp className="h-5 w-5" />}
+          tone="orange"
+        />
+      </div>
 
       {goals.length === 0 ? (
-        <Card className="flex flex-col items-center justify-center gap-4 py-16 text-center">
-          <Target className="h-16 w-16 text-muted-foreground" />
-          <h3 className="text-xl font-semibold">
-            {isGoalsLoading ? 'Loading goals...' : 'No goals set'}
+        <div className="flex flex-col items-center justify-center gap-4 rounded-[28px] border border-dashed border-slate-200 bg-white py-16 text-center shadow-xl shadow-slate-200/30">
+          <Target className="h-16 w-16 text-slate-300" />
+          <h3 className="text-xl font-semibold text-slate-800">
+            {isGoalsLoading ? 'Se incarca obiectivele...' : 'Nu exista obiective'}
           </h3>
-          <p className="text-muted-foreground">
+          <p className="font-medium text-slate-500">
             {isGoalsLoading
-              ? 'Please wait, loading data.'
-              : 'Click "Add Goal" to get started.'}
+              ? 'Te rog asteapta putin.'
+              : 'Apasa pe "Add Goal" pentru a incepe.'}
           </p>
-        </Card>
+        </div>
       ) : (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
           {goals.map((goal) => {
@@ -335,10 +394,10 @@ export default function GoalsPage() {
               goal.metricKey.includes('value') ||
               goal.metricKey.includes('cash');
             const targetDisplay = isCurrency
-              ? `${goal.target.toLocaleString('en-US')} RON`
+              ? `${goal.target.toLocaleString('ro-RO')} RON`
               : goal.target;
             const currentDisplay = isCurrency
-              ? `${currentValue.toLocaleString('en-US')}`
+              ? `${currentValue.toLocaleString('ro-RO')}`
               : currentValue;
             const fullDisplay = isCurrency
               ? `${currentDisplay} / ${targetDisplay}`
@@ -353,31 +412,58 @@ export default function GoalsPage() {
             const periodDisplay =
               fromDate && toDate
                 ? `${fromDate} - ${toDate}`
-                : 'Undefined period';
+                : 'Perioada nedefinita';
 
             return (
-              <Card key={goal.id} className="group relative">
-                <CardHeader>
-                  <CardTitle className="pr-12">{goal.title}</CardTitle>
-                  <CardDescription>
-                    {periodDisplay} | Target: {targetDisplay}
-                  </CardDescription>
+              <Card
+                key={goal.id}
+                className="group relative overflow-hidden rounded-[28px] border border-slate-100 bg-white shadow-xl shadow-slate-200/35"
+              >
+                <CardHeader className="space-y-4 pb-3">
+                  <div>
+                    <div className="mb-4 inline-flex rounded-2xl border border-blue-100 bg-blue-50 p-3 text-blue-600">
+                      <Target className="h-5 w-5" />
+                    </div>
+                    <CardTitle className="pr-12 text-xl text-slate-800">{goal.title}</CardTitle>
+                    <CardDescription className="mt-2 flex items-center gap-2 text-sm font-medium text-slate-500">
+                      <CalendarRange className="h-4 w-4" />
+                      {periodDisplay}
+                    </CardDescription>
+                  </div>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="absolute right-2 top-2 h-8 w-8 opacity-0 transition-opacity group-hover:opacity-100"
+                    className="absolute right-3 top-3 h-8 w-8 rounded-full opacity-0 transition-opacity group-hover:bg-red-50 group-hover:opacity-100"
                     onClick={() => handleDeleteGoal(goal.id)}
                   >
                     <Trash2 className="h-4 w-4 text-destructive" />
                     <span className="sr-only">Delete goal</span>
                   </Button>
                 </CardHeader>
-                <CardContent className="space-y-2">
-                  <Progress value={progressPercentage} />
-                  <div className="flex justify-between text-sm font-medium text-muted-foreground">
-                    <span>Progres</span>
+                <CardContent className="space-y-4">
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                      Target
+                    </p>
+                    <p className="mt-1 text-lg font-black text-slate-900">{targetDisplay}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm font-medium text-slate-500">
+                      <span>Progres</span>
+                      <span>{Math.min(progressPercentage, 100).toFixed(0)}%</span>
+                    </div>
+                    <Progress
+                      value={progressPercentage}
+                      className={cn(
+                        '[&>div]:bg-[#38bdf8]',
+                        progressPercentage >= 100 && '[&>div]:bg-emerald-500'
+                      )}
+                    />
+                  </div>
+                  <div className="flex justify-between text-sm font-medium text-slate-500">
+                    <span>Valoare curenta</span>
                     <span>
-                      {isReportLoading ? 'Loading...' : fullDisplay}
+                      {isReportLoading ? 'Se incarca...' : fullDisplay}
                     </span>
                   </div>
                 </CardContent>
@@ -498,6 +584,34 @@ export default function GoalsPage() {
           </Form>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function GoalSummaryCard({
+  label,
+  value,
+  icon,
+  tone,
+}: {
+  label: string;
+  value: string;
+  icon: React.ReactNode;
+  tone: 'blue' | 'emerald' | 'orange';
+}) {
+  const tones = {
+    blue: 'bg-blue-50 text-blue-600 border-blue-100',
+    emerald: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+    orange: 'bg-orange-50 text-orange-600 border-orange-100',
+  };
+
+  return (
+    <div className="rounded-[28px] border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/40">
+      <div className="mb-4 flex items-start justify-between">
+        <div className={`rounded-2xl border p-3 ${tones[tone]}`}>{icon}</div>
+      </div>
+      <p className="mb-1 text-xs font-bold uppercase tracking-widest text-slate-400">{label}</p>
+      <p className="text-2xl font-black text-slate-900">{value}</p>
     </div>
   );
 }

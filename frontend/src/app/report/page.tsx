@@ -258,236 +258,257 @@ export default function DailyReportPage() {
   const currentStatusInfo = statusConfig[status];
   const isBusy = isLoading || isSaving;
   const watchedValues = form.watch();
+  const toSafeNumber = (value: unknown) => {
+    if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (!trimmed) return 0;
+      const parsed = Number(trimmed);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+    return 0;
+  };
 
   return (
-    <div className="w-full min-w-0 bg-slate-50 p-8">
-      <div className="mx-auto flex w-full max-w-[1700px] min-w-0 flex-col gap-6">
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden">
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-[1700px] min-w-0 flex-1 flex-col overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-xl shadow-slate-200/40">
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="w-full min-w-0 space-y-6">
-          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900">Raport zilnic</h1>
-              <p className="text-slate-500">
-                {userRole === "manager"
-                  ? "Înregistrează-ți activitatea zilnică în același format folosit de agenți."
-                  : "Completează activitatea ta zilnică și trimite raportul către manager."}
-              </p>
-              <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-slate-500">
-                <span className="inline-flex items-center gap-2">
-                  <CalendarRange className="h-4 w-4" />
-                  {formattedDate}
-                </span>
-                <span className="inline-flex items-center gap-2">
-                  <currentStatusInfo.icon className={cn("h-4 w-4", currentStatusInfo.color)} />
-                  <span className={cn("font-semibold", currentStatusInfo.color)}>
-                    {currentStatusInfo.text}
-                  </span>
-                </span>
-                <span className="inline-flex items-center gap-2">
-                  <Clock className="h-4 w-4" />
-                  Trimitere automata la 23:59
-                </span>
-              </div>
-            </div>
-
-            <div className="flex w-full gap-2 sm:w-auto">
-              <Button
-                variant="outline"
-                type="button"
-                disabled={isReadOnly || isBusy}
-                onClick={() => saveReport("draft", form.getValues())}
-                className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-              >
-                Salveaza ciorna
-              </Button>
-              <Button
-                type="submit"
-                disabled={isReadOnly || !isValid || isBusy}
-                className="bg-blue-600 text-white hover:bg-blue-700"
-              >
-                Trimite raportul
-              </Button>
-            </div>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-4">
-            <MetricSummaryCard
-              label="Outbound"
-              value={watchedValues.outbound_dials ?? 0}
-              icon={<Phone className="h-5 w-5 text-blue-600" />}
-            />
-            <MetricSummaryCard
-              label="Call-uri in calendar"
-              value={watchedValues.sales_call_on_calendar ?? 0}
-              icon={<CalendarRange className="h-5 w-5 text-amber-600" />}
-            />
-            <MetricSummaryCard
-              label="Vanzari totale"
-              value={
-                (watchedValues.sales_one_call_close ?? 0) +
-                (watchedValues.followup_sales ?? 0)
-              }
-              icon={<CheckCircle className="h-5 w-5 text-emerald-600" />}
-            />
-            <MetricSummaryCard
-              label="Valoare contracte"
-              value={watchedValues.contract_value ?? 0}
-              icon={<BadgeDollarSign className="h-5 w-5 text-indigo-600" />}
-              formatter={(value) => `${value} RON`}
-            />
-          </div>
-
-          <SectionCard
-            title="Activitate Outbound"
-            description="Indicatorii principali pentru activitatea de prospectare."
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden"
           >
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <NumericField form={form} name="outbound_dials" label="Apeluri outbound efectuate" readOnly={isReadOnly} />
-              <NumericField form={form} name="pickups" label="Apeluri preluate" readOnly={isReadOnly} />
-              <NumericField
-                form={form}
-                name="conversations_30s_plus"
-                label="Conversatii > 30 sec"
-                readOnly={isReadOnly}
-              />
-            </div>
-          </SectionCard>
-
-          <SectionCard
-            title="Management Sales Call"
-            description="Rezultatele apelurilor programate."
-          >
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <NumericField
-                form={form}
-                name="sales_call_booked_from_outbound"
-                label="Sales call-uri din outbound"
-                readOnly={isReadOnly}
-              />
-              <NumericField
-                form={form}
-                name="sales_call_on_calendar"
-                label="Call-uri in calendar"
-                readOnly={isReadOnly}
-              />
-              <NumericField form={form} name="no_show" label="No-show" readOnly={isReadOnly} />
-              <NumericField
-                form={form}
-                name="reschedule_request"
-                label="Cereri de reprogramare"
-                readOnly={isReadOnly}
-              />
-              <NumericField form={form} name="cancel" label="Anulari" readOnly={isReadOnly} />
-            </div>
-          </SectionCard>
-
-          <SectionCard
-            title="Performanta vanzari"
-            description="Indicatorii principali de performanta in vanzari."
-          >
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <NumericField form={form} name="deposits" label="Depozite colectate" readOnly={isReadOnly} />
-              <NumericField
-                form={form}
-                name="sales_one_call_close"
-                label="Vanzari inchise din primul apel"
-                readOnly={isReadOnly}
-              />
-              <NumericField
-                form={form}
-                name="followup_sales"
-                label="Vanzari din follow-up"
-                readOnly={isReadOnly}
-              />
-            </div>
-          </SectionCard>
-
-          <SectionCard
-            title="Oportunitati de upsell"
-            description="Urmarirea vanzarilor suplimentare."
-          >
-            <div className="grid gap-4 md:grid-cols-1 xl:grid-cols-2">
-              <NumericField
-                form={form}
-                name="upsell_conversation_taken"
-                label="Conversatii de upsell"
-                readOnly={isReadOnly}
-              />
-              <NumericField form={form} name="upsells" label="Upsell-uri realizate" readOnly={isReadOnly} />
-            </div>
-          </SectionCard>
-
-          <SectionCard
-            title="Valori financiare"
-            description="Totalurile financiare pentru ziua de azi."
-          >
-            <div className="grid gap-4 md:grid-cols-1 xl:grid-cols-2">
-              <NumericField
-                form={form}
-                name="contract_value"
-                label="Valoare totala contracte (RON)"
-                readOnly={isReadOnly}
-                step="0.01"
-              />
-              <NumericField
-                form={form}
-                name="new_cash_collected"
-                label="Cash nou colectat (RON)"
-                readOnly={isReadOnly}
-                step="0.01"
-              />
-            </div>
-          </SectionCard>
-
-          <SectionCard title="Notite">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-900" htmlFor="observations">
-                Notite
-              </label>
-              <Textarea
-                id="observations"
-                {...form.register("observations")}
-                placeholder={
-                  userRole === "manager"
-                    ? "Add notes, blockers, or any context relevant to your own activity today..."
-                    : "Add notes, issues encountered, or other context relevant to your manager..."
-                }
-                className="min-h-[120px] border-slate-200"
-                maxLength={1000}
-                readOnly={isReadOnly}
-              />
-              {form.formState.errors.observations ? (
-                <p className="text-sm font-medium text-destructive">
-                  {String(form.formState.errors.observations.message ?? "")}
-                </p>
-              ) : null}
-            </div>
-          </SectionCard>
-
-          <SectionCard title="Confirmare si responsabilitate">
-            <div className="flex flex-row items-start space-x-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <Checkbox
-                checked={Boolean(form.watch("confirmation"))}
-                onCheckedChange={(checked) =>
-                  form.setValue("confirmation", checked === true, { shouldValidate: true })
-                }
-                disabled={isReadOnly}
-              />
-              <div className="space-y-1 leading-none">
-                <label className="text-sm font-medium text-slate-900">
-                  Confirm ca datele introduse sunt corecte si complete.
-                </label>
-                <FormDescription>
-                  Bifand aceasta casuta, iti asumi responsabilitatea pentru informatiile din acest raport.
-                </FormDescription>
-                {form.formState.errors.confirmation ? (
-                  <p className="text-sm font-medium text-destructive">
-                    {String(form.formState.errors.confirmation.message ?? "")}
+            <div className="sticky top-0 z-30 shrink-0 border-b border-slate-200 bg-white/95 px-8 py-6 backdrop-blur-sm">
+              <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
+                <div>
+                  <h1 className="text-2xl font-bold text-slate-900">Raport zilnic</h1>
+                  <p className="text-slate-500">
+                    {userRole === "manager"
+                      ? "Înregistrează-ți activitatea zilnică în același format folosit de agenți."
+                      : "Completează activitatea ta zilnică și trimite raportul către manager."}
                   </p>
-                ) : null}
+                  <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-slate-500">
+                    <span className="inline-flex items-center gap-2">
+                      <CalendarRange className="h-4 w-4" />
+                      {formattedDate}
+                    </span>
+                    <span className="inline-flex items-center gap-2">
+                      <currentStatusInfo.icon className={cn("h-4 w-4", currentStatusInfo.color)} />
+                      <span className={cn("font-semibold", currentStatusInfo.color)}>
+                        {currentStatusInfo.text}
+                      </span>
+                    </span>
+                    <span className="inline-flex items-center gap-2">
+                      <Clock className="h-4 w-4" />
+                      Trimitere automata la 23:59
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex w-full gap-2 sm:w-auto">
+                  <Button
+                    variant="outline"
+                    type="button"
+                    disabled={isReadOnly || isBusy}
+                    onClick={() => saveReport("draft", form.getValues())}
+                    className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  >
+                    Salveaza ciorna
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={isReadOnly || !isValid || isBusy}
+                    className="bg-blue-600 text-white hover:bg-blue-700"
+                  >
+                    Trimite raportul
+                  </Button>
+                </div>
               </div>
             </div>
-          </SectionCard>
+
+            <div className="shrink-0 border-b border-slate-200 bg-slate-50/60 px-8 py-5">
+              <div className="grid gap-4 md:grid-cols-4">
+                <MetricSummaryCard
+                  label="Outbound"
+                  value={toSafeNumber(watchedValues.outbound_dials)}
+                  icon={<Phone className="h-5 w-5 text-blue-600" />}
+                />
+                <MetricSummaryCard
+                  label="Call-uri in calendar"
+                  value={toSafeNumber(watchedValues.sales_call_on_calendar)}
+                  icon={<CalendarRange className="h-5 w-5 text-amber-600" />}
+                />
+                <MetricSummaryCard
+                  label="Vanzari totale"
+                  value={
+                    toSafeNumber(watchedValues.sales_one_call_close) +
+                    toSafeNumber(watchedValues.followup_sales)
+                  }
+                  icon={<CheckCircle className="h-5 w-5 text-emerald-600" />}
+                />
+                <MetricSummaryCard
+                  label="Valoare contracte"
+                  value={toSafeNumber(watchedValues.contract_value)}
+                  icon={<BadgeDollarSign className="h-5 w-5 text-indigo-600" />}
+                  formatter={(value) => `${value} RON`}
+                />
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 px-8 py-6">
+              <div className="space-y-6 pb-8">
+                <SectionCard
+                  title="Activitate Outbound"
+                  description="Indicatorii principali pentru activitatea de prospectare."
+                >
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    <NumericField form={form} name="outbound_dials" label="Apeluri outbound efectuate" readOnly={isReadOnly} />
+                    <NumericField form={form} name="pickups" label="Apeluri preluate" readOnly={isReadOnly} />
+                    <NumericField
+                      form={form}
+                      name="conversations_30s_plus"
+                      label="Conversatii > 30 sec"
+                      readOnly={isReadOnly}
+                    />
+                  </div>
+                </SectionCard>
+
+                <SectionCard
+                  title="Management Sales Call"
+                  description="Rezultatele apelurilor programate."
+                >
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    <NumericField
+                      form={form}
+                      name="sales_call_booked_from_outbound"
+                      label="Sales call-uri din outbound"
+                      readOnly={isReadOnly}
+                    />
+                    <NumericField
+                      form={form}
+                      name="sales_call_on_calendar"
+                      label="Call-uri in calendar"
+                      readOnly={isReadOnly}
+                    />
+                    <NumericField form={form} name="no_show" label="No-show" readOnly={isReadOnly} />
+                    <NumericField
+                      form={form}
+                      name="reschedule_request"
+                      label="Cereri de reprogramare"
+                      readOnly={isReadOnly}
+                    />
+                    <NumericField form={form} name="cancel" label="Anulari" readOnly={isReadOnly} />
+                  </div>
+                </SectionCard>
+
+                <SectionCard
+                  title="Performanta vanzari"
+                  description="Indicatorii principali de performanta in vanzari."
+                >
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    <NumericField form={form} name="deposits" label="Depozite colectate" readOnly={isReadOnly} />
+                    <NumericField
+                      form={form}
+                      name="sales_one_call_close"
+                      label="Vanzari inchise din primul apel"
+                      readOnly={isReadOnly}
+                    />
+                    <NumericField
+                      form={form}
+                      name="followup_sales"
+                      label="Vanzari din follow-up"
+                      readOnly={isReadOnly}
+                    />
+                  </div>
+                </SectionCard>
+
+                <SectionCard
+                  title="Oportunitati de upsell"
+                  description="Urmarirea vanzarilor suplimentare."
+                >
+                  <div className="grid gap-4 md:grid-cols-1 xl:grid-cols-2">
+                    <NumericField
+                      form={form}
+                      name="upsell_conversation_taken"
+                      label="Conversatii de upsell"
+                      readOnly={isReadOnly}
+                    />
+                    <NumericField form={form} name="upsells" label="Upsell-uri realizate" readOnly={isReadOnly} />
+                  </div>
+                </SectionCard>
+
+                <SectionCard
+                  title="Valori financiare"
+                  description="Totalurile financiare pentru ziua de azi."
+                >
+                  <div className="grid gap-4 md:grid-cols-1 xl:grid-cols-2">
+                    <NumericField
+                      form={form}
+                      name="contract_value"
+                      label="Valoare totala contracte (RON)"
+                      readOnly={isReadOnly}
+                      step="0.01"
+                    />
+                    <NumericField
+                      form={form}
+                      name="new_cash_collected"
+                      label="Cash nou colectat (RON)"
+                      readOnly={isReadOnly}
+                      step="0.01"
+                    />
+                  </div>
+                </SectionCard>
+
+                <SectionCard title="Notite">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-900" htmlFor="observations">
+                      Notite
+                    </label>
+                    <Textarea
+                      id="observations"
+                      {...form.register("observations")}
+                      placeholder={
+                        userRole === "manager"
+                          ? "Add notes, blockers, or any context relevant to your own activity today..."
+                          : "Add notes, issues encountered, or other context relevant to your manager..."
+                      }
+                      className="min-h-[120px] border-slate-200"
+                      maxLength={1000}
+                      readOnly={isReadOnly}
+                    />
+                    {form.formState.errors.observations ? (
+                      <p className="text-sm font-medium text-destructive">
+                        {String(form.formState.errors.observations.message ?? "")}
+                      </p>
+                    ) : null}
+                  </div>
+                </SectionCard>
+
+                <SectionCard title="Confirmare si responsabilitate">
+                  <div className="flex flex-row items-start space-x-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <Checkbox
+                      checked={Boolean(form.watch("confirmation"))}
+                      onCheckedChange={(checked) =>
+                        form.setValue("confirmation", checked === true, { shouldValidate: true })
+                      }
+                      disabled={isReadOnly}
+                    />
+                    <div className="space-y-1 leading-none">
+                      <label className="text-sm font-medium text-slate-900">
+                        Confirm ca datele introduse sunt corecte si complete.
+                      </label>
+                      <FormDescription>
+                        Bifand aceasta casuta, iti asumi responsabilitatea pentru informatiile din acest raport.
+                      </FormDescription>
+                      {form.formState.errors.confirmation ? (
+                        <p className="text-sm font-medium text-destructive">
+                          {String(form.formState.errors.confirmation.message ?? "")}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                </SectionCard>
+              </div>
+            </div>
           </form>
         </Form>
       </div>

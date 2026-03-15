@@ -5,19 +5,11 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '../../../components/ui/card';
 import {
   Table,
   TableBody,
@@ -36,40 +28,41 @@ import {
   Phone,
   RefreshCw,
   CalendarPlus,
+  User,
 } from 'lucide-react';
 
 const metricsConfig = {
   sales: {
-    label: 'Sales',
+    label: 'Vanzari',
     dataKey: 'sales',
-    unitLabel: 'Units',
+    unitLabel: 'Unitati',
     icon: ShoppingCart,
     showValue: true,
-    barName: 'Sales',
+    barName: 'Vanzari',
   },
   calls: {
-    label: 'Calls Made',
+    label: 'Apeluri efectuate',
     dataKey: 'calls',
-    unitLabel: 'Calls',
+    unitLabel: 'Apeluri',
     icon: Phone,
     showValue: false,
-    barName: 'Calls',
+    barName: 'Apeluri',
   },
   followUpSales: {
-    label: 'Follow-up Sales',
+    label: 'Vanzari follow-up',
     dataKey: 'followUpSales',
-    unitLabel: 'Units',
+    unitLabel: 'Unitati',
     icon: RefreshCw,
     showValue: false,
-    barName: 'Follow-up Sales',
+    barName: 'Vanzari follow-up',
   },
   outboundBookings: {
-    label: 'Bookings Outbound',
+    label: 'Programari outbound',
     dataKey: 'outboundBookings',
-    unitLabel: 'Bookings',
+    unitLabel: 'Programari',
     icon: CalendarPlus,
     showValue: false,
-    barName: 'Bookings',
+    barName: 'Programari',
   },
 } as const;
 
@@ -141,7 +134,7 @@ const formatIsoDate = (date: Date) => date.toISOString().split('T')[0];
 const parseReportDate = (date: string) => new Date(`${date}T00:00:00Z`);
 
 const formatMonthLabel = (date: Date) => {
-  const formatted = date.toLocaleString('en-US', { month: 'short' }).replace('.', '');
+  const formatted = date.toLocaleString('ro-RO', { month: 'short' }).replace('.', '');
   return formatted.charAt(0).toUpperCase() + formatted.slice(1);
 };
 
@@ -184,13 +177,13 @@ const buildDailySeries = (
     const diffDays = Math.round(
       (todayUtc.getTime() - cursor.getTime()) / (1000 * 60 * 60 * 24)
     );
-    let periodLabel = `${diffDays} days ago`;
+    let periodLabel = `Acum ${diffDays} zile`;
     if (diffDays === 0) {
-      periodLabel = 'Today';
+      periodLabel = 'Astazi';
     } else if (diffDays === 1) {
-      periodLabel = 'Yesterday';
+      periodLabel = 'Ieri';
     } else {
-      periodLabel = `${diffDays} days ago`;
+      periodLabel = `Acum ${diffDays} zile`;
     }
     const totals = totalsByDate.get(iso);
     data.push({
@@ -243,9 +236,9 @@ const buildWeeklySeries = (
   const totalWeeks = Math.ceil(daysInMonth / 7);
   return Array.from({ length: totalWeeks }, (_, index) => {
     const weekNumber = index + 1;
-    const totals = totalsByWeek.get(weekNumber);
-    return {
-      period: `Wk ${weekNumber}`,
+      const totals = totalsByWeek.get(weekNumber);
+      return {
+      period: `Sapt. ${weekNumber}`,
       sales: totals?.sales ?? 0,
       calls: totals?.calls ?? 0,
       followUpSales: totals?.followUpSales ?? 0,
@@ -382,7 +375,7 @@ export default function HistoryPage() {
       const message =
         error instanceof Error ? error.message : 'Unknown error';
       toast({
-        title: 'Unable to load history',
+        title: 'Nu am putut incarca istoricul',
         description: message,
         variant: 'destructive',
       });
@@ -408,92 +401,76 @@ export default function HistoryPage() {
     return (
       <div className="space-y-6">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Total ({metric.unitLabel})
-              </CardTitle>
-              <Icon className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{totals.totalUnits}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Average / Period
-              </CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {totals.averageUnits.toFixed(1)}
-              </div>
-            </CardContent>
-          </Card>
+          <HistoryMetricCard
+            label={`Total (${metric.unitLabel})`}
+            value={totals.totalUnits.toLocaleString('ro-RO')}
+            icon={<Icon className="h-5 w-5" />}
+            tone="blue"
+          />
+          <HistoryMetricCard
+            label="Media / perioada"
+            value={totals.averageUnits.toFixed(1)}
+            icon={<TrendingUp className="h-5 w-5" />}
+            tone="emerald"
+          />
           {metric.showValue && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Total Value (RON)
-                </CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {totals.totalValue > 0
-                    ? totals.totalValue.toLocaleString('en-US')
-                    : '-'}
-                </div>
-              </CardContent>
-            </Card>
+            <HistoryMetricCard
+              label="Valoare totala (RON)"
+              value={
+                totals.totalValue > 0
+                  ? totals.totalValue.toLocaleString('ro-RO')
+                  : '-'
+              }
+              icon={<DollarSign className="h-5 w-5" />}
+              tone="indigo"
+            />
           )}
         </div>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>{`Chart ${metric.label} - ${title}`}</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <div className="rounded-[28px] border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/40">
+            <div className="mb-4">
+              <h3 className="text-lg font-bold text-slate-800">{`Grafic ${metric.label} - ${title}`}</h3>
+            </div>
+            <div>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={data}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
                   <XAxis
                     dataKey="period"
-                    stroke="#888888"
-                    fontSize={12}
+                    stroke="#94a3b8"
+                    fontSize={11}
                     tickLine={false}
                     axisLine={false}
                   />
                   <YAxis
-                    stroke="#888888"
-                    fontSize={12}
+                    stroke="#94a3b8"
+                    fontSize={11}
                     tickLine={false}
                     axisLine={false}
                     allowDecimals={false}
                   />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: 'hsl(var(--card))',
-                      borderColor: 'hsl(var(--border))',
+                      borderRadius: 12,
+                      border: '1px solid #e2e8f0',
+                      backgroundColor: '#ffffff',
                     }}
                   />
                   <Bar
                     dataKey={metric.dataKey}
                     name={metric.barName}
-                    fill="hsl(var(--primary))"
+                    fill="#38bdf8"
                     radius={[4, 4, 0, 0]}
                   />
                 </BarChart>
               </ResponsiveContainer>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>{`Table ${metric.label} - ${title}`}</CardTitle>
-            </CardHeader>
-            <CardContent>
+            </div>
+          </div>
+          <div className="rounded-[28px] border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/40">
+            <div className="mb-4">
+              <h3 className="text-lg font-bold text-slate-800">{`Tabel ${metric.label} - ${title}`}</h3>
+            </div>
+            <div>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -502,7 +479,7 @@ export default function HistoryPage() {
                       {metric.label} ({metric.unitLabel})
                     </TableHead>
                     {metric.showValue && (
-                      <TableHead className="text-right">Value (RON)</TableHead>
+                      <TableHead className="text-right">Valoare (RON)</TableHead>
                     )}
                   </TableRow>
                 </TableHeader>
@@ -515,15 +492,15 @@ export default function HistoryPage() {
                       </TableCell>
                       {metric.showValue && (
                         <TableCell className="text-right">
-                          {(item.value || 0).toLocaleString('en-US')}
+                          {(item.value || 0).toLocaleString('ro-RO')}
                         </TableCell>
                       )}
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -553,51 +530,93 @@ export default function HistoryPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="font-headline text-2xl">Sales & Activity History</h1>
-        <p className="text-muted-foreground">
-          Analyze your performance across different time periods.
-        </p>
-      </header>
-      {isLoading ? (
-        <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-          Loading history...
+    <div className="w-full min-w-0 max-w-none space-y-8">
+      <div className="flex w-full flex-col gap-6 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h2 className="text-3xl font-black tracking-tight text-slate-800">Istoric</h2>
+          <p className="mt-1 font-medium text-slate-500">
+            Analyzeaza-ti performanta istorica pe baza rapoartelor zilnice trimise.
+          </p>
         </div>
+
+        <div className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm md:w-auto">
+          <div className="flex items-center gap-1 rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
+            <User className="h-3.5 w-3.5" />
+            Activitatea mea
+          </div>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <p className="text-sm text-slate-500">
+          Se incarca istoricul...
+        </p>
       ) : (
         <Tabs defaultValue="7days" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
-            <TabsTrigger value="7days">Last 7 days</TabsTrigger>
-            <TabsTrigger value="currentMonth">Current month</TabsTrigger>
-            <TabsTrigger value="currentYear">Current year</TabsTrigger>
-            <TabsTrigger value="previousYear">Previous year</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2 rounded-2xl bg-slate-100 p-1 sm:grid-cols-4">
+            <TabsTrigger value="7days">Ultimele 7 zile</TabsTrigger>
+            <TabsTrigger value="currentMonth">Luna curenta</TabsTrigger>
+            <TabsTrigger value="currentYear">Anul curent</TabsTrigger>
+            <TabsTrigger value="previousYear">Anul precedent</TabsTrigger>
           </TabsList>
           <TabsContent value="7days" className="mt-6">
             {renderPeriodContent(
-              'Last 7 days',
+              'Ultimele 7 zile',
               historyData.last7Days,
-              'Day'
+              'Zi'
             )}
           </TabsContent>
           <TabsContent value="currentMonth" className="mt-6">
             {renderPeriodContent(
-              'Current Month',
+              'Luna curenta',
               historyData.currentMonth,
-              'Week'
+              'Saptamana'
             )}
           </TabsContent>
           <TabsContent value="currentYear" className="mt-6">
-            {renderPeriodContent('Current Year', historyData.currentYear, 'Month')}
+            {renderPeriodContent('Anul curent', historyData.currentYear, 'Luna')}
           </TabsContent>
           <TabsContent value="previousYear" className="mt-6">
             {renderPeriodContent(
-              'Previous Year',
+              'Anul precedent',
               historyData.previousYear,
-              'Month'
+              'Luna'
             )}
           </TabsContent>
         </Tabs>
       )}
+    </div>
+  );
+}
+
+function HistoryMetricCard({
+  label,
+  value,
+  subtitle,
+  icon,
+  tone,
+}: {
+  label: string;
+  value: string;
+  subtitle?: string;
+  icon: React.ReactNode;
+  tone: 'blue' | 'emerald' | 'orange' | 'indigo';
+}) {
+  const tones = {
+    blue: 'bg-blue-50 text-blue-600 border-blue-100',
+    emerald: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+    orange: 'bg-orange-50 text-orange-600 border-orange-100',
+    indigo: 'bg-indigo-50 text-indigo-600 border-indigo-100',
+  };
+
+  return (
+    <div className="rounded-[24px] border border-slate-100 bg-white p-5 shadow-xl shadow-slate-200/35">
+      <div className="mb-3 flex items-start justify-between">
+        <div className={`rounded-xl border p-2.5 ${tones[tone]}`}>{icon}</div>
+      </div>
+      <p className="mb-1 text-xs font-bold uppercase tracking-widest text-slate-400">{label}</p>
+      <p className="text-2xl font-black text-slate-900">{value}</p>
+      {subtitle ? <p className="mt-1 truncate text-xs font-medium text-slate-500">{subtitle}</p> : null}
     </div>
   );
 }

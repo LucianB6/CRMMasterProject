@@ -20,17 +20,12 @@ import {
   Pencil,
   Lock,
   Clock,
+  Calendar,
+  ArrowRight,
 } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '../../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Button } from '../../components/ui/button';
 import { Skeleton } from '../../components/ui/skeleton';
@@ -116,28 +111,28 @@ const emptyReport: NormalizedReport = {
 
 const statusConfig = {
   unfilled: {
-    text: 'Unfilled',
+    text: 'Necompletat',
     icon: XCircle,
     color: 'text-destructive',
-    buttonText: 'Complete report',
+    buttonText: 'Completeaza raportul',
   },
   draft: {
     text: 'Draft',
     icon: Pencil,
     color: 'text-yellow-500',
-    buttonText: 'Continue report',
+    buttonText: 'Continua raportul',
   },
   submitted: {
-    text: 'Submitted',
+    text: 'Trimis',
     icon: CheckCircle2,
     color: 'text-green-500',
-    buttonText: 'View submitted report',
+    buttonText: 'Vezi raportul trimis',
   },
   locked: {
-    text: 'Locked',
+    text: 'Blocat',
     icon: Lock,
     color: 'text-muted-foreground',
-    buttonText: 'View report',
+    buttonText: 'Vezi raportul',
   },
 };
 
@@ -169,7 +164,7 @@ export default function DashboardPage() {
   const [report, setReport] = useState<NormalizedReport>(emptyReport);
   const [historyLast7Days, setHistoryLast7Days] = useState<ChartPoint[]>([]);
   const [historyCurrentMonth, setHistoryCurrentMonth] = useState<ChartPoint[]>([]);
-  const [deadline] = useState(new Date(new Date().setHours(19, 0, 0, 0)));
+  const [deadline] = useState(new Date(new Date().setHours(23, 59, 59, 0)));
   const [countdown, setCountdown] = useState('');
 
   const getAuthToken = useCallback(() => {
@@ -221,13 +216,13 @@ export default function DashboardPage() {
   }, []);
 
   const formatNumber = useCallback((value: number) => {
-    return new Intl.NumberFormat('en-US').format(value);
+    return new Intl.NumberFormat('ro-RO').format(value);
   }, []);
 
   const formatCurrency = useCallback((value: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('ro-RO', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'RON',
       maximumFractionDigits: 0,
     }).format(value);
   }, []);
@@ -343,19 +338,19 @@ export default function DashboardPage() {
 
         setHistoryLast7Days(
           buildHistorySeries(recentData, recentStart, todayUtc, (date) =>
-            date.toLocaleDateString('en-US', { weekday: 'short' })
+            date.toLocaleDateString('ro-RO', { weekday: 'short' })
           )
         );
         setHistoryCurrentMonth(
           buildHistorySeries(monthData, monthStart, todayUtc, (date) =>
-            date.toLocaleDateString('en-US', { day: 'numeric' })
+            date.toLocaleDateString('ro-RO', { day: 'numeric' })
           )
         );
       } catch (error) {
         const message =
           error instanceof Error ? error.message : 'Unknown error';
         toast({
-          title: 'Unable to load charts',
+          title: 'Nu am putut incarca graficele',
           description: message,
           variant: 'destructive',
         });
@@ -373,26 +368,30 @@ export default function DashboardPage() {
   const quickStats = useMemo(
     () => [
       {
-        title: 'Calls made',
+        title: 'Apeluri efectuate',
         value: formatNumber(report.inputs.outbound_dials),
         icon: Phone,
+        tone: 'blue' as const,
       },
       {
-        title: 'Conversions',
+        title: 'Conectari',
         value: formatNumber(report.inputs.pickups),
         icon: Target,
+        tone: 'emerald' as const,
       },
       {
-        title: 'Closed sales',
+        title: 'Vanzari inchise',
         value: formatNumber(
           report.inputs.sales_one_call_close + report.inputs.followup_sales
         ),
         icon: TrendingUp,
+        tone: 'orange' as const,
       },
       {
-        title: 'Sales value',
+        title: 'Valoare contracte',
         value: formatCurrency(report.inputs.contract_value),
         icon: DollarSign,
+        tone: 'indigo' as const,
       },
     ],
     [
@@ -427,176 +426,255 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <Card>
-        <CardContent className="p-6">
-          <div className="grid grid-cols-1 items-center gap-4 sm:grid-cols-[1fr_auto_auto] sm:gap-6">
-            <div className="space-y-1">
-              <p className="font-headline text-xl">
-                {new Date().toLocaleDateString('en-US', {
-                  weekday: 'long',
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                })}
+    <div className="w-full min-w-0 max-w-none space-y-8">
+      <div className="w-full rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-3">
+            <div>
+              <h2 className="text-3xl font-black tracking-tight text-slate-800">
+                Overview
+              </h2>
+              <p className="mt-1 font-medium text-slate-500">
+                Urmareste-ti activitatea zilnica si evolutia din perioada curenta.
               </p>
-              <div className="flex items-center gap-2">
-                <Icon className={cn('h-5 w-5', currentStatus.color)} />
-                <span className={cn('font-semibold', currentStatus.color)}>
-                  Report status: {currentStatus.text}
-                </span>
-              </div>
             </div>
-            <div className="text-left sm:text-right">
-              <div className="flex items-center justify-start gap-2 text-muted-foreground sm:justify-end">
+            <p className="text-sm font-semibold text-slate-700">
+              {new Date().toLocaleDateString('ro-RO', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+              })}
+            </p>
+          </div>
+
+          <div className="flex w-full flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 lg:w-auto lg:min-w-[360px]">
+          <div className="flex items-center gap-2">
+            <Icon className={cn('h-5 w-5', currentStatus.color)} />
+            <span className={cn('text-sm font-bold', currentStatus.color)}>
+              Status raport: {currentStatus.text}
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 text-sm text-slate-500">
                 <Clock className="h-4 w-4" />
-                <span className="text-sm font-semibold">{countdown}</span>
+                <span>Trimitere automata in {countdown}</span>
               </div>
-              <p className="text-xs text-muted-foreground">
-                until auto-publish
-              </p>
             </div>
             <Button
               size="lg"
               disabled={reportStatus === 'locked'}
-              className="w-full shrink-0 sm:w-auto"
+              className="shrink-0 bg-[#38bdf8] text-white hover:bg-sky-500"
               onClick={() => router.push('/dashboard/report')}
             >
               {currentStatus.buttonText}
             </Button>
           </div>
-        </CardContent>
-      </Card>
-
-      <div className="space-y-2">
-        <h2 className="text-lg font-semibold tracking-tight">Quick Stats - Today</h2>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {quickStats.map((stat) => (
-            <Card key={stat.title}>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  {stat.title}
-                </CardTitle>
-                <stat.icon className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stat.value}</div>
-                {reportStatus === 'draft' && (
-                  <p className="text-xs text-yellow-500">incomplete data</p>
-                )}
-              </CardContent>
-            </Card>
-          ))}
         </div>
       </div>
+      </div>
 
-      <Card>
-        <CardContent className="flex flex-col items-start gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h3 className="font-semibold">Today's report</h3>
-            <p className="text-sm text-muted-foreground">
-              Stare:{' '}
-              {reportStatus === 'draft'
-                ? 'Draft salvat, netrimis.'
-                : 'No active draft.'}
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            onClick={() => router.push('/dashboard/report')}
-            className="w-full shrink-0 sm:w-auto"
-          >
-            Edit today's report
-          </Button>
-        </CardContent>
-      </Card>
+      <div className="grid w-full grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        {quickStats.map((stat) => (
+          <OverviewStatCard
+            key={stat.title}
+            label={stat.title}
+            value={stat.value}
+            icon={<stat.icon className="h-5 w-5" />}
+            tone={stat.tone}
+            hint={
+              reportStatus === 'draft' ? 'Datele pot fi inca incomplete.' : null
+            }
+          />
+        ))}
+      </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <CardTitle>Personal history</CardTitle>
-              <CardDescription>Summary of your activity.</CardDescription>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="w-full overflow-hidden rounded-[32px] border border-slate-100 bg-white shadow-xl shadow-slate-200/50">
+          <div className="p-8">
+            <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800">Istoric personal</h3>
+                <p className="text-sm font-medium text-slate-400">
+                  Activitatea ta din ultimele zile si din luna curenta.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                className="w-full border-slate-200 font-semibold text-slate-700 sm:w-auto"
+                onClick={() => router.push('/dashboard/history')}
+              >
+                Vezi istoricul complet
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
             </div>
-            <Button variant="link" className="pr-0">
-              View full history
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="7">
-            <TabsList className="mb-4">
-              <TabsTrigger value="7">Last 7 days</TabsTrigger>
-              <TabsTrigger value="month">Current month</TabsTrigger>
-            </TabsList>
-            <TabsContent value="7">
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={historyLast7Days}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="day" stroke="#888888" fontSize={12} />
-                  <YAxis
-                    stroke="#888888"
-                    fontSize={12}
-                    allowDecimals={false}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'hsl(var(--card))',
-                      borderColor: 'hsl(var(--border))',
-                    }}
-                  />
-                  <Legend iconSize={10} />
-                  <Bar
-                    dataKey="calls"
-                    name="Calls"
-                    fill="hsl(var(--chart-1))"
-                    radius={[4, 4, 0, 0]}
-                  />
-                  <Bar
-                    dataKey="sales"
-                    name="Sales"
-                    fill="hsl(var(--chart-2))"
-                    radius={[4, 4, 0, 0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </TabsContent>
-            <TabsContent value="month">
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={historyCurrentMonth}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="day" stroke="#888888" fontSize={12} />
-                  <YAxis
-                    stroke="#888888"
-                    fontSize={12}
-                    allowDecimals={false}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'hsl(var(--card))',
-                      borderColor: 'hsl(var(--border))',
-                    }}
-                  />
-                  <Legend iconSize={10} />
-                  <Bar
-                    dataKey="calls"
-                    name="Calls"
-                    fill="hsl(var(--chart-1))"
-                    radius={[4, 4, 0, 0]}
-                  />
-                  <Bar
-                    dataKey="sales"
-                    name="Sales"
-                    fill="hsl(var(--chart-2))"
-                    radius={[4, 4, 0, 0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
 
+            <Tabs defaultValue="7">
+              <TabsList className="mb-6 h-auto rounded-xl bg-slate-100 p-1">
+                <TabsTrigger
+                  value="7"
+                  className="rounded-lg px-4 py-1.5 text-xs font-bold data-[state=active]:bg-white data-[state=active]:text-[#38bdf8]"
+                >
+                  ULTIMELE 7 ZILE
+                </TabsTrigger>
+                <TabsTrigger
+                  value="month"
+                  className="rounded-lg px-4 py-1.5 text-xs font-bold data-[state=active]:bg-white data-[state=active]:text-[#38bdf8]"
+                >
+                  LUNA CURENTA
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="7">
+                <ResponsiveContainer width="100%" height={320}>
+                  <BarChart data={historyLast7Days}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
+                    <XAxis dataKey="day" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
+                    <YAxis stroke="#94a3b8" fontSize={11} allowDecimals={false} tickLine={false} axisLine={false} />
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: 12,
+                        border: '1px solid #e2e8f0',
+                        backgroundColor: '#ffffff',
+                      }}
+                    />
+                    <Legend iconSize={10} />
+                    <Bar
+                      dataKey="calls"
+                      name="Apeluri"
+                      fill="#38bdf8"
+                      radius={[8, 8, 0, 0]}
+                    />
+                    <Bar
+                      dataKey="sales"
+                      name="Vanzari"
+                      fill="#14b8a6"
+                      radius={[8, 8, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </TabsContent>
+              <TabsContent value="month">
+                <ResponsiveContainer width="100%" height={320}>
+                  <BarChart data={historyCurrentMonth}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
+                    <XAxis dataKey="day" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={false} />
+                    <YAxis stroke="#94a3b8" fontSize={11} allowDecimals={false} tickLine={false} axisLine={false} />
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: 12,
+                        border: '1px solid #e2e8f0',
+                        backgroundColor: '#ffffff',
+                      }}
+                    />
+                    <Legend iconSize={10} />
+                    <Bar
+                      dataKey="calls"
+                      name="Apeluri"
+                      fill="#38bdf8"
+                      radius={[8, 8, 0, 0]}
+                    />
+                    <Bar
+                      dataKey="sales"
+                      name="Vanzari"
+                      fill="#14b8a6"
+                      radius={[8, 8, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </TabsContent>
+            </Tabs>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <DashboardInfoCard
+            title="Raportul de azi"
+            description={
+              reportStatus === 'draft'
+                ? 'Ai un draft salvat. Il poti completa sau trimite mai tarziu.'
+                : 'Deschide raportul zilnic si completeaza activitatea curenta.'
+            }
+            icon={<FileTextBlockIcon />}
+            actionLabel="Editeaza raportul"
+            onAction={() => router.push('/dashboard/report')}
+          />
+          <DashboardInfoCard
+            title="Perioada activa"
+            description="Lucrezi pe intervalul curent si iti vezi rezultatele actualizate in dashboard."
+            icon={<Calendar className="h-5 w-5" />}
+          />
+        </div>
+      </div>
     </div>
   );
+}
+
+function OverviewStatCard({
+  label,
+  value,
+  icon,
+  tone,
+  hint,
+}: {
+  label: string;
+  value: string;
+  icon: React.ReactNode;
+  tone: 'blue' | 'emerald' | 'orange' | 'indigo';
+  hint?: string | null;
+}) {
+  const colorMap = {
+    blue: 'bg-blue-50 text-blue-600 border-blue-100',
+    emerald: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+    orange: 'bg-orange-50 text-orange-600 border-orange-100',
+    indigo: 'bg-indigo-50 text-indigo-600 border-indigo-100',
+  };
+
+  return (
+    <div className="rounded-[28px] border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/40 transition-all hover:scale-[1.01]">
+      <div className="mb-4 flex items-start justify-between">
+        <div className={`rounded-2xl border p-3 ${colorMap[tone]}`}>{icon}</div>
+      </div>
+      <p className="mb-1 text-xs font-bold uppercase tracking-widest text-slate-400">{label}</p>
+      <p className="text-2xl font-black text-slate-900">{value}</p>
+      {hint ? <p className="mt-2 text-xs font-medium text-amber-500">{hint}</p> : null}
+    </div>
+  );
+}
+
+function DashboardInfoCard({
+  title,
+  description,
+  icon,
+  actionLabel,
+  onAction,
+}: {
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <div className="rounded-[28px] border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/40">
+      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-100 bg-slate-50 text-slate-600">
+        {icon}
+      </div>
+      <h3 className="text-lg font-bold text-slate-800">{title}</h3>
+      <p className="mt-2 text-sm font-medium leading-6 text-slate-500">{description}</p>
+      {actionLabel && onAction ? (
+        <Button
+          variant="outline"
+          className="mt-5 w-full border-slate-200 font-semibold text-slate-700"
+          onClick={onAction}
+        >
+          {actionLabel}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function FileTextBlockIcon() {
+  return <Clock className="h-5 w-5" />;
 }
