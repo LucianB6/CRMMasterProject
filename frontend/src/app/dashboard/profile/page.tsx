@@ -3,7 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { KeyRound, Mail, ShieldCheck, User } from 'lucide-react';
 import React from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import * as z from 'zod';
 
 import { Button } from '../../../components/ui/button';
@@ -114,7 +114,7 @@ export default function ProfilePage() {
     passwordForm.reset();
   }
 
-  const watchedProfile = profileForm.watch();
+  const watchedProfile = useWatch({ control: profileForm.control });
   const displayName =
     [watchedProfile.firstName, watchedProfile.lastName].filter(Boolean).join(' ').trim() ||
     'Profil utilizator';

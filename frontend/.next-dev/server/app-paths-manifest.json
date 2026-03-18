@@ -1,9 +1,7 @@
 {
-  "/lead-form/page": "app/lead-form/page.js",
   "/page": "app/page.js",
   "/login/page": "app/login/page.js",
-  "/dashboard/manager/lead-form/page": "app/dashboard/manager/lead-form/page.js",
   "/dashboard/page": "app/dashboard/page.js",
-  "/dashboard/history/page": "app/dashboard/history/page.js",
-  "/dashboard/ai-assistant/page": "app/dashboard/ai-assistant/page.js"
+  "/dashboard/ai-assistant/page": "app/dashboard/ai-assistant/page.js",
+  "/dashboard/manager/leads/page": "app/dashboard/manager/leads/page.js"
 }

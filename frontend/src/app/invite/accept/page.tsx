@@ -134,12 +134,12 @@ function InviteAcceptContent() {
     return { route: '/dashboard', role: 'agent' };
   };
 
-  const finishAuth = async (token: string) => {
+  const finishAuth = useCallback(async (token: string) => {
     localStorage.setItem('salesway_token', token);
     const { route, role } = await resolveLandingRoute(token);
     localStorage.setItem('userRole', role);
     router.push(route);
-  };
+  }, [router]);
 
   useEffect(() => {
     const token = searchParams.get('inviteToken') ?? searchParams.get('token');
@@ -228,7 +228,7 @@ function InviteAcceptContent() {
         setIsGooglePending(false);
       }
     },
-    [canAccept, form, inviteToken, isGooglePending, toast]
+    [canAccept, finishAuth, form, inviteToken, isGooglePending, toast]
   );
 
   useEffect(() => {
