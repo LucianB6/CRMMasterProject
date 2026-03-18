@@ -467,9 +467,9 @@ export function LeadTimeline({
   }, []);
 
   return (
-    <section className="relative flex-1 overflow-y-auto bg-white">
-      <div className="sticky top-0 z-10 flex justify-between border-b border-[#38bdf8]/35 bg-white/90 px-8 pb-2 pt-6 backdrop-blur-sm">
-        <div className="flex gap-6">
+    <section className="relative flex h-full min-h-0 flex-1 flex-col overflow-y-auto bg-transparent">
+      <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-slate-200/80 bg-[#f8fafc]/95 px-4 pb-3 pt-4 backdrop-blur-sm sm:px-6 sm:pt-5 lg:flex-row lg:items-center lg:justify-between lg:px-8 lg:pb-2 lg:pt-6">
+        <div className="flex gap-3 overflow-x-auto pb-1 sm:gap-6 sm:pb-0">
           {[
             ['timeline', 'Timeline'],
             ['activities', 'Activities'],
@@ -479,9 +479,9 @@ export function LeadTimeline({
               key={key}
               type="button"
               onClick={() => setActiveSection(key as 'timeline' | 'activities' | 'tasks')}
-              className={`border-b-2 pb-3 text-sm font-semibold transition-all ${
+              className={`shrink-0 border-b-2 pb-2 text-sm font-semibold transition-all sm:pb-3 ${
                 activeSection === key
-                  ? 'border-[#38bdf8] text-[#38bdf8]'
+                  ? 'border-slate-900 text-slate-900'
                   : 'border-transparent text-slate-400'
               }`}
             >
@@ -490,7 +490,7 @@ export function LeadTimeline({
           ))}
         </div>
         {activeSection === 'timeline' ? (
-          <div className="flex rounded-lg bg-[#38bdf8]/10 p-1">
+          <div className="flex w-full self-start rounded-xl bg-slate-100 p-1 sm:w-auto lg:self-center">
             {[
               ['chronological', 'Chronological'],
               ['grouped', 'Grouped'],
@@ -501,7 +501,7 @@ export function LeadTimeline({
                 onClick={() =>
                   setTimelineView(key as 'chronological' | 'grouped')
                 }
-                className={`rounded-md px-3 py-1 text-xs font-semibold ${
+                className={`flex-1 rounded-lg px-3 py-2 text-xs font-semibold sm:flex-none sm:py-1 ${
                   timelineView === key ? 'bg-white text-[#38bdf8] shadow-sm' : 'text-slate-500'
                 }`}
               >
@@ -512,17 +512,17 @@ export function LeadTimeline({
         ) : null}
       </div>
 
-      <div className="mx-auto max-w-2xl p-8">
-        <div className="mb-10 overflow-hidden rounded-2xl border border-[#38bdf8]/35 bg-white shadow-sm">
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-1 flex-col px-6 py-8 lg:px-8">
+        <div className="mb-10 overflow-hidden border-b border-slate-200/80 pb-8">
           <Tabs defaultValue="note">
-            <TabsList className="h-auto w-full justify-start rounded-none border-b border-[#38bdf8]/35 bg-[#38bdf8]/10 p-0">
-              <TabsTrigger value="note" className="rounded-none border-b-2 border-[#38bdf8] px-4 py-2 text-xs font-bold data-[state=inactive]:border-transparent data-[state=inactive]:text-slate-400">
+            <TabsList className="h-auto w-full justify-start rounded-none border-b border-slate-200/80 bg-transparent p-0">
+              <TabsTrigger value="note" className="rounded-none border-b-2 border-[#38bdf8] px-4 py-2 text-xs font-bold text-[#38bdf8] data-[state=inactive]:border-transparent data-[state=inactive]:text-slate-400">
                 Notă
               </TabsTrigger>
-              <TabsTrigger value="call" className="rounded-none border-b-2 border-transparent px-4 py-2 text-xs font-bold data-[state=active]:border-[#38bdf8] data-[state=inactive]:text-slate-400">
+              <TabsTrigger value="call" className="rounded-none border-b-2 border-transparent px-4 py-2 text-xs font-bold data-[state=active]:border-[#38bdf8] data-[state=active]:text-[#38bdf8] data-[state=inactive]:text-slate-400">
                 Apel
               </TabsTrigger>
-              <TabsTrigger value="task" className="rounded-none border-b-2 border-transparent px-4 py-2 text-xs font-bold data-[state=active]:border-[#38bdf8] data-[state=inactive]:text-slate-400">
+              <TabsTrigger value="task" className="rounded-none border-b-2 border-transparent px-4 py-2 text-xs font-bold data-[state=active]:border-[#38bdf8] data-[state=active]:text-[#38bdf8] data-[state=inactive]:text-slate-400">
                 Task
               </TabsTrigger>
             </TabsList>
@@ -535,7 +535,7 @@ export function LeadTimeline({
                   value={noteInput}
                   onChange={(event) => setNoteInput(event.target.value)}
                 />
-                <div className="border-t border-[#38bdf8]/35 bg-white p-3">
+                <div className="border-t border-slate-200/80 bg-white p-3">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-muted-foreground">Categorie</span>
@@ -545,7 +545,7 @@ export function LeadTimeline({
                           setSelectedNoteCategory(value === 'none' ? undefined : (value as LeadNoteCategory))
                         }
                       >
-                        <SelectTrigger className="h-8 w-[170px] border-[#38bdf8]/35 bg-[#38bdf8]/5 text-xs">
+                        <SelectTrigger className="h-8 w-[170px] border-slate-200 bg-white text-xs">
                           <SelectValue placeholder="Alege categorie" />
                         </SelectTrigger>
                         <SelectContent>
@@ -568,7 +568,7 @@ export function LeadTimeline({
                     </div>
                     <Button
                       type="button"
-                      className="bg-[#38bdf8] text-xs font-bold hover:bg-[#0ea5e9]"
+                      className="bg-[#38bdf8] text-xs font-bold text-white hover:bg-sky-500"
                       onClick={() => void handleSaveNote()}
                       disabled={!noteInput.trim() || isSavingNote}
                     >
@@ -586,10 +586,10 @@ export function LeadTimeline({
                 value={callSummary}
                 onChange={(event) => setCallSummary(event.target.value)}
               />
-              <div className="flex justify-end border-t border-[#38bdf8]/35 bg-white p-2">
+              <div className="flex justify-end border-t border-slate-200/80 bg-white p-2">
                 <Button
                   type="button"
-                  className="bg-[#38bdf8] text-xs font-bold hover:bg-[#0ea5e9]"
+                  className="bg-[#38bdf8] text-xs font-bold text-white hover:bg-sky-500"
                   onClick={() => void handleSaveCall()}
                   disabled={!callSummary.trim() || isSavingCall}
                 >
@@ -605,10 +605,10 @@ export function LeadTimeline({
                 value={taskTitle}
                 onChange={(event) => setTaskTitle(event.target.value)}
               />
-              <div className="flex justify-end border-t border-[#38bdf8]/35 bg-white p-2">
+              <div className="flex justify-end border-t border-slate-200/80 bg-white p-2">
                 <Button
                   type="button"
-                  className="bg-[#38bdf8] text-xs font-bold hover:bg-[#0ea5e9]"
+                  className="bg-[#38bdf8] text-xs font-bold text-white hover:bg-sky-500"
                   onClick={() => void handleSaveTask()}
                   disabled={!taskTitle.trim() || isSavingTask}
                 >
@@ -631,7 +631,7 @@ export function LeadTimeline({
           timelineView === 'grouped' && groupedNotes.size > 0 ? (
             <div className="space-y-6">
               {Array.from(groupedNotes.entries()).map(([category, items]) => (
-                <section key={category} className="rounded-2xl border border-[#38bdf8]/35 bg-[#38bdf8]/5 p-4">
+                <section key={category} className="border-b border-slate-200/80 pb-6">
                   <div className="mb-4 flex items-center justify-between">
                     <h3 className="text-sm font-bold text-slate-800">
                       {noteCategoryLabels[category]}
@@ -655,7 +655,7 @@ export function LeadTimeline({
               ))}
             </div>
           ) : (
-            <div className="relative ml-4 space-y-10 border-l-2 border-[#38bdf8]/35 pl-8">
+            <div className="relative ml-4 min-h-[420px] flex-1 space-y-10 border-l border-slate-200 pl-8">
               {orderedEvents.length === 0 ? (
                 <EmptyState text="Nu există încă evenimente pentru acest lead." />
               ) : (
@@ -676,7 +676,7 @@ export function LeadTimeline({
         ) : null}
 
         {!isLoading && activeSection === 'activities' ? (
-          <div className="space-y-3">
+          <div className="flex min-h-[420px] flex-col space-y-3">
             {orderedActivities.length === 0 ? (
               <EmptyState text="Nu există încă activități operaționale pentru acest lead." />
             ) : (
@@ -695,15 +695,12 @@ export function LeadTimeline({
         ) : null}
 
         {!isLoading && activeSection === 'tasks' ? (
-          <div className="space-y-3">
+          <div className="flex min-h-[420px] flex-col space-y-3">
             {tasks.length === 0 ? (
               <EmptyState text="Nu există task-uri asociate acestui lead." />
             ) : (
               tasks.map((task) => (
-                <div
-                  key={task.id}
-                  className="rounded-2xl border border-[#38bdf8]/35 bg-white p-4 shadow-sm"
-                >
+                <div key={task.id} className="border-b border-slate-200/80 pb-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <h4 className="text-sm font-bold text-slate-900">{task.title}</h4>
@@ -748,7 +745,7 @@ function TimelineLineItem({
   badge?: string;
 }) {
   return (
-    <div className="relative">
+    <div className="relative rounded-2xl border border-slate-200/70 px-4 py-3">
       <div className="absolute -left-[45px] top-0 z-10 flex h-8 w-8 items-center justify-center rounded-full border-2 border-[#38bdf8]/35 bg-white">
         {icon}
       </div>
@@ -772,7 +769,7 @@ function TimelineLineItem({
         <span className="text-xs text-slate-500">{actor}</span>
       </div>
       {description ? (
-        <div className="rounded-xl border border-[#38bdf8]/35 bg-[#38bdf8]/10 p-3 text-sm text-slate-600">
+        <div className="rounded-xl border border-[#38bdf8]/30 bg-[#38bdf8]/10 p-3 text-sm text-slate-600">
           {description}
         </div>
       ) : null}
@@ -796,7 +793,7 @@ function TimelineCard({
   badge?: string;
 }) {
   return (
-    <div className="rounded-2xl border border-[#38bdf8]/35 bg-white p-4 shadow-sm">
+    <div className="rounded-2xl border border-slate-200/70 bg-white p-4 shadow-sm">
       <div className="mb-2 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-full border border-[#38bdf8]/25 bg-[#38bdf8]/10">
@@ -825,8 +822,14 @@ function TimelineCard({
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div className="rounded-xl border border-dashed border-[#38bdf8]/35 bg-[#38bdf8]/5 p-4 text-sm text-slate-500">
-      {text}
+    <div className="flex min-h-[420px] flex-1 items-center justify-center rounded-3xl border border-dashed border-[#38bdf8]/35 bg-gradient-to-b from-[#38bdf8]/10 to-white px-8 py-10 text-center">
+      <div className="max-w-sm">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-[#38bdf8]/25 bg-white shadow-sm">
+          <Clock3 size={20} className="text-[#38bdf8]" />
+        </div>
+        <h3 className="mt-4 text-base font-semibold text-slate-900">Nimic de afișat încă</h3>
+        <p className="mt-2 text-sm leading-relaxed text-slate-500">{text}</p>
+      </div>
     </div>
   );
 }

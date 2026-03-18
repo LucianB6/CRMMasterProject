@@ -1,11 +1,11 @@
 "use client";
 
+import Image from "next/image";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   AlertCircle,
   ArrowRight,
   CheckCircle2,
-  Layers,
   Loader2,
   Lock,
   Mail
@@ -28,10 +28,11 @@ import {
 } from "../../components/ui/form";
 import { Input } from "../../components/ui/input";
 import { useToast } from "../../hooks/use-toast";
+import iconita from "../../assets/iconita.svg";
 
 const loginSchema = z.object({
-  email: z.string().email({ message: "Please enter a valid email address." }),
-  password: z.string().min(1, { message: "Password is required." })
+  email: z.string().email({ message: "Introdu o adresă de email validă." }),
+  password: z.string().min(1, { message: "Parola este obligatorie." })
 });
 
 type LoginFormValues = z.infer<typeof loginSchema>;
@@ -49,6 +50,7 @@ export default function LoginPage() {
 function LoginPageContent() {
   const router = useRouter();
   const { toast } = useToast();
+  const googleButtonRef = React.useRef<HTMLDivElement>(null);
 
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isGooglePending, setIsGooglePending] = React.useState(false);
@@ -102,13 +104,13 @@ function LoginPageContent() {
   const getLoginErrorMessage = (error: unknown, fallback: string) => {
     if (error instanceof ApiError) {
       if (error.status === 400) {
-        return "Invalid request. Please verify your details and try again.";
+        return "Cerere invalidă. Verifică datele și încearcă din nou.";
       }
       if (error.status === 401) {
-        return "Email or password is incorrect.";
+        return "Emailul sau parola sunt incorecte.";
       }
       if (error.status === 403) {
-        return "You do not have access yet. Complete manager onboarding or use the correct invitation.";
+        return "Nu ai încă acces. Finalizează configurarea contului de manager sau folosește invitația corectă.";
       }
       return error.body || error.message || fallback;
     }
@@ -121,8 +123,8 @@ function LoginPageContent() {
       const idToken = credentialResponse.credential;
       if (!idToken) {
         toast({
-          title: "Google authentication failed",
-          description: "Google did not return a valid credential.",
+          title: "Autentificarea cu Google a eșuat",
+          description: "Google nu a returnat un credential valid.",
           variant: "destructive"
         });
         return;
@@ -138,12 +140,12 @@ function LoginPageContent() {
           body: JSON.stringify({ idToken })
         });
 
-        toast({ title: "Authentication successful", description: "Redirecting..." });
+        toast({ title: "Autentificare reușită", description: "Redirecționare..." });
         await finishAuth(payload.token);
       } catch (error) {
         toast({
-          title: "Google authentication failed",
-          description: getGoogleErrorMessage(error, "Please try again."),
+          title: "Autentificarea cu Google a eșuat",
+          description: getGoogleErrorMessage(error, "Încearcă din nou."),
           variant: "destructive"
         });
       } finally {
@@ -161,13 +163,22 @@ function LoginPageContent() {
     }
 
     const initializeGoogle = () => {
-      if (!window.google?.accounts?.id) {
+      if (!window.google?.accounts?.id || !googleButtonRef.current) {
         return;
       }
 
       window.google.accounts.id.initialize({
         client_id: clientId,
         callback: onGoogleCredential
+      });
+
+      googleButtonRef.current.innerHTML = "";
+      window.google.accounts.id.renderButton(googleButtonRef.current, {
+        type: "standard",
+        shape: "pill",
+        size: "large",
+        text: "continue_with",
+        width: 320
       });
       setIsGoogleReady(true);
     };
@@ -210,12 +221,12 @@ function LoginPageContent() {
         })
       });
 
-      toast({ title: "Login successful", description: "Redirecting..." });
+      toast({ title: "Autentificare reușită", description: "Redirecționare..." });
       await finishAuth(payload.token);
     } catch (error) {
       toast({
-        title: "Login failed",
-        description: getLoginErrorMessage(error, "Email or password is incorrect."),
+        title: "Autentificarea a eșuat",
+        description: getLoginErrorMessage(error, "Emailul sau parola sunt incorecte."),
         variant: "destructive"
       });
     } finally {
@@ -224,16 +235,29 @@ function LoginPageContent() {
   };
 
   const onGoogleClick = () => {
-    if (!isGoogleReady || !window.google?.accounts?.id) {
+    if (!isGoogleReady || !googleButtonRef.current) {
       toast({
-        title: "Google authentication unavailable",
+        title: "Autentificarea cu Google nu este disponibilă",
         description: "Setează NEXT_PUBLIC_GOOGLE_CLIENT_ID și încearcă din nou.",
         variant: "destructive"
       });
       return;
     }
 
-    (window.google.accounts.id as unknown as { prompt: () => void }).prompt();
+    const googleButton = googleButtonRef.current.querySelector(
+      'div[role="button"], iframe[title*="Google"], div[aria-labelledby]'
+    ) as HTMLElement | null;
+
+    if (!googleButton) {
+      toast({
+        title: "Autentificarea cu Google nu este disponibilă",
+        description: "Butonul Google nu a fost inițializat corect. Încearcă din nou.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    googleButton.click();
   };
 
   const inputClass =
@@ -243,29 +267,35 @@ function LoginPageContent() {
 
   const onGoogleUnavailable = () => {
     toast({
-      title: "Google authentication unavailable",
+      title: "Autentificarea cu Google nu este disponibilă",
       description: "Setează NEXT_PUBLIC_GOOGLE_CLIENT_ID și încearcă din nou.",
       variant: "destructive"
     });
   };
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-[#f0f9ff] via-[#e0f2fe] to-[#bae6fd] p-4 font-sans">
-      <div className="mx-auto flex min-h-screen w-full max-w-[480px] items-center justify-center">
+    <div className="min-h-dvh w-full bg-gradient-to-br from-[#f0f9ff] via-[#e0f2fe] to-[#bae6fd] p-4 font-sans">
+      <div className="mx-auto flex min-h-[calc(100dvh-2rem)] w-full max-w-[480px] items-center justify-center">
         <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-700">
           <div className="mb-8 text-center">
-            <div className="mb-5 inline-flex items-center rounded-2xl border border-blue-100 bg-white px-4 py-3 shadow-sm">
-              <div className="rounded-lg bg-white p-2 shadow-inner">
-                <Layers className="h-6 w-6 text-[#38bdf8]" />
+            <div className="mb-5 inline-flex items-center rounded-2xl border border-blue-100 bg-white px-0 py-2 shadow-sm">
+              <div className="rounded-xl bg-white p-0 shadow-inner">
+                <Image
+                  src={iconita}
+                  alt="Iconița SalesWay"
+                  className="h-12 w-auto"
+                  priority
+                />
               </div>
             </div>
-            <h1 className="text-3xl font-black tracking-tight text-slate-900">Welcome back!</h1>
-            <p className="mt-2 font-medium text-slate-500">Sign in to your SalesWay workspace.</p>
+            <h1 className="text-3xl font-black tracking-tight text-slate-900">Bine ai revenit!</h1>
+            <p className="mt-2 font-medium text-slate-500">Autentifică-te în workspace-ul tău selfCRM.</p>
           </div>
 
           <div className="rounded-[32px] border border-white bg-white p-8 shadow-2xl shadow-blue-200/50 md:p-10">
             <div className="space-y-4">
               <div className="flex flex-col items-center justify-center">
+                <div ref={googleButtonRef} className="sr-only" aria-hidden="true" />
                 <button
                   type="button"
                   onClick={isGoogleReady ? onGoogleClick : onGoogleUnavailable}
@@ -277,16 +307,16 @@ function LoginPageContent() {
                     <path fill="#FBBC05" d="M10.6 28.1c-.5-1.5-.8-3.1-.8-4.8s.3-3.3.8-4.8L3 12.6C1.7 15.1 1 17.9 1 20.8s.7 5.7 2 8.2l7.6-5.9z" />
                     <path fill="#34A853" d="M24 46c6.5 0 12-2.1 16-5.8l-7.4-5.7c-2 1.4-4.8 2.4-8.6 2.4-6.3 0-11.6-4.1-13.4-9.7L3 33.1C6.9 40.8 14.8 46 24 46z" />
                   </svg>
-                  Continue with Google
+                  Continuă cu Google
                 </button>
                 {!isGoogleReady && (
                   <p className="mt-2 text-center text-[10px] font-medium italic text-slate-400">
-                    Set `NEXT_PUBLIC_GOOGLE_CLIENT_ID` to enable Google authentication.
+                    Setează `NEXT_PUBLIC_GOOGLE_CLIENT_ID` pentru a activa autentificarea cu Google.
                   </p>
                 )}
                 {isGooglePending && (
                   <p className="mt-2 text-center text-[10px] font-medium italic text-slate-400">
-                    Completing Google authentication...
+                    Se finalizează autentificarea cu Google...
                   </p>
                 )}
               </div>
@@ -296,7 +326,7 @@ function LoginPageContent() {
                   <div className="w-full border-t border-slate-100" />
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-white px-4 font-bold tracking-widest text-slate-400">or email</span>
+                  <span className="bg-white px-4 font-bold tracking-widest text-slate-400">sau email</span>
                 </div>
               </div>
             </div>
@@ -309,7 +339,7 @@ function LoginPageContent() {
                   render={({ field }) => (
                     <FormItem className="space-y-1">
                       <FormLabel className={labelClass}>
-                        Email Address
+                        Adresă de email
                       </FormLabel>
                       <div className="group relative">
                         <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-[#38bdf8]" size={18} />
@@ -334,13 +364,13 @@ function LoginPageContent() {
                     <FormItem className="space-y-1">
                       <div className="mb-1.5 flex items-center justify-between">
                         <FormLabel className={labelClass}>
-                          Password
+                          Parolă
                         </FormLabel>
                         <Link
-                          href="/status"
+                          href="/forgot-password"
                           className="text-[10px] font-bold uppercase tracking-wider text-[#38bdf8] hover:text-[#0ea5e9]"
                         >
-                          Forgot password?
+                          Ai uitat parola?
                         </Link>
                       </div>
                       <div className="group relative">
@@ -368,7 +398,7 @@ function LoginPageContent() {
                     <Loader2 className="animate-spin" size={20} />
                   ) : (
                     <>
-                      Sign in
+                      Autentificare
                       <ArrowRight size={18} />
                     </>
                   )}
@@ -377,12 +407,12 @@ function LoginPageContent() {
             </Form>
 
             <div className="mt-8 border-t border-slate-50 pt-6 text-center">
-              <p className="text-sm font-medium text-slate-500">Don&apos;t have a manager account?</p>
+              <p className="text-sm font-medium text-slate-500">Nu ai încă un cont de manager?</p>
               <Link
                 href="/signup/choose-plan"
                 className="mt-3 block w-full rounded-xl border-2 border-[#38bdf8]/10 px-4 py-3 text-sm font-bold text-[#38bdf8] transition-all hover:bg-blue-50"
               >
-                Create manager account
+                Creează cont de manager
               </Link>
             </div>
           </div>
@@ -390,7 +420,7 @@ function LoginPageContent() {
           <div className="mt-8 flex items-center justify-center gap-6 text-slate-400">
             <div className="flex items-center gap-1.5">
               <CheckCircle2 size={14} className="text-emerald-400" />
-              <span className="text-[10px] font-bold uppercase tracking-wider">Secured by SalesWay</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider">Securizat de selfCRM</span>
             </div>
             <div className="flex items-center gap-1.5">
               <AlertCircle size={14} />
@@ -398,7 +428,7 @@ function LoginPageContent() {
                 href="/status"
                 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 transition-colors hover:text-slate-600"
               >
-                Support center
+                Centru de suport
               </Link>
             </div>
           </div>

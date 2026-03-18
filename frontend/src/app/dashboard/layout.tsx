@@ -15,9 +15,11 @@ import {
   Target,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import * as React from 'react';
+import logoFullFundalTransparent from '../../assets/selfCRMLogo.svg';
 import { DashboardHeader } from '../../components/dashboard/header';
 import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar';
 import { PlaceHolderImages } from '../../lib/placeholder-images';
@@ -76,8 +78,8 @@ function NavItem({ href, icon: Icon, label, active = false }: NavItemProps) {
       href={href}
       className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-all ${
         active
-          ? 'bg-white text-[#38bdf8] shadow-sm font-bold'
-          : 'text-blue-50 hover:bg-white/10 font-medium'
+          ? 'bg-white text-[#38bdf8] shadow-sm font-bold dark:bg-slate-800 dark:text-sky-300'
+          : 'text-blue-50 hover:bg-white/10 font-medium dark:text-slate-200 dark:hover:bg-slate-900/80'
       }`}
     >
       <Icon size={20} />
@@ -183,23 +185,28 @@ export default function DashboardLayout({
 
   return (
     <div
-      className={`flex w-full ${
+      className={`dashboard-shell flex w-full ${
         isDailyReportPage ? 'h-screen overflow-hidden' : 'min-h-screen'
       }`}
     >
       <aside
-        className={`hidden w-64 shrink-0 bg-[#38bdf8] text-white shadow-xl md:sticky md:top-0 md:flex md:h-screen md:flex-col ${
+        className={`hidden w-64 shrink-0 bg-[#38bdf8] text-white shadow-xl dark:bg-slate-950 dark:text-slate-50 md:sticky md:top-0 md:flex md:h-screen md:flex-col ${
           isDailyReportPage ? 'h-screen' : ''
         }`}
       >
         <Link
           href={isManager ? '/dashboard/manager/overview' : '/dashboard'}
-          className="shrink-0 flex items-center gap-3 p-6 transition-opacity hover:opacity-90"
+          className="shrink-0 p-4 transition-opacity hover:opacity-90"
         >
-          <div className="rounded-lg bg-white p-2 shadow-inner">
-            <Layers className="h-6 w-6 text-[#38bdf8]" />
+          <div className="relative inline-flex items-center justify-center px-3 py-2">
+            <div className="absolute inset-x-3 top-1/2 h-[82px] -translate-y-1/2 rounded-2xl bg-white/95 shadow-sm ring-1 ring-slate-200/60" />
+            <Image
+              src={logoFullFundalTransparent}
+              alt="SalesWay"
+              className="relative z-10 h-[130px] w-auto"
+              priority
+            />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">SalesWay</h1>
         </Link>
 
         <nav
@@ -207,7 +214,7 @@ export default function DashboardLayout({
             isDailyReportPage ? 'overflow-hidden' : 'overflow-y-auto'
           }`}
         >
-          <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-blue-100 opacity-70">
+          <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-blue-100 opacity-70 dark:text-slate-400">
             {isManager ? 'Manager' : 'Personal'}
           </p>
 
@@ -234,8 +241,8 @@ export default function DashboardLayout({
                   href="/dashboard/manager/leads"
                   className={`ml-2 block rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                     pathname.startsWith('/dashboard/manager/leads')
-                      ? 'bg-white/20'
-                      : 'hover:bg-white/10'
+                      ? 'bg-white/20 dark:bg-slate-800'
+                      : 'hover:bg-white/10 dark:hover:bg-slate-900/80'
                   }`}
                 >
                   Active Leads
@@ -244,8 +251,8 @@ export default function DashboardLayout({
                   href="/dashboard/manager/lead-form"
                   className={`ml-2 block rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                     pathname.startsWith('/dashboard/manager/lead-form')
-                      ? 'bg-white/20'
-                      : 'hover:bg-white/10'
+                      ? 'bg-white/20 dark:bg-slate-800'
+                      : 'hover:bg-white/10 dark:hover:bg-slate-900/80'
                   }`}
                 >
                   Form Editor
@@ -268,7 +275,7 @@ export default function DashboardLayout({
           )}
 
           <div className="pt-6">
-            <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-blue-100 opacity-70">
+            <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-blue-100 opacity-70 dark:text-slate-400">
               Tools
             </p>
             {toolsMenuItems.map((item) => (
@@ -299,9 +306,9 @@ export default function DashboardLayout({
           </div>
         </nav>
 
-        <div className="shrink-0 bg-[#0ea5e9] p-4">
+        <div className="shrink-0 bg-[#0ea5e9] p-4 dark:border-t dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center gap-3 px-2">
-            <Avatar className="h-10 w-10 border border-white/30 bg-white/20">
+            <Avatar className="h-10 w-10 border border-white/30 bg-white/20 dark:border-slate-700 dark:bg-slate-800">
               {managerAvatar && (
                 <AvatarImage
                   src={managerAvatar.imageUrl}
@@ -315,7 +322,7 @@ export default function DashboardLayout({
             </Avatar>
             <div className="truncate">
               <p className="text-sm font-bold leading-tight">{displayName}</p>
-              <p className="text-xs text-blue-100">{isManager ? 'Sales Manager' : 'Sales Agent'}</p>
+              <p className="text-xs text-blue-100 dark:text-slate-400">{isManager ? 'Sales Manager' : 'Sales Agent'}</p>
             </div>
           </div>
         </div>

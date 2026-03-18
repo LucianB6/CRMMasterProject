@@ -20,6 +20,8 @@ export type TimelineActivity = {
 
 export type LeadAiInsights = {
   score: number;
+  clientScore?: number | null;
+  nextCallCloseProbability?: number | null;
   recommendedAction: string;
   suggestedApproach: string;
   scoreFactors: Array<{

@@ -20,10 +20,12 @@ import {
 import { ApiError } from '../../../../lib/api';
 import { apiFetch } from '../../../../lib/api';
 import {
+  fetchManagerAgents,
   fetchManagerLeads,
   type LeadSort,
   type LeadSource,
   type LeadStatus,
+  type ManagerAgent,
   type ManagerLead,
   type PageResponse,
 } from '../../../../lib/leads';
@@ -304,6 +306,7 @@ export default function ManagerLeadsPage() {
   const searchParams = useSearchParams();
   const [userRole, setUserRole] = useState<'manager' | 'agent'>('agent');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [agents, setAgents] = useState<ManagerAgent[]>([]);
 
   const [filters, setFilters] = useState<LeadsFiltersState>(DEFAULT_FILTERS);
   const [searchInput, setSearchInput] = useState('');
@@ -351,6 +354,19 @@ export default function ManagerLeadsPage() {
     };
 
     void loadCurrentUser();
+  }, []);
+
+  useEffect(() => {
+    const loadAgents = async () => {
+      try {
+        const data = await fetchManagerAgents(getAuthToken());
+        setAgents(data);
+      } catch {
+        setAgents([]);
+      }
+    };
+
+    void loadAgents();
   }, []);
 
   useEffect(() => {
@@ -515,6 +531,13 @@ export default function ManagerLeadsPage() {
 
   const canGoPrevious = safePageNumber > 0;
   const canGoNext = safePageNumber + 1 < safeTotalPages;
+  const resolveAssignedToLabel = (assignedToUserId: string | null) => {
+    if (!assignedToUserId) return '-';
+    const matchedAgent = agents.find((agent) => agent.user_id === assignedToUserId);
+    if (matchedAgent?.email) return matchedAgent.email;
+    if (currentUserId && assignedToUserId === currentUserId) return 'Eu';
+    return assignedToUserId;
+  };
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-auto bg-slate-50 p-8">
@@ -525,18 +548,6 @@ export default function ManagerLeadsPage() {
             <p className="text-slate-500">{displayedResultsLabel}</p>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setSearchInput('');
-                setFilters(DEFAULT_FILTERS);
-              }}
-              className="border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-            >
-              Reset
-            </Button>
             <Button
               type="button"
               size="sm"
@@ -762,7 +773,7 @@ export default function ManagerLeadsPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-slate-600">
-                        <span className="break-all">{lead.assignedToUserId ?? '-'}</span>
+                        <span className="break-words">{resolveAssignedToLabel(lead.assignedToUserId)}</span>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-1.5 text-xs text-slate-500">

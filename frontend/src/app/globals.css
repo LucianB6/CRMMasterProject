@@ -86,3 +86,44 @@
     scroll-behavior: smooth;
   }
 }
+
+@layer components {
+  .dark .dashboard-shell {
+    color: rgb(241 245 249);
+  }
+
+  .dark .dashboard-shell [class*='bg-white'] {
+    background-color: rgb(15 23 42) !important;
+  }
+
+  .dark .dashboard-shell [class*='bg-slate-50'] {
+    background-color: rgb(15 23 42 / 0.88) !important;
+  }
+
+  .dark .dashboard-shell [class*='bg-slate-100'] {
+    background-color: rgb(30 41 59 / 0.92) !important;
+  }
+
+  .dark .dashboard-shell [class*='border-slate-100'],
+  .dark .dashboard-shell [class*='border-slate-200'],
+  .dark .dashboard-shell [class*='border-[#38bdf8]/35'] {
+    border-color: rgb(51 65 85 / 0.9) !important;
+  }
+
+  .dark .dashboard-shell [class*='text-slate-900'],
+  .dark .dashboard-shell [class*='text-slate-800'],
+  .dark .dashboard-shell [class*='text-slate-700'] {
+    color: rgb(241 245 249) !important;
+  }
+
+  .dark .dashboard-shell [class*='text-slate-600'],
+  .dark .dashboard-shell [class*='text-slate-500'],
+  .dark .dashboard-shell [class*='text-slate-400'] {
+    color: rgb(148 163 184) !important;
+  }
+
+  .dark .dashboard-shell [class*='shadow-slate-200'],
+  .dark .dashboard-shell [class*='shadow-slate-300'] {
+    --tw-shadow-color: rgb(2 6 23 / 0.55) !important;
+  }
+}

@@ -1,19 +1,52 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-
-import type { LeadAnswerResponse, LeadFormQuestion } from '../../lib/leads';
+import type {
+  LeadAnswerResponse,
+  LeadFormQuestion,
+  LeadStatus,
+  ManagerAgent,
+  PipelineStage,
+} from '../../lib/leads';
 import type { LeadDetail } from './lead-detail-types';
+import { Button } from '../ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../ui/select';
 import { Textarea } from '../ui/textarea';
+import { LEAD_STATUS_OPTIONS } from './lead-detail-types';
 
 type LeadInfoPanelProps = {
   lead: LeadDetail;
+  agents: ManagerAgent[];
+  userRole: 'manager' | 'agent';
+  currentUserId: string | null;
+  currentUserEmail: string | null;
+  stages: PipelineStage[];
   answers: LeadAnswerResponse[];
   formQuestions: LeadFormQuestion[];
   isLoadingAnswers: boolean;
+  isUpdatingStatus: boolean;
+  isUpdatingAssignee: boolean;
+  isUpdatingStage: boolean;
+  draftAnswers: Record<string, string>;
+  isSavingAnswers: boolean;
+  hasUnsavedChanges: boolean;
+  saveStateMessage: string | null;
+  saveErrorMessage: string | null;
+  savableAnswerIds: Set<string>;
+  onChangeStatus: (nextStatus: LeadStatus) => void;
+  onChangeAssignee: (nextAssignee: string | null) => void;
+  onChangeStage: (nextStage: string | null) => void;
+  onAnswerChange: (answerId: string, value: string) => void;
+  onSaveAnswers: () => void;
+  variant?: 'sidebar' | 'drawer';
 };
 
-type EditableAnswerItem = {
+export type EditableAnswerItem = {
   id: string;
   questionId: string | null;
   questionLabel: string;
@@ -22,6 +55,13 @@ type EditableAnswerItem = {
   helpText: string | null;
   answer: string;
   answeredAt: string | null;
+};
+
+const statusLabels: Record<LeadStatus, string> = {
+  new: 'Nou',
+  contacted: 'Contactat',
+  qualified: 'Calificat',
+  lost: 'Pierdut',
 };
 
 const formatValue = (value: string | null | undefined) => {
@@ -39,7 +79,20 @@ const formatDateTime = (value: string | null | undefined) => {
   }).format(parsed);
 };
 
-const buildEditableAnswerItems = (
+const formatSource = (source: string | null | undefined) => {
+  if (!source) return '-';
+  return source.replaceAll('_', ' ');
+};
+
+const resolveAssigneeLabel = (lead: LeadDetail, agents: ManagerAgent[]) => {
+  if (!lead.assignedToUserId) return 'Neasignat';
+  return (
+    agents.find((agent) => agent.user_id === lead.assignedToUserId)?.email ||
+    lead.assignedToUserId
+  );
+};
+
+export const buildEditableAnswerItems = (
   formQuestions: LeadFormQuestion[],
   answers: LeadAnswerResponse[]
 ): EditableAnswerItem[] => {
@@ -93,11 +146,59 @@ const buildEditableAnswerItems = (
 
 export function LeadInfoPanel({
   lead,
+  agents,
+  userRole,
+  currentUserId,
+  currentUserEmail,
+  stages,
   answers,
   formQuestions,
   isLoadingAnswers,
+  isUpdatingStatus,
+  isUpdatingAssignee,
+  isUpdatingStage,
+  draftAnswers,
+  isSavingAnswers,
+  hasUnsavedChanges,
+  saveStateMessage,
+  saveErrorMessage,
+  savableAnswerIds,
+  onChangeStatus,
+  onChangeAssignee,
+  onChangeStage,
+  onAnswerChange,
+  onSaveAnswers,
+  variant = 'sidebar',
 }: LeadInfoPanelProps) {
+  const currentStatus = LEAD_STATUS_OPTIONS.includes(lead.status as LeadStatus)
+    ? (lead.status as LeadStatus)
+    : 'new';
+  const activeStages = stages.filter((stage) => stage.isActive !== false);
+  const currentStage = activeStages.find((stage) => stage.stageId === lead.stageId);
+  const isManager = userRole === 'manager';
+  const assigneeLabel = resolveAssigneeLabel(lead, agents);
+  const agentAssigneeValue =
+    lead.assignedToUserId && lead.assignedToUserId === currentUserId
+      ? currentUserId
+      : 'unassigned';
+  const assigneeOptions = isManager
+    ? [
+        ...(currentUserId &&
+        !agents.some((agent) => agent.user_id === currentUserId)
+          ? [
+              {
+                user_id: currentUserId,
+                email: currentUserEmail || 'My account',
+              },
+            ]
+          : []),
+        ...agents,
+      ]
+    : [];
   const detailRows = [
+    { label: 'Sursă', value: formatSource(lead.source) },
+    { label: 'Trimis la', value: formatDateTime(lead.submittedAt) },
+    { label: 'Ultima activitate', value: formatDateTime(lead.lastActivityAt) },
     { label: 'Email', value: formatValue(lead.email) },
     { label: 'Telefon', value: formatValue(lead.phone) },
     { label: 'Campanie', value: formatValue(lead.campaign) },
@@ -116,59 +217,171 @@ export function LeadInfoPanel({
     },
   ].filter((item) => item.value !== '-');
 
-  const editableAnswerItems = useMemo(
-    () => buildEditableAnswerItems(formQuestions, answers),
-    [formQuestions, answers]
-  );
-  const [draftAnswers, setDraftAnswers] = useState<Record<string, string>>({});
+  const editableAnswerItems = buildEditableAnswerItems(formQuestions, answers);
 
-  useEffect(() => {
-    setDraftAnswers(
-      Object.fromEntries(editableAnswerItems.map((item) => [item.id, item.answer]))
-    );
-  }, [editableAnswerItems]);
-
-  return (
-    <aside className="hidden w-80 overflow-y-auto border-r border-[#38bdf8]/35 bg-white xl:block">
-      <div className="space-y-8 p-6">
-        <section>
-          <h3 className="mb-4 text-[11px] font-bold uppercase tracking-widest text-slate-400">
-            Overview
+  const content = (
+    <div className="flex min-h-full flex-col space-y-10 px-2 py-6 sm:px-4">
+      <section>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h3 className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">
+            Form details
           </h3>
-          <div className="space-y-4">
-            <InfoBlock
-              label="Nume"
-              value={`${lead.firstName ?? ''} ${lead.lastName ?? ''}`.trim() || '-'}
-            />
-            {detailRows.map((row) => (
-              <InfoBlock key={row.label} label={row.label} value={row.value} />
-            ))}
-          </div>
-        </section>
+          {variant === 'drawer' ? (
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">
+              Lead context
+            </span>
+          ) : null}
+        </div>
 
-        <section className="border-t border-[#38bdf8]/35 pt-6">
-          <h3 className="mb-4 text-[11px] font-bold uppercase tracking-widest text-slate-400">
+        <div className="space-y-2">
+          <SelectCard label="Status">
+            <Select
+              value={currentStatus}
+              onValueChange={(value) => onChangeStatus(value as LeadStatus)}
+              disabled={isUpdatingStatus}
+            >
+              <SelectTrigger className="h-11 rounded-2xl border-sky-100 bg-white text-sm font-medium text-slate-700 shadow-none">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LEAD_STATUS_OPTIONS.map((status) => (
+                  <SelectItem key={status} value={status}>
+                    {statusLabels[status]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </SelectCard>
+
+          <SelectCard label="Stage">
+            <Select
+              value={lead.stageId ?? 'unassigned'}
+              onValueChange={(value) => onChangeStage(value === 'unassigned' ? null : value)}
+              disabled={isUpdatingStage}
+            >
+              <SelectTrigger className="h-11 rounded-2xl border-sky-100 bg-white text-sm font-medium text-slate-700 shadow-none">
+                <SelectValue placeholder={currentStage?.name || 'Fără stage'} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unassigned">Fără stage</SelectItem>
+                {activeStages.map((stage) => (
+                  <SelectItem key={stage.stageId} value={stage.stageId}>
+                    {stage.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </SelectCard>
+
+          <SelectCard label="Assignee curent">
+            {isManager ? (
+              <Select
+                value={lead.assignedToUserId ?? 'unassigned'}
+                onValueChange={(value) => onChangeAssignee(value === 'unassigned' ? null : value)}
+                disabled={isUpdatingAssignee}
+              >
+                <SelectTrigger className="h-11 rounded-2xl border-sky-100 bg-white text-sm font-medium text-slate-700 shadow-none">
+                  <SelectValue placeholder={assigneeLabel} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unassigned">Neasignat</SelectItem>
+                  {assigneeOptions.map((agent) => (
+                    <SelectItem key={agent.user_id} value={agent.user_id}>
+                      {agent.user_id === currentUserId ? `${agent.email} (You)` : agent.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Select
+                value={agentAssigneeValue}
+                onValueChange={(value) =>
+                  onChangeAssignee(value === 'unassigned' ? null : currentUserId)
+                }
+                disabled={isUpdatingAssignee || !currentUserId}
+              >
+                <SelectTrigger className="h-11 rounded-2xl border-sky-100 bg-white text-sm font-medium text-slate-700 shadow-none">
+                  <SelectValue placeholder={assigneeLabel} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unassigned">Neasignat</SelectItem>
+                  {currentUserId ? (
+                    <SelectItem value={currentUserId}>
+                      {currentUserEmail ? `${currentUserEmail} (Eu)` : 'Către mine'}
+                    </SelectItem>
+                  ) : null}
+                </SelectContent>
+              </Select>
+            )}
+          </SelectCard>
+        </div>
+      </section>
+
+      <section className="border-t border-slate-200/80 pt-8">
+        <h3 className="mb-4 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">
+          Contact si context
+        </h3>
+        <div className="grid gap-2">
+          <InfoBlock
+            label="Nume"
+            value={`${lead.firstName ?? ''} ${lead.lastName ?? ''}`.trim() || '-'}
+          />
+          {detailRows.map((row) => (
+            <InfoBlock key={row.label} label={row.label} value={row.value} />
+          ))}
+        </div>
+      </section>
+
+      <section className="border-t border-slate-200/80 pt-8">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h3 className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">
             Form Answers
           </h3>
+          {hasUnsavedChanges ? (
+            <Button
+              type="button"
+              size="sm"
+              className="rounded-xl bg-[#38bdf8] text-white hover:bg-sky-500"
+              disabled={isSavingAnswers}
+              onClick={onSaveAnswers}
+            >
+              {isSavingAnswers ? 'Saving...' : 'Save changes'}
+            </Button>
+          ) : null}
+        </div>
 
-          {isLoadingAnswers ? (
-            <div className="space-y-3">
-              <AnswerSkeleton />
-              <AnswerSkeleton />
-              <AnswerSkeleton />
-            </div>
-          ) : editableAnswerItems.length === 0 ? (
-            <p className="text-xs text-slate-500">
-              Nu există întrebări configurate în formularul curent.
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {editableAnswerItems.map((item) => (
+        {saveStateMessage ? (
+          <p className="mb-3 text-xs text-slate-500">{saveStateMessage}</p>
+        ) : null}
+
+        {saveErrorMessage ? (
+          <p className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+            {saveErrorMessage}
+          </p>
+        ) : null}
+
+        {isLoadingAnswers ? (
+          <div className="space-y-3">
+            <AnswerSkeleton />
+            <AnswerSkeleton />
+            <AnswerSkeleton />
+          </div>
+        ) : editableAnswerItems.length === 0 ? (
+          <p className="text-xs text-slate-500">
+            Nu există întrebări configurate în formularul curent.
+          </p>
+        ) : (
+          <div className="space-y-5">
+            {editableAnswerItems.map((item) => {
+              const canSave = savableAnswerIds.has(item.id);
+              const isChanged = (draftAnswers[item.id] ?? '') !== item.answer;
+
+              return (
                 <div
                   key={item.id}
-                  className="rounded-xl border border-[#38bdf8]/35 bg-[#38bdf8]/10 p-3"
+                  className="space-y-3 border-b border-slate-200/80 pb-5"
                 >
-                  <label className="mb-1 block text-[10px] font-bold uppercase text-[#38bdf8]">
+                  <label className="block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
                     {item.questionLabel}
                   </label>
                   {item.helpText ? (
@@ -178,37 +391,76 @@ export function LeadInfoPanel({
                   ) : null}
                   <Textarea
                     value={draftAnswers[item.id] ?? ''}
-                    onChange={(event) =>
-                      setDraftAnswers((current) => ({
-                        ...current,
-                        [item.id]: event.target.value,
-                      }))
+                    onChange={(event) => onAnswerChange(item.id, event.target.value)}
+                    disabled={isSavingAnswers}
+                    className="min-h-[104px] resize-y rounded-xl border-slate-200 bg-white text-sm shadow-none focus-visible:ring-slate-300"
+                    placeholder={
+                      item.placeholder ||
+                      (canSave
+                        ? 'Adaugă sau editează răspunsul...'
+                        : 'Poți edita local, dar răspunsul nu poate fi sincronizat automat.')
                     }
-                    className="min-h-[84px] resize-y border-[#38bdf8]/25 bg-white text-sm focus-visible:ring-[#38bdf8]"
-                    placeholder={item.placeholder || 'Adaugă sau editează răspunsul...'}
                   />
                   <p className="mt-2 text-[11px] text-slate-500">
                     {item.questionType || 'field'} • {formatDateTime(item.answeredAt)}
                   </p>
+                  {canSave && isChanged ? (
+                    <div className="mt-3 flex justify-end">
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="rounded-xl bg-[#38bdf8] text-white hover:bg-sky-500"
+                        disabled={isSavingAnswers}
+                        onClick={onSaveAnswers}
+                      >
+                        {isSavingAnswers ? 'Updating...' : 'Update'}
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
-    </aside>
+              );
+            })}
+          </div>
+        )}
+
+        {!isLoadingAnswers && hasUnsavedChanges ? (
+          <p className="mt-3 text-xs text-slate-500">
+            Modificarile raman locale pana cand apesi Update.
+          </p>
+        ) : null}
+      </section>
+    </div>
   );
+
+  return <div className="min-h-full bg-white">{content}</div>;
 }
 
 function InfoBlock({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <label className="mb-1 block text-xs text-slate-500">{label}</label>
-      <p className="text-sm font-medium">{value}</p>
+    <div className="grid gap-1 py-2">
+      <label className="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+        {label}
+      </label>
+      <p className="break-words text-sm font-semibold text-slate-700">{value}</p>
+    </div>
+  );
+}
+
+function SelectCard({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="grid gap-2 border-b border-slate-200/80 py-3">
+      <p className="mb-2 break-words text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">{label}</p>
+      {children}
     </div>
   );
 }
 
 function AnswerSkeleton() {
-  return <div className="h-28 rounded-xl border border-[#38bdf8]/20 bg-[#38bdf8]/5" />;
+  return <div className="h-28 rounded-xl bg-slate-100" />;
 }

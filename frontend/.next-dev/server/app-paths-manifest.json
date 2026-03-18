@@ -1,8 +1,9 @@
 {
-  "/dashboard/tasks/page": "app/dashboard/tasks/page.js",
-  "/dashboard/goals/page": "app/dashboard/goals/page.js",
-  "/dashboard/manager/leads/page": "app/dashboard/manager/leads/page.js",
-  "/dashboard/calendar/page": "app/dashboard/calendar/page.js",
-  "/dashboard/report/page": "app/dashboard/report/page.js",
+  "/lead-form/page": "app/lead-form/page.js",
+  "/page": "app/page.js",
+  "/login/page": "app/login/page.js",
+  "/dashboard/manager/lead-form/page": "app/dashboard/manager/lead-form/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/dashboard/history/page": "app/dashboard/history/page.js",
   "/dashboard/ai-assistant/page": "app/dashboard/ai-assistant/page.js"
 }
