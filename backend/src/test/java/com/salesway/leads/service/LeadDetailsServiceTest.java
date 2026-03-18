@@ -508,6 +508,8 @@ class LeadDetailsServiceTest {
         assertThat(response.recommendedAction()).isNotBlank();
         assertThat(response.suggestedApproach()).isNotBlank();
         assertThat(response.scoreFactors()).isNotEmpty();
+        assertThat(response.scoreFactors())
+                .allSatisfy(factor -> assertThat(factor.value()).isBetween(0, 10));
         assertThat(response.generatedAt()).isNotNull();
     }
 
