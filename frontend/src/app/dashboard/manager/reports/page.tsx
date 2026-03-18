@@ -315,14 +315,14 @@ export default function ManagerReportsPage() {
       <header>
         <h1 className="font-headline text-2xl">Team Reports</h1>
         <p className="text-muted-foreground">
-          View and edit your agents' daily reports.
+          View and edit your agents&apos; daily reports.
         </p>
       </header>
       <Card>
         <CardHeader>
           <CardTitle>Select Agent</CardTitle>
           <CardDescription>
-            Choose an agent to view today's daily report.
+            Choose an agent to view today&apos;s daily report.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">

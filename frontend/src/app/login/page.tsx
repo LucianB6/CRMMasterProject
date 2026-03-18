@@ -91,12 +91,12 @@ function LoginPageContent() {
     return { route: "/dashboard", role: "agent" };
   };
 
-  const finishAuth = async (token: string) => {
+  const finishAuth = React.useCallback(async (token: string) => {
     localStorage.setItem("salesway_token", token);
     const { route, role } = await resolveLandingRoute(token);
     localStorage.setItem("userRole", role);
     router.push(route);
-  };
+  }, [router]);
 
   const getGoogleErrorMessage = (error: unknown, fallback: string) =>
     mapInternalAuthError(error, fallback).message;
@@ -152,7 +152,7 @@ function LoginPageContent() {
         setIsGooglePending(false);
       }
     },
-    [isGooglePending, toast]
+    [finishAuth, isGooglePending, toast]
   );
 
   React.useEffect(() => {

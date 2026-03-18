@@ -53,7 +53,7 @@ export function AiAssistant({ children }: { children: React.ReactNode }) {
             AI Sales Assistant
           </SheetTitle>
           <SheetDescription>
-            Ask about sales tactics, KPIs, or performance. I'm here to help you
+            Ask about sales tactics, KPIs, or performance. I&apos;m here to help you
             improve.
           </SheetDescription>
         </SheetHeader>

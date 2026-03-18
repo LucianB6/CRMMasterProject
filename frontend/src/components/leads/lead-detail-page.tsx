@@ -336,7 +336,7 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
       setIsLoadingAnswers(false);
       setIsRefreshing(false);
     }
-  }, [leadId, setInsightsFromResponse, setIsRefreshing, toast]);
+  }, [leadId, setIsRefreshing, toast]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
