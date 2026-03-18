@@ -60,7 +60,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String method = request.getMethod();
-        String path = request.getServletPath();
+        String path = normalizePath(request.getServletPath());
         if ("OPTIONS".equalsIgnoreCase(method)) {
             return true;
         }
@@ -71,5 +71,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 || path.equals("/invitations/preview")
                 || path.equals("/health")
                 || path.startsWith("/actuator/health");
+    }
+
+    private String normalizePath(String path) {
+        if (path == null || path.length() <= 1) {
+            return path;
+        }
+        return path.endsWith("/") ? path.substring(0, path.length() - 1) : path;
     }
 }

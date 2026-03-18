@@ -428,27 +428,24 @@ public class LeadDetailsService {
                 && !standardFields.getPhone().isBlank();
         if (hasContactDetails) {
             score += 20;
-            factors.add(new LeadAiInsightFactorResponse(
+            factors.add(impactFactor(
                     "Contactability",
                     20,
-                    "positive",
                     "Lead has both email and phone available."
             ));
         } else {
-            factors.add(new LeadAiInsightFactorResponse(
+            factors.add(ratedFactor(
                     "Contactability",
-                    0,
-                    "negative",
+                    2,
                     "Missing direct contact details lowers qualification confidence."
             ));
         }
 
         if (lead.getAssignedToUserId() != null) {
             score += 15;
-            factors.add(new LeadAiInsightFactorResponse(
+            factors.add(impactFactor(
                     "Ownership",
                     15,
-                    "positive",
                     "Lead is already assigned for follow-up."
             ));
         }
@@ -478,19 +475,17 @@ public class LeadDetailsService {
         int rawInteractionPoints = (int) Math.min(actorInteractions * 6L, 24L);
         int interactionPoints = (int) Math.round(rawInteractionPoints * relationshipSignal.engagementMultiplier());
         score += interactionPoints;
-        factors.add(new LeadAiInsightFactorResponse(
+        factors.add(impactFactor(
                 "Manager Engagement",
                 interactionPoints,
-                interactionPoints > 0 ? "positive" : "neutral",
                 interactionPoints > 0
                         ? "Current manager already has timeline interactions on this lead."
                         : "No timeline interactions yet from current manager."
         ));
         if (interactionPoints != rawInteractionPoints) {
-            factors.add(new LeadAiInsightFactorResponse(
+            factors.add(impactFactor(
                     "Engagement Quality",
                     interactionPoints - rawInteractionPoints,
-                    interactionPoints >= rawInteractionPoints ? "positive" : "negative",
                     interactionPoints >= rawInteractionPoints
                             ? "Positive relationship momentum amplified the value of recent interactions."
                             : "Tension in the relationship reduced the value of recent interactions."
@@ -498,10 +493,9 @@ public class LeadDetailsService {
         }
         if (relationshipSignal.scoreAdjustment() != 0) {
             score += relationshipSignal.scoreAdjustment();
-            factors.add(new LeadAiInsightFactorResponse(
+            factors.add(impactFactor(
                     "Relationship Risk",
                     relationshipSignal.scoreAdjustment(),
-                    relationshipSignal.scoreAdjustment() > 0 ? "positive" : "negative",
                     relationshipSignal.scoreImpactReason()
             ));
         }
@@ -512,36 +506,32 @@ public class LeadDetailsService {
 
         if ("qualified".equalsIgnoreCase(lead.getStatus())) {
             score += 18;
-            factors.add(new LeadAiInsightFactorResponse(
+            factors.add(impactFactor(
                     "Pipeline Status",
                     18,
-                    "positive",
                     "Lead is already in qualified stage."
             ));
         } else if ("new".equalsIgnoreCase(lead.getStatus())) {
             score += 8;
-            factors.add(new LeadAiInsightFactorResponse(
+            factors.add(impactFactor(
                     "Pipeline Status",
                     8,
-                    "neutral",
                     "Lead is new and still needs qualification."
             ));
         } else {
             score += 4;
-            factors.add(new LeadAiInsightFactorResponse(
+            factors.add(impactFactor(
                     "Pipeline Status",
                     4,
-                    "neutral",
                     "Lead is active in pipeline."
             ));
         }
 
         if (lead.getDuplicateGroupId() != null) {
             score -= 12;
-            factors.add(new LeadAiInsightFactorResponse(
+            factors.add(impactFactor(
                     "Duplicate Risk",
                     -12,
-                    "negative",
                     "Lead is part of a duplicate group."
             ));
         }
@@ -557,10 +547,9 @@ public class LeadDetailsService {
         );
         if (!kbSnippets.isEmpty()) {
             score += 8;
-            factors.add(new LeadAiInsightFactorResponse(
+            factors.add(impactFactor(
                     "Black Book Match",
                     8,
-                    "positive",
                     "Recommendations are grounded in company sales playbook sections."
             ));
         }
@@ -578,10 +567,9 @@ public class LeadDetailsService {
                 workloadPoints = 5;
             }
             score += workloadPoints;
-            factors.add(new LeadAiInsightFactorResponse(
+            factors.add(impactFactor(
                     "Assignee Capacity",
                     workloadPoints,
-                    workloadPoints > 0 ? "positive" : "neutral",
                     workloadPoints > 0
                             ? "Assigned owner has manageable recent workload."
                             : "Assigned owner has high recent lead load."
@@ -646,10 +634,9 @@ public class LeadDetailsService {
             recommendedAction = safeGuidance.recommendedAction();
             suggestedApproach = safeGuidance.suggestedApproach();
             guidanceSource = "fallback";
-            factors.add(new LeadAiInsightFactorResponse(
+            factors.add(ratedFactor(
                     "Confidence Guardrail",
-                    0,
-                    "neutral",
+                    5,
                     confidenceAssessment.fallbackReason()
             ));
         } else {
@@ -662,10 +649,9 @@ public class LeadDetailsService {
                 int strategyAdjustment = calculateStrategyScoreAdjustment(strategyScores);
                 if (strategyAdjustment != 0) {
                     score += strategyAdjustment;
-                    factors.add(new LeadAiInsightFactorResponse(
+                    factors.add(impactFactor(
                             "Strategic Buying Signals",
                             strategyAdjustment,
-                            strategyAdjustment > 0 ? "positive" : "negative",
                             buildStrategyScoreReason(strategyScores)
                     ));
                 }
@@ -678,10 +664,9 @@ public class LeadDetailsService {
         int finalNextCallCloseProbability = clampScore(nextCallCloseProbability != null
                 ? nextCallCloseProbability
                 : calculateFallbackCloseProbability(finalClientScore, relationshipSignal, answerSignals));
-        factors.add(new LeadAiInsightFactorResponse(
+        factors.add(ratedFactor(
                 "Close Probability",
-                0,
-                finalNextCallCloseProbability >= 60 ? "positive" : finalNextCallCloseProbability >= 40 ? "neutral" : "negative",
+                Math.max(0, Math.min(10, Math.round(finalNextCallCloseProbability / 10.0f))),
                 "Probabilitate estimată de închidere la următorul apel: " + finalNextCallCloseProbability + "%."
         ));
         score = clampScore(score);
@@ -696,10 +681,9 @@ public class LeadDetailsService {
             recommendedAction = guidanceAdjustment.recommendedAction();
             suggestedApproach = guidanceAdjustment.suggestedApproach();
             guidanceSource = "guardrailed";
-            factors.add(new LeadAiInsightFactorResponse(
+            factors.add(ratedFactor(
                     "Anti-Repetition Guardrail",
-                    0,
-                    "neutral",
+                    5,
                     guidanceAdjustment.reason()
             ));
         }
