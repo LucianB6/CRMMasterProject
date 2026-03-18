@@ -7,6 +7,8 @@ import java.util.UUID;
 public record LeadAiInsightsResponse(
         UUID insightId,
         int score,
+        int clientScore,
+        int nextCallCloseProbability,
         String relationshipSentiment,
         String relationshipRiskLevel,
         String relationshipTrend,

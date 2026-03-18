@@ -3,11 +3,13 @@ package com.salesway.auth.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.salesway.auth.dto.GoogleLoginRequest;
 import com.salesway.auth.entity.User;
+import com.salesway.auth.repository.PasswordResetTokenRepository;
 import com.salesway.auth.repository.UserRepository;
 import com.salesway.common.enums.MembershipRole;
 import com.salesway.common.enums.MembershipStatus;
 import com.salesway.companies.entity.Company;
 import com.salesway.companies.repository.CompanyRepository;
+import com.salesway.email.service.EmailService;
 import com.salesway.invitations.entity.Invitation;
 import com.salesway.invitations.enums.InvitationStatus;
 import com.salesway.invitations.repository.InvitationRepository;
@@ -67,6 +69,8 @@ class AuthServiceGoogleInviteTest {
         NotificationService notificationService = new NotificationService(null, new ObjectMapper());
         ManagerAccessService managerAccessService = new ManagerAccessService(null, null) {
         };
+        PasswordResetTokenRepository passwordResetTokenRepository = org.mockito.Mockito.mock(PasswordResetTokenRepository.class);
+        EmailService emailService = org.mockito.Mockito.mock(EmailService.class);
 
         GoogleIdTokenVerifier verifier = new GoogleIdTokenVerifier("960603321072-6g9an4d97grelbps1dtr03e1de9bi0ae.apps.googleusercontent.com") {
             @Override
@@ -93,7 +97,10 @@ class AuthServiceGoogleInviteTest {
                 notificationService,
                 managerAccessService,
                 verifier,
-                invitationRepository
+                invitationRepository,
+                passwordResetTokenRepository,
+                emailService,
+                "http://localhost:3000/reset-password"
         );
 
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -188,7 +195,10 @@ class AuthServiceGoogleInviteTest {
                 new NotificationService(null, new ObjectMapper()),
                 new ManagerAccessService(null, null) {},
                 mismatchVerifier,
-                invitationRepository
+                invitationRepository,
+                org.mockito.Mockito.mock(PasswordResetTokenRepository.class),
+                org.mockito.Mockito.mock(EmailService.class),
+                "http://localhost:3000/reset-password"
         );
 
         User user = new User();

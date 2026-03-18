@@ -10,6 +10,8 @@ public record LeadSearchCriteria(
         Instant createdTo,
         UUID assignedToUserId,
         Boolean hasOpenTasks,
-        String source
+        String source,
+        UUID visibleToUserId,
+        boolean includeUnassignedForVisibleUser
 ) {
 }

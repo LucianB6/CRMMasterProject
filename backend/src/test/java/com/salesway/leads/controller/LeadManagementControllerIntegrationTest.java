@@ -8,7 +8,10 @@ import com.salesway.leads.dto.LeadAiExplainabilityResponse;
 import com.salesway.leads.dto.LeadAiInsightsResponse;
 import com.salesway.leads.dto.LeadAiNextBestActionResponse;
 import com.salesway.leads.dto.LeadAiWhatChangedResponse;
+import com.salesway.leads.dto.LeadAnswersUpdateRequest;
 import com.salesway.leads.dto.LeadDetailAnswerItemResponse;
+import com.salesway.leads.dto.LeadFormResponse;
+import com.salesway.leads.dto.LeadQuestionResponse;
 import com.salesway.leads.enums.LeadInsightFeedbackStatus;
 import com.salesway.leads.service.LeadDetailsService;
 import com.salesway.leads.service.LeadManagementService;
@@ -29,6 +32,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -58,6 +62,60 @@ class LeadManagementControllerIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].questionLabel").value("Question"))
                 .andExpect(jsonPath("$[0].answer").value("Meta Ads"));
+    }
+
+    @Test
+    void putAnswers_returnsUpdatedPayload() throws Exception {
+        UUID leadId = UUID.randomUUID();
+        when(leadDetailsService.updateAnswers(org.mockito.ArgumentMatchers.eq(leadId), org.mockito.ArgumentMatchers.any(LeadAnswersUpdateRequest.class)))
+                .thenReturn(List.of(
+                        new LeadDetailAnswerItemResponse(UUID.randomUUID(), "Budget", "short_text", "5000 EUR", Instant.now())
+                ));
+
+        String body = """
+                {
+                  "answers": [
+                    {
+                      "questionId": "11111111-1111-1111-1111-111111111111",
+                      "value": "5000 EUR"
+                    }
+                  ]
+                }
+                """;
+
+        mockMvc.perform(put("/manager/leads/{leadId}/answers", leadId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].questionLabel").value("Budget"))
+                .andExpect(jsonPath("$[0].answer").value("5000 EUR"));
+    }
+
+    @Test
+    void getLeadForm_returnsLeadSpecificForm() throws Exception {
+        UUID leadId = UUID.randomUUID();
+        when(leadDetailsService.getLeadForm(leadId)).thenReturn(new LeadFormResponse(
+                UUID.randomUUID(),
+                "Discovery Form",
+                "discovery",
+                true,
+                List.of(new LeadQuestionResponse(
+                        UUID.randomUUID(),
+                        "short_text",
+                        "Budget",
+                        null,
+                        null,
+                        true,
+                        null,
+                        1,
+                        true
+                ))
+        ));
+
+        mockMvc.perform(get("/manager/leads/{leadId}/form", leadId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Discovery Form"))
+                .andExpect(jsonPath("$.questions[0].label").value("Budget"));
     }
 
     @Test
@@ -99,6 +157,8 @@ class LeadManagementControllerIntegrationTest {
         when(leadDetailsService.getAiInsights(leadId)).thenReturn(new LeadAiInsightsResponse(
                 insightId,
                 82,
+                78,
+                61,
                 "positive",
                 "low",
                 "improving",
@@ -111,7 +171,8 @@ class LeadManagementControllerIntegrationTest {
                         "urgent",
                         "Lead is strong and ready for direct contact.",
                         "Momentum is high enough for a decisive move.",
-                        "today"
+                        "today",
+                        "phone"
                 ),
                 new LeadAiWhatChangedResponse(
                         "Follow up on implementation timing.",
@@ -133,6 +194,8 @@ class LeadManagementControllerIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.insightId").value(insightId.toString()))
                 .andExpect(jsonPath("$.score").value(82))
+                .andExpect(jsonPath("$.clientScore").value(78))
+                .andExpect(jsonPath("$.nextCallCloseProbability").value(61))
                 .andExpect(jsonPath("$.relationshipSentiment").value("positive"))
                 .andExpect(jsonPath("$.relationshipRiskLevel").value("low"))
                 .andExpect(jsonPath("$.confidenceLevel").value("high"))

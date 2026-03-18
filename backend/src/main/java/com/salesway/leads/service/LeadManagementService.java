@@ -23,6 +23,7 @@ import com.salesway.leads.repository.LeadRepository;
 import com.salesway.leads.repository.LeadSpecifications;
 import com.salesway.leads.repository.LeadStandardFieldsRepository;
 import com.salesway.leads.repository.PipelineStageRepository;
+import com.salesway.manager.service.CompanyAccessService;
 import com.salesway.manager.service.ManagerAccessService;
 import com.salesway.memberships.entity.CompanyMembership;
 import com.salesway.memberships.repository.CompanyMembershipRepository;
@@ -61,6 +62,7 @@ public class LeadManagementService {
     private final LeadRepository leadRepository;
     private final LeadStandardFieldsRepository standardFieldsRepository;
     private final LeadAnswerRepository leadAnswerRepository;
+    private final CompanyAccessService companyAccessService;
     private final ManagerAccessService managerAccessService;
     private final CompanyMembershipRepository companyMembershipRepository;
     private final TaskBoardService taskBoardService;
@@ -72,6 +74,7 @@ public class LeadManagementService {
             LeadRepository leadRepository,
             LeadStandardFieldsRepository standardFieldsRepository,
             LeadAnswerRepository leadAnswerRepository,
+            CompanyAccessService companyAccessService,
             ManagerAccessService managerAccessService,
             CompanyMembershipRepository companyMembershipRepository,
             TaskBoardService taskBoardService,
@@ -82,6 +85,7 @@ public class LeadManagementService {
         this.leadRepository = leadRepository;
         this.standardFieldsRepository = standardFieldsRepository;
         this.leadAnswerRepository = leadAnswerRepository;
+        this.companyAccessService = companyAccessService;
         this.managerAccessService = managerAccessService;
         this.companyMembershipRepository = companyMembershipRepository;
         this.taskBoardService = taskBoardService;
@@ -106,17 +110,17 @@ public class LeadManagementService {
         validatePaging(page, size);
         String normalizedStatus = LeadStatus.normalize(status);
         String normalizedSource = LeadSource.normalize(source);
-        CompanyMembership managerMembership = managerAccessService.getManagerMembership();
-        UUID companyId = managerMembership.getCompany().getId();
+        CompanyMembership membership = companyAccessService.getActiveMembership();
+        UUID companyId = membership.getCompany().getId();
         LOG.debug(
-                "Listing leads with manager context userId={}, selectedMembershipId={}, selectedCompanyId={}, selectedCompanyName={}",
-                managerMembership.getUser().getId(),
-                managerMembership.getId(),
+                "Listing leads with company context userId={}, selectedMembershipId={}, selectedCompanyId={}, selectedCompanyName={}",
+                membership.getUser().getId(),
+                membership.getId(),
                 companyId,
-                managerMembership.getCompany().getName()
+                membership.getCompany().getName()
         );
 
-        UUID assignedToUserId = resolveAssignedToFilter(assignedTo, managerMembership);
+        UUID assignedToUserId = resolveAssignedToFilter(assignedTo, membership);
         Instant createdFromInstant = parseDateParam(createdFrom, true, "createdFrom");
         Instant createdToInstant = parseDateParam(createdTo, false, "createdTo");
         if (createdFromInstant != null && createdToInstant != null && createdFromInstant.isAfter(createdToInstant)) {
@@ -130,7 +134,9 @@ public class LeadManagementService {
                 createdToInstant,
                 assignedToUserId,
                 hasOpenTasks,
-                normalizedSource
+                normalizedSource,
+                membership.getRole() == MembershipRole.AGENT ? membership.getUser().getId() : null,
+                membership.getRole() == MembershipRole.AGENT
         );
         Pageable pageable = PageRequest.of(page, size, parseSort(sort));
         Page<Lead> leads = leadRepository.findAll(LeadSpecifications.byCriteria(companyId, criteria), pageable);
@@ -140,9 +146,9 @@ public class LeadManagementService {
 
     @Transactional(readOnly = true)
     public LeadDetailResponse getLead(UUID leadId) {
-        CompanyMembership managerMembership = managerAccessService.getManagerMembership();
-        UUID companyId = managerMembership.getCompany().getId();
-        Lead lead = getLeadOrThrow(leadId, companyId);
+        CompanyMembership membership = companyAccessService.getActiveMembership();
+        UUID companyId = membership.getCompany().getId();
+        Lead lead = getLeadOrThrow(leadId, membership);
 
         LeadStandardFields standard = standardFieldsRepository.findByLeadId(lead.getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Lead standard fields missing"));
@@ -206,23 +212,35 @@ public class LeadManagementService {
 
     @Transactional
     public void updateAssignee(UUID leadId, UUID assignedToUserId) {
-        CompanyMembership managerMembership = managerAccessService.getManagerMembership();
-        ensureManagerRole(managerMembership);
-        UUID companyId = managerMembership.getCompany().getId();
-        Lead lead = getLeadOrThrow(leadId, companyId);
+        CompanyMembership membership = companyAccessService.getActiveMembership();
+        UUID companyId = membership.getCompany().getId();
+        Lead lead = getLeadOrThrow(leadId, membership);
         UUID oldAssignee = lead.getAssignedToUserId();
 
-        if (assignedToUserId == null) {
-            lead.setAssignedToUserId(null);
-            lead.setAssignedByUserId(null);
-            lead.setAssignedAt(null);
-        } else {
-            companyMembershipRepository.findByCompanyIdAndUserId(companyId, assignedToUserId)
-                    .filter(membership -> membership.getStatus() == MembershipStatus.ACTIVE)
-                    .orElseThrow(() -> new IllegalArgumentException("assignedToUserId does not belong to current company"));
-            lead.setAssignedToUserId(assignedToUserId);
-            lead.setAssignedByUserId(managerMembership.getUser().getId());
+        if (membership.getRole() == MembershipRole.AGENT) {
+            if (lead.getAssignedToUserId() != null) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Agents can only self-assign unassigned leads");
+            }
+            if (assignedToUserId == null || !assignedToUserId.equals(membership.getUser().getId())) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Agents can only assign leads to themselves");
+            }
+            lead.setAssignedToUserId(membership.getUser().getId());
+            lead.setAssignedByUserId(membership.getUser().getId());
             lead.setAssignedAt(Instant.now());
+        } else {
+            ensureManagerRole(membership);
+            if (assignedToUserId == null) {
+                lead.setAssignedToUserId(null);
+                lead.setAssignedByUserId(null);
+                lead.setAssignedAt(null);
+            } else {
+                companyMembershipRepository.findByCompanyIdAndUserId(companyId, assignedToUserId)
+                        .filter(companyMembership -> companyMembership.getStatus() == MembershipStatus.ACTIVE)
+                        .orElseThrow(() -> new IllegalArgumentException("assignedToUserId does not belong to current company"));
+                lead.setAssignedToUserId(assignedToUserId);
+                lead.setAssignedByUserId(membership.getUser().getId());
+                lead.setAssignedAt(Instant.now());
+            }
         }
 
         leadEventService.appendEvent(
@@ -236,8 +254,8 @@ public class LeadManagementService {
 
     @Transactional
     public void addNote(UUID leadId, LeadNoteRequest request) {
-        CompanyMembership managerMembership = managerAccessService.getManagerMembership();
-        Lead lead = getLeadOrThrow(leadId, managerMembership.getCompany().getId());
+        CompanyMembership membership = companyAccessService.getActiveMembership();
+        Lead lead = getLeadOrThrow(leadId, membership);
         String text = request.getText().trim();
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("text", text);
@@ -277,9 +295,9 @@ public class LeadManagementService {
             String types
     ) {
         validatePaging(page, size);
-        CompanyMembership managerMembership = managerAccessService.getManagerMembership();
-        UUID companyId = managerMembership.getCompany().getId();
-        getLeadOrThrow(leadId, companyId);
+        CompanyMembership membership = companyAccessService.getActiveMembership();
+        UUID companyId = membership.getCompany().getId();
+        getLeadOrThrow(leadId, membership);
 
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         Collection<LeadEventType> parsedTypes = parseEventTypes(types);
@@ -288,15 +306,27 @@ public class LeadManagementService {
 
     @Transactional(readOnly = true)
     public List<TaskBoardResponse> getLeadTasks(UUID leadId) {
-        CompanyMembership managerMembership = managerAccessService.getManagerMembership();
-        UUID companyId = managerMembership.getCompany().getId();
-        getLeadOrThrow(leadId, companyId);
+        CompanyMembership membership = companyAccessService.getActiveMembership();
+        UUID companyId = membership.getCompany().getId();
+        getLeadOrThrow(leadId, membership);
         return taskBoardService.getTasksForCompany(companyId, leadId, null, null, null, null);
     }
 
     private Lead getLeadOrThrow(UUID leadId, UUID companyId) {
         return leadRepository.findByIdAndCompanyId(leadId, companyId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead not found"));
+    }
+
+    private Lead getLeadOrThrow(UUID leadId, CompanyMembership membership) {
+        Lead lead = getLeadOrThrow(leadId, membership.getCompany().getId());
+        if (membership.getRole() == MembershipRole.AGENT) {
+            UUID currentUserId = membership.getUser().getId();
+            UUID assignedToUserId = lead.getAssignedToUserId();
+            if (assignedToUserId != null && !assignedToUserId.equals(currentUserId)) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead not found");
+            }
+        }
+        return lead;
     }
 
     private LeadListItemResponse toListResponse(Lead lead) {
@@ -368,6 +398,10 @@ public class LeadManagementService {
             assignee = UUID.fromString(normalized);
         } catch (IllegalArgumentException exception) {
             throw new IllegalArgumentException("assignedTo must be UUID or 'me'");
+        }
+        if (managerMembership.getRole() == MembershipRole.AGENT
+                && !assignee.equals(managerMembership.getUser().getId())) {
+            throw new IllegalArgumentException("Agents can only filter by their own assignments");
         }
         companyMembershipRepository.findByCompanyIdAndUserId(managerMembership.getCompany().getId(), assignee)
                 .orElseThrow(() -> new IllegalArgumentException("assignedTo user not found in current company"));

@@ -1,14 +1,19 @@
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/SaleswayApplication.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/auth/controller/AuthController.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/auth/dto/AuthMessageResponse.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/auth/dto/CurrentUserResponse.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/auth/dto/ForgotPasswordRequest.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/auth/dto/GoogleLoginRequest.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/auth/dto/GoogleSignupIntent.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/auth/dto/LoginRequest.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/auth/dto/LoginResponse.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/auth/dto/ResetPasswordRequest.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/auth/dto/SignupRequest.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/auth/dto/SignupResponse.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/auth/dto/UpdateProfileRequest.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/auth/entity/PasswordResetToken.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/auth/entity/User.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/auth/repository/PasswordResetTokenRepository.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/auth/repository/UserRepository.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/auth/service/AuthService.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/auth/service/GoogleIdTokenVerifier.java
@@ -58,6 +63,7 @@
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/config/PredictionClientConfig.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/config/SchedulingConfig.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/email/dto/InvitationEmailPayload.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/email/dto/PasswordResetEmailPayload.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/email/service/EmailService.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/email/service/SmtpEmailService.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/goals/controller/GoalController.java
@@ -84,6 +90,7 @@
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/dto/LeadAiNextBestActionResponse.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/dto/LeadAiWhatChangedResponse.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/dto/LeadAnswerResponse.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/dto/LeadAnswersUpdateRequest.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/dto/LeadAssigneeUpdateRequest.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/dto/LeadCallCreateRequest.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/dto/LeadCampaignCreateRequest.java
@@ -158,6 +165,7 @@
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/manager/dto/ManagerInviteCreateResponse.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/manager/dto/ManagerNotificationResponse.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/manager/dto/ManagerTeamPerformancePointResponse.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/manager/service/CompanyAccessService.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/manager/service/CompanyContextResolver.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/manager/service/ManagerAccessService.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/manager/service/ManagerInvitationService.java

@@ -3,6 +3,9 @@ package com.salesway.leads.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.BooleanNode;
+import com.fasterxml.jackson.databind.node.DecimalNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.salesway.auth.entity.User;
 import com.salesway.auth.repository.UserRepository;
 import com.salesway.chatbot.client.OpenAiClient;
@@ -17,8 +20,11 @@ import com.salesway.leads.dto.LeadAiExplainabilityResponse;
 import com.salesway.leads.dto.LeadAiInsightsResponse;
 import com.salesway.leads.dto.LeadAiNextBestActionResponse;
 import com.salesway.leads.dto.LeadAiWhatChangedResponse;
+import com.salesway.leads.dto.LeadAnswersUpdateRequest;
 import com.salesway.leads.dto.LeadCallCreateRequest;
 import com.salesway.leads.dto.LeadDetailAnswerItemResponse;
+import com.salesway.leads.dto.LeadFormResponse;
+import com.salesway.leads.dto.LeadQuestionResponse;
 import com.salesway.leads.dto.LeadTaskCreateRequest;
 import com.salesway.leads.entity.Lead;
 import com.salesway.leads.entity.LeadAnswer;
@@ -26,6 +32,7 @@ import com.salesway.leads.entity.LeadAiInsightMemory;
 import com.salesway.leads.entity.LeadAiInsightSnapshot;
 import com.salesway.leads.entity.LeadCallLog;
 import com.salesway.leads.entity.LeadEvent;
+import com.salesway.leads.entity.LeadFormQuestion;
 import com.salesway.leads.entity.LeadStandardFields;
 import com.salesway.leads.enums.LeadNoteCategory;
 import com.salesway.leads.enums.LeadEventType;
@@ -35,8 +42,10 @@ import com.salesway.leads.repository.LeadAiInsightMemoryRepository;
 import com.salesway.leads.repository.LeadAiInsightSnapshotRepository;
 import com.salesway.leads.repository.LeadCallLogRepository;
 import com.salesway.leads.repository.LeadEventRepository;
+import com.salesway.leads.repository.LeadFormQuestionRepository;
 import com.salesway.leads.repository.LeadRepository;
 import com.salesway.leads.repository.LeadStandardFieldsRepository;
+import com.salesway.manager.service.CompanyAccessService;
 import com.salesway.manager.service.ManagerAccessService;
 import com.salesway.memberships.entity.CompanyMembership;
 import com.salesway.memberships.repository.CompanyMembershipRepository;
@@ -55,7 +64,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -68,6 +80,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 public class LeadDetailsService {
@@ -76,6 +90,7 @@ public class LeadDetailsService {
     private static final double HYBRID_LEXICAL_WEIGHT = 0.35;
     private static final double MIN_VECTOR_SIMILARITY = 0.20;
     private static final double MIN_AI_GUIDANCE_CONFIDENCE = 0.55;
+    private static final Set<String> TEXT_TYPES = Set.of("short_text", "long_text");
     private static final Logger LOG = LoggerFactory.getLogger(LeadDetailsService.class);
     private final LeadRepository leadRepository;
     private final LeadAnswerRepository leadAnswerRepository;
@@ -84,8 +99,10 @@ public class LeadDetailsService {
     private final LeadEventRepository leadEventRepository;
     private final LeadCallLogRepository leadCallLogRepository;
     private final LeadStandardFieldsRepository leadStandardFieldsRepository;
+    private final LeadFormQuestionRepository leadFormQuestionRepository;
     private final TaskBoardItemRepository taskBoardItemRepository;
     private final CompanyMembershipRepository companyMembershipRepository;
+    private final CompanyAccessService companyAccessService;
     private final LeadEventService leadEventService;
     private final ManagerAccessService managerAccessService;
     private final UserRepository userRepository;
@@ -102,8 +119,10 @@ public class LeadDetailsService {
             LeadEventRepository leadEventRepository,
             LeadCallLogRepository leadCallLogRepository,
             LeadStandardFieldsRepository leadStandardFieldsRepository,
+            LeadFormQuestionRepository leadFormQuestionRepository,
             TaskBoardItemRepository taskBoardItemRepository,
             CompanyMembershipRepository companyMembershipRepository,
+            CompanyAccessService companyAccessService,
             LeadEventService leadEventService,
             ManagerAccessService managerAccessService,
             UserRepository userRepository,
@@ -119,8 +138,10 @@ public class LeadDetailsService {
         this.leadEventRepository = leadEventRepository;
         this.leadCallLogRepository = leadCallLogRepository;
         this.leadStandardFieldsRepository = leadStandardFieldsRepository;
+        this.leadFormQuestionRepository = leadFormQuestionRepository;
         this.taskBoardItemRepository = taskBoardItemRepository;
         this.companyMembershipRepository = companyMembershipRepository;
+        this.companyAccessService = companyAccessService;
         this.leadEventService = leadEventService;
         this.managerAccessService = managerAccessService;
         this.userRepository = userRepository;
@@ -132,9 +153,133 @@ public class LeadDetailsService {
 
     @Transactional(readOnly = true)
     public List<LeadDetailAnswerItemResponse> getAnswers(UUID leadId) {
+        CompanyMembership membership = companyAccessService.getActiveMembership();
+        Lead lead = getLeadOrThrow(leadId, membership);
+        return leadAnswerRepository.findByLeadIdOrderByDisplayOrderSnapshotAscCreatedAtAsc(lead.getId())
+                .stream()
+                .map(this::toAnswerResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public LeadFormResponse getLeadForm(UUID leadId) {
+        CompanyMembership membership = companyAccessService.getActiveMembership();
+        Lead lead = getLeadOrThrow(leadId, membership);
+        if (lead.getLeadForm() == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead form not found");
+        }
+        List<LeadQuestionResponse> questions = leadFormQuestionRepository
+                .findByLeadFormIdAndIsActiveTrueOrderByDisplayOrderAsc(lead.getLeadForm().getId())
+                .stream()
+                .map(this::toQuestionResponse)
+                .toList();
+        return new LeadFormResponse(
+                lead.getLeadForm().getId(),
+                lead.getLeadForm().getTitle(),
+                lead.getLeadForm().getPublicSlug(),
+                lead.getLeadForm().getIsActive(),
+                questions
+        );
+    }
+
+    @Transactional
+    public List<LeadDetailAnswerItemResponse> updateAnswers(UUID leadId, LeadAnswersUpdateRequest request) {
         CompanyMembership membership = managerAccessService.getManagerMembership();
         Lead lead = getLeadOrThrow(leadId, membership.getCompany().getId());
-        return leadAnswerRepository.findByLeadIdOrderByDisplayOrderSnapshotAscCreatedAtAsc(lead.getId())
+        if (lead.getLeadForm() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Lead form is missing for this lead");
+        }
+
+        List<LeadFormQuestion> activeQuestions = leadFormQuestionRepository
+                .findByLeadFormIdAndIsActiveTrueOrderByDisplayOrderAsc(lead.getLeadForm().getId());
+        Map<UUID, LeadFormQuestion> questionsById = new LinkedHashMap<>();
+        for (LeadFormQuestion question : activeQuestions) {
+            questionsById.put(question.getId(), question);
+        }
+
+        Map<UUID, JsonNode> incomingAnswersByQuestionId = new LinkedHashMap<>();
+        for (LeadAnswersUpdateRequest.Answer answer : request.getAnswers()) {
+            LeadFormQuestion question = questionsById.get(answer.getQuestionId());
+            if (question == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "questionId invalid or inactive for this form: " + answer.getQuestionId());
+            }
+            JsonNode normalizedValue = normalizeAnswerValue(question, answer.getValue());
+            if (incomingAnswersByQuestionId.put(answer.getQuestionId(), normalizedValue) != null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "answers questionId duplicated: " + answer.getQuestionId());
+            }
+        }
+
+        for (Map.Entry<UUID, JsonNode> entry : incomingAnswersByQuestionId.entrySet()) {
+            if (entry.getValue() == null) {
+                continue;
+            }
+            LeadFormQuestion question = questionsById.get(entry.getKey());
+            validateAnswerValue(question, entry.getValue());
+        }
+
+        List<LeadAnswer> existingAnswers = leadAnswerRepository.findByLeadIdOrderByDisplayOrderSnapshotAscCreatedAtAsc(leadId);
+        Map<UUID, LeadAnswer> existingByQuestionId = existingAnswers.stream()
+                .filter(answer -> answer.getQuestion() != null && answer.getQuestion().getId() != null)
+                .collect(Collectors.toMap(
+                        answer -> answer.getQuestion().getId(),
+                        answer -> answer,
+                        (left, right) -> right,
+                        LinkedHashMap::new
+                ));
+
+        List<UUID> missingRequired = activeQuestions.stream()
+                .filter(question -> Boolean.TRUE.equals(question.getRequired()))
+                .map(LeadFormQuestion::getId)
+                .filter(questionId -> {
+                    if (incomingAnswersByQuestionId.containsKey(questionId)) {
+                        return incomingAnswersByQuestionId.get(questionId) == null;
+                    }
+                    LeadAnswer existingAnswer = existingByQuestionId.get(questionId);
+                    return existingAnswer == null || existingAnswer.getAnswerValue() == null || existingAnswer.getAnswerValue().isNull();
+                })
+                .toList();
+        if (!missingRequired.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "missing required questionIds: " + missingRequired);
+        }
+
+        List<LeadAnswer> answersToDelete = incomingAnswersByQuestionId.entrySet().stream()
+                .filter(entry -> entry.getValue() == null)
+                .map(entry -> existingByQuestionId.get(entry.getKey()))
+                .filter(answer -> answer != null)
+                .toList();
+        if (!answersToDelete.isEmpty()) {
+            leadAnswerRepository.deleteAll(answersToDelete);
+        }
+
+        List<LeadAnswer> answersToSave = new ArrayList<>();
+        for (Map.Entry<UUID, JsonNode> entry : incomingAnswersByQuestionId.entrySet()) {
+            if (entry.getValue() == null) {
+                continue;
+            }
+            LeadFormQuestion question = questionsById.get(entry.getKey());
+            LeadAnswer answer = existingByQuestionId.get(entry.getKey());
+            if (answer == null) {
+                answer = new LeadAnswer();
+                answer.setLead(lead);
+                answer.setQuestion(question);
+            }
+            answer.setAnswerValue(entry.getValue());
+            answer.setQuestionLabelSnapshot(question.getLabel());
+            answer.setQuestionTypeSnapshot(question.getQuestionType());
+            answer.setRequiredSnapshot(question.getRequired());
+            answer.setOptionsSnapshot(question.getOptionsJson());
+            answer.setDisplayOrderSnapshot(question.getDisplayOrder());
+            answersToSave.add(answer);
+        }
+        if (!answersToSave.isEmpty()) {
+            leadAnswerRepository.saveAll(answersToSave);
+        }
+
+        lead.setLastActivityAt(Instant.now());
+        leadRepository.save(lead);
+
+        return leadAnswerRepository.findByLeadIdOrderByDisplayOrderSnapshotAscCreatedAtAsc(leadId)
                 .stream()
                 .map(this::toAnswerResponse)
                 .toList();
@@ -143,8 +288,8 @@ public class LeadDetailsService {
     @Transactional(readOnly = true)
     public Page<LeadActivityResponse> getActivities(UUID leadId, int page, int size) {
         validatePaging(page, size);
-        CompanyMembership membership = managerAccessService.getManagerMembership();
-        Lead lead = getLeadOrThrow(leadId, membership.getCompany().getId());
+        CompanyMembership membership = companyAccessService.getActiveMembership();
+        Lead lead = getLeadOrThrow(leadId, membership);
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         Collection<LeadEventType> types = EnumSet.of(
                 LeadEventType.NOTE_ADDED,
@@ -245,24 +390,32 @@ public class LeadDetailsService {
 
     @Transactional
     public LeadAiInsightsResponse getAiInsights(UUID leadId) {
-        CompanyMembership membership = managerAccessService.getManagerMembership();
+        CompanyMembership membership = companyAccessService.getActiveMembership();
         UUID companyId = membership.getCompany().getId();
-        getLeadOrThrow(leadId, companyId);
+        Lead lead = getLeadOrThrow(leadId, membership);
+        KbDocument activeKbDocument = kbDocumentRepository.findFirstByCompanyIdAndIsActiveTrueOrderByCreatedAtDesc(companyId).orElse(null);
+        Instant latestFeedbackAt = leadAiInsightMemoryRepository.findLatestUpdatedAtByLeadIdAndCompanyId(leadId, companyId);
+        Instant latestAnswerAt = leadAnswerRepository.findLatestCreatedAtByLeadId(leadId);
         return leadAiInsightSnapshotRepository.findByLeadIdAndCompanyId(leadId, companyId)
+                .filter(snapshot -> !isSnapshotStale(snapshot, lead, activeKbDocument, latestFeedbackAt, latestAnswerAt))
                 .map(this::toResponse)
                 .orElseGet(() -> regenerateAiInsights(leadId));
     }
 
     @Transactional
     public LeadAiInsightsResponse regenerateAiInsights(UUID leadId) {
-        CompanyMembership membership = managerAccessService.getManagerMembership();
+        CompanyMembership membership = companyAccessService.getActiveMembership();
         UUID companyId = membership.getCompany().getId();
         UUID currentUserId = membership.getUser().getId();
-        Lead lead = getLeadOrThrow(leadId, companyId);
+        Lead lead = getLeadOrThrow(leadId, membership);
         KbDocument activeKbDocument = kbDocumentRepository.findFirstByCompanyIdAndIsActiveTrueOrderByCreatedAtDesc(companyId).orElse(null);
         Instant latestFeedbackAt = leadAiInsightMemoryRepository.findLatestUpdatedAtByLeadIdAndCompanyId(leadId, companyId);
         List<LeadAiInsightMemory> recentMemories = leadAiInsightMemoryRepository
                 .findTop3ByLeadIdAndCompanyIdOrderByCreatedAtDesc(leadId, companyId);
+        List<LeadAnswer> leadAnswers = leadAnswerRepository.findByLeadIdOrderByDisplayOrderSnapshotAscCreatedAtAsc(leadId);
+        List<String> formAnswerSummaries = summarizeLeadAnswers(leadAnswers);
+        AnswerSignals answerSignals = extractAnswerSignals(leadAnswers);
+        QualificationSignals qualificationSignals = extractQualificationSignals(noteTextsFromAnswersAndRecentMemory(formAnswerSummaries, recentMemories), formAnswerSummaries, answerSignals);
 
         int score = 0;
         List<LeadAiInsightFactorResponse> factors = new java.util.ArrayList<>();
@@ -313,7 +466,12 @@ public class LeadDetailsService {
                 .toList();
         CategorizedNotes categorizedNotes = categorizeNotes(recentEvents.getContent());
         RelationshipSignal relationshipSignal = analyzeRelationshipSignal(recentEvents.getContent(), categorizedNotes, lead);
-        ConversationState conversationState = extractConversationState(recentEvents.getContent(), noteTexts, categorizedNotes);
+        ConversationState conversationState = extractConversationState(
+                recentEvents.getContent(),
+                noteTexts,
+                categorizedNotes,
+                formAnswerSummaries
+        );
         long actorInteractions = recentEvents.getContent().stream()
                 .filter(event -> currentUserId.equals(event.getActorUserId()))
                 .count();
@@ -347,6 +505,10 @@ public class LeadDetailsService {
                     relationshipSignal.scoreImpactReason()
             ));
         }
+        applyQualificationSignals(qualificationSignals, factors);
+        score += qualificationSignals.scoreAdjustment();
+        applyAnswerSignals(answerSignals, factors);
+        score += answerSignals.scoreBoost();
 
         if ("qualified".equalsIgnoreCase(lead.getStatus())) {
             score += 18;
@@ -384,7 +546,15 @@ public class LeadDetailsService {
             ));
         }
 
-        List<String> kbSnippets = findRelevantBlackBookSnippets(companyId, lead, noteTexts, conversationState, categorizedNotes, activeKbDocument);
+        List<String> kbSnippets = findRelevantBlackBookSnippets(
+                companyId,
+                lead,
+                noteTexts,
+                conversationState,
+                categorizedNotes,
+                formAnswerSummaries,
+                activeKbDocument
+        );
         if (!kbSnippets.isEmpty()) {
             score += 8;
             factors.add(new LeadAiInsightFactorResponse(
@@ -452,6 +622,7 @@ public class LeadDetailsService {
                 noteTexts,
                 conversationState,
                 categorizedNotes,
+                formAnswerSummaries,
                 summarizeRecentInsights(recentMemories),
                 gapAnalysis,
                 antiRepetitionRules,
@@ -461,6 +632,8 @@ public class LeadDetailsService {
                 suggestedApproach
         );
         String guidanceSource = "ai";
+        Integer aiClientScore = null;
+        Integer nextCallCloseProbability = null;
         if (confidenceAssessment.shouldUseFallback() || !aiGuidance.aiGenerated()) {
             AiGuidance safeGuidance = fallbackStructuredGuidance(
                     noteTexts,
@@ -482,7 +655,36 @@ public class LeadDetailsService {
         } else {
             recommendedAction = aiGuidance.recommendedAction();
             suggestedApproach = aiGuidance.suggestedApproach();
+            StrategyScores strategyScores = aiGuidance.strategy() == null ? null : aiGuidance.strategy().scores();
+            if (strategyScores != null) {
+                aiClientScore = strategyScores.clientScore();
+                nextCallCloseProbability = strategyScores.nextCallCloseProbability();
+                int strategyAdjustment = calculateStrategyScoreAdjustment(strategyScores);
+                if (strategyAdjustment != 0) {
+                    score += strategyAdjustment;
+                    factors.add(new LeadAiInsightFactorResponse(
+                            "Strategic Buying Signals",
+                            strategyAdjustment,
+                            strategyAdjustment > 0 ? "positive" : "negative",
+                            buildStrategyScoreReason(strategyScores)
+                    ));
+                }
+            }
         }
+        int derivedClientScore = calculateDerivedClientScore(score, qualificationSignals, answerSignals);
+        int finalClientScore = clampScore(aiClientScore != null
+                ? (int) Math.round((derivedClientScore * 0.65) + (aiClientScore * 0.35))
+                : derivedClientScore);
+        int finalNextCallCloseProbability = clampScore(nextCallCloseProbability != null
+                ? nextCallCloseProbability
+                : calculateFallbackCloseProbability(finalClientScore, relationshipSignal, answerSignals));
+        factors.add(new LeadAiInsightFactorResponse(
+                "Close Probability",
+                0,
+                finalNextCallCloseProbability >= 60 ? "positive" : finalNextCallCloseProbability >= 40 ? "neutral" : "negative",
+                "Probabilitate estimată de închidere la următorul apel: " + finalNextCallCloseProbability + "%."
+        ));
+        score = clampScore(score);
         GuidanceAdjustment guidanceAdjustment = enforceAntiRepetition(
                 recommendedAction,
                 suggestedApproach,
@@ -506,6 +708,7 @@ public class LeadDetailsService {
         LeadAiNextBestActionResponse nextBestAction = mapNextBestAction(
                 score,
                 relationshipSignal,
+                answerSignals,
                 guidanceSource,
                 aiGuidance,
                 gapAnalysis,
@@ -526,6 +729,8 @@ public class LeadDetailsService {
         LeadAiInsightsResponse response = new LeadAiInsightsResponse(
                 savedInsight.getId(),
                 score,
+                finalClientScore,
+                finalNextCallCloseProbability,
                 relationshipSignal.overallSentiment(),
                 relationshipSignal.riskLevel(),
                 relationshipSignal.trend(),
@@ -564,6 +769,20 @@ public class LeadDetailsService {
                 answer.getQuestionTypeSnapshot(),
                 serializeAnswer(answer.getAnswerValue()),
                 answer.getCreatedAt()
+        );
+    }
+
+    private LeadQuestionResponse toQuestionResponse(LeadFormQuestion question) {
+        return new LeadQuestionResponse(
+                question.getId(),
+                question.getQuestionType(),
+                question.getLabel(),
+                question.getPlaceholder(),
+                question.getHelpText(),
+                question.getRequired(),
+                serializeAnswer(question.getOptionsJson()),
+                question.getDisplayOrder(),
+                question.getIsActive()
         );
     }
 
@@ -654,9 +873,11 @@ public class LeadDetailsService {
             List<String> noteTexts,
             ConversationState conversationState,
             CategorizedNotes categorizedNotes,
+            List<String> formAnswerSummaries,
             KbDocument activeKbDocument
     ) {
-        String query = buildHybridSearchQuery(lead, noteTexts, conversationState, categorizedNotes).toLowerCase(Locale.ROOT);
+        String query = buildHybridSearchQuery(lead, noteTexts, conversationState, categorizedNotes, formAnswerSummaries)
+                .toLowerCase(Locale.ROOT);
         List<String> hostedSnippets = findHostedBlackBookSnippets(query);
         if (!hostedSnippets.isEmpty()) {
             return hostedSnippets;
@@ -786,13 +1007,14 @@ public class LeadDetailsService {
     private ConversationState extractConversationState(
             List<LeadEvent> events,
             List<String> noteTexts,
-            CategorizedNotes categorizedNotes
+            CategorizedNotes categorizedNotes,
+            List<String> formAnswerSummaries
     ) {
         if (events == null || events.isEmpty()) {
             return fallbackConversationState(noteTexts, categorizedNotes);
         }
 
-        String timeline = buildTimelineSummary(events, categorizedNotes);
+        String timeline = buildTimelineSummary(events, categorizedNotes, formAnswerSummaries);
         try {
             List<Map<String, String>> messages = List.of(
                     Map.of("role", "system", "content", "Respond with strict JSON only."),
@@ -833,7 +1055,11 @@ public class LeadDetailsService {
         }
     }
 
-    private String buildTimelineSummary(List<LeadEvent> events, CategorizedNotes categorizedNotes) {
+    private String buildTimelineSummary(
+            List<LeadEvent> events,
+            CategorizedNotes categorizedNotes,
+            List<String> formAnswerSummaries
+    ) {
         String timelineLines = events.stream()
                 .limit(50)
                 .map(event -> {
@@ -851,7 +1077,13 @@ public class LeadDetailsService {
                 })
                 .collect(java.util.stream.Collectors.joining("\n"));
         String categorizedSummary = categorizedNotes.toPromptSection();
-        return categorizedSummary.isBlank() ? timelineLines : categorizedSummary + "\n\nCronologie:\n" + timelineLines;
+        String formAnswersSummary = formAnswerSummaries == null || formAnswerSummaries.isEmpty()
+                ? ""
+                : "Răspunsuri formular:\n- " + String.join("\n- ", formAnswerSummaries);
+        String structuredSummary = Stream.of(formAnswersSummary, categorizedSummary)
+                .filter(value -> value != null && !value.isBlank())
+                .collect(java.util.stream.Collectors.joining("\n\n"));
+        return structuredSummary.isBlank() ? timelineLines : structuredSummary + "\n\nCronologie:\n" + timelineLines;
     }
 
     private ConversationState fallbackConversationState(List<String> noteTexts, CategorizedNotes categorizedNotes) {
@@ -900,12 +1132,14 @@ public class LeadDetailsService {
             Lead lead,
             List<String> noteTexts,
             ConversationState conversationState,
-            CategorizedNotes categorizedNotes
+            CategorizedNotes categorizedNotes,
+            List<String> formAnswerSummaries
     ) {
         List<String> queryParts = new ArrayList<>();
         queryParts.add(lead.getStatus() == null ? "" : lead.getStatus());
         queryParts.add(lead.getSource() == null ? "" : lead.getSource());
         queryParts.add(String.join(" ", noteTexts));
+        queryParts.add(String.join(" ", formAnswerSummaries));
         queryParts.add(conversationState.conversationStage());
         queryParts.add(conversationState.currentObjection());
         queryParts.add(conversationState.nextExpectedStep());
@@ -920,7 +1154,7 @@ public class LeadDetailsService {
                 .collect(java.util.stream.Collectors.joining(" "));
     }
 
-    private String buildInsightsCacheKey(Lead lead, KbDocument activeKbDocument, Instant latestFeedbackAt) {
+    private String buildInsightsCacheKey(Lead lead, KbDocument activeKbDocument, Instant latestFeedbackAt, Instant latestAnswerAt) {
         String activityToken = lead.getLastActivityAt() != null
                 ? lead.getLastActivityAt().toString()
                 : lead.getSubmittedAt() != null ? lead.getSubmittedAt().toString() : "no-activity";
@@ -933,7 +1167,67 @@ public class LeadDetailsService {
                     : activeKbDocument.getId() + ":" + (activeKbDocument.getUpdatedAt() == null ? "no-update" : activeKbDocument.getUpdatedAt());
         }
         String feedbackToken = latestFeedbackAt == null ? "no-feedback" : latestFeedbackAt.toString();
-        return lead.getId() + "|" + activityToken + "|" + kbToken + "|" + feedbackToken;
+        String answersToken = latestAnswerAt == null ? "no-answers" : latestAnswerAt.toString();
+        return lead.getId() + "|" + activityToken + "|" + kbToken + "|" + feedbackToken + "|" + answersToken;
+    }
+
+    private boolean isSnapshotStale(
+            LeadAiInsightSnapshot snapshot,
+            Lead lead,
+            KbDocument activeKbDocument,
+            Instant latestFeedbackAt,
+            Instant latestAnswerAt
+    ) {
+        if (snapshot == null) {
+            return true;
+        }
+        Instant snapshotReference = snapshot.getLastRegeneratedAt() != null
+                ? snapshot.getLastRegeneratedAt()
+                : snapshot.getGeneratedAt();
+        if (snapshotReference == null) {
+            return true;
+        }
+        String currentKey = buildInsightsCacheKey(lead, activeKbDocument, latestFeedbackAt, latestAnswerAt);
+        String snapshotKey = buildInsightsCacheKey(
+                leadSnapshotView(lead, snapshotReference),
+                activeKbDocumentSnapshotView(activeKbDocument, snapshotReference),
+                minInstant(latestFeedbackAt, snapshotReference),
+                minInstant(latestAnswerAt, snapshotReference)
+        );
+        return !currentKey.equals(snapshotKey);
+    }
+
+    private Lead leadSnapshotView(Lead lead, Instant snapshotReference) {
+        Lead snapshotLead = new Lead();
+        snapshotLead.setId(lead.getId());
+        snapshotLead.setSubmittedAt(lead.getSubmittedAt());
+        snapshotLead.setLastActivityAt(
+                lead.getLastActivityAt() != null && lead.getLastActivityAt().isAfter(snapshotReference)
+                        ? snapshotReference
+                        : lead.getLastActivityAt()
+        );
+        return snapshotLead;
+    }
+
+    private KbDocument activeKbDocumentSnapshotView(KbDocument activeKbDocument, Instant snapshotReference) {
+        if (activeKbDocument == null) {
+            return null;
+        }
+        KbDocument snapshotDocument = new KbDocument();
+        snapshotDocument.setId(activeKbDocument.getId());
+        snapshotDocument.setUpdatedAt(
+                activeKbDocument.getUpdatedAt() != null && activeKbDocument.getUpdatedAt().isAfter(snapshotReference)
+                        ? snapshotReference
+                        : activeKbDocument.getUpdatedAt()
+        );
+        return snapshotDocument;
+    }
+
+    private Instant minInstant(Instant candidate, Instant upperBound) {
+        if (candidate == null) {
+            return null;
+        }
+        return candidate.isAfter(upperBound) ? upperBound : candidate;
     }
 
     private String summarizeRecentInsights(List<LeadAiInsightMemory> recentMemories) {
@@ -980,6 +1274,8 @@ public class LeadDetailsService {
         snapshot.setCompany(lead.getCompany());
         snapshot.setLatestInsightMemoryId(response.insightId());
         snapshot.setScore(response.score());
+        snapshot.setClientScore(response.clientScore());
+        snapshot.setNextCallCloseProbability(response.nextCallCloseProbability());
         snapshot.setRelationshipSentiment(response.relationshipSentiment());
         snapshot.setRelationshipRiskLevel(response.relationshipRiskLevel());
         snapshot.setRelationshipTrend(response.relationshipTrend());
@@ -1002,6 +1298,8 @@ public class LeadDetailsService {
         return new LeadAiInsightsResponse(
                 snapshot.getLatestInsightMemoryId(),
                 snapshot.getScore(),
+                snapshot.getClientScore(),
+                snapshot.getNextCallCloseProbability(),
                 snapshot.getRelationshipSentiment(),
                 snapshot.getRelationshipRiskLevel(),
                 snapshot.getRelationshipTrend(),
@@ -1082,20 +1380,39 @@ public class LeadDetailsService {
     private LeadAiNextBestActionResponse mapNextBestAction(
             int score,
             RelationshipSignal relationshipSignal,
+            AnswerSignals answerSignals,
             String guidanceSource,
             AiGuidance aiGuidance,
             GapAnalysis gapAnalysis,
             ConversationState conversationState
     ) {
+        if ("frustrated".equals(relationshipSignal.overallSentiment())
+                && "decreasing".equals(relationshipSignal.trend())) {
+            String reason = !relationshipSignal.keyBlocker().isBlank()
+                    ? relationshipSignal.keyBlocker()
+                    : "Lead-ul pierde încredere și are nevoie de o intervenție personală imediată.";
+            return new LeadAiNextBestActionResponse(
+                    "recover_relationship",
+                    "urgent",
+                    reason,
+                    "Lead-ul este frustrat, iar trendul conversației scade; dacă nu intervii acum, probabilitatea de stagnare crește.",
+                    "today",
+                    "phone_and_personal_message"
+            );
+        }
+
         if (aiGuidance != null && aiGuidance.strategy() != null) {
             StrategicRecommendation strategy = aiGuidance.strategy();
             LeadAction action = strategy.nextBestAction();
+            String timing = action != null && !action.timing().isBlank() ? action.timing() : "within_24h";
+            String channel = action != null && !action.channel().isBlank() ? action.channel() : "apel";
             return new LeadAiNextBestActionResponse(
                     action != null && !action.type().isBlank() ? action.type() : "clarify_next_step",
                     action != null && !action.priority().isBlank() ? action.priority() : "medium",
                     !strategy.reason().isBlank() ? strategy.reason() : "Este nevoie de un pas următor concret.",
-                    action != null && !action.timing().isBlank() ? action.timing() : "după_clarificare_suplimentară",
-                    action != null && !action.channel().isBlank() ? action.channel() : "apel"
+                    buildWhyNow(score, relationshipSignal, answerSignals, strategy),
+                    timing,
+                    channel
             );
         }
 
@@ -1130,13 +1447,7 @@ public class LeadDetailsService {
                 ? conversationState.openQuestions().get(0)
                 : "Needs a concrete next step.";
 
-        String whyNow = "high".equals(relationshipSignal.riskLevel())
-                ? "Relationship risk is elevated and needs immediate intervention."
-                : "decreasing".equals(relationshipSignal.trend())
-                ? "Momentum is weakening and should be stabilized now."
-                : score >= 75
-                ? "Lead is strong enough to justify a decisive next step."
-                : "Lead needs a concrete progression step to avoid stalling.";
+        String whyNow = buildWhyNow(score, relationshipSignal, answerSignals, null);
 
         String deadlineHint = switch (priority) {
             case "urgent" -> "today";
@@ -1144,7 +1455,12 @@ public class LeadDetailsService {
             default -> "this_week";
         };
 
-        return new LeadAiNextBestActionResponse(actionType, priority, reason, whyNow, deadlineHint);
+        String channel = "recover_relationship".equals(actionType)
+                ? "phone_and_personal_message"
+                : "schedule_call".equals(actionType)
+                ? "phone"
+                : "email_or_task";
+        return new LeadAiNextBestActionResponse(actionType, priority, reason, whyNow, deadlineHint, channel);
     }
 
     private LeadAiExplainabilityResponse buildExplainability(
@@ -1472,29 +1788,29 @@ public class LeadDetailsService {
             }
             case "frustrated" -> {
                 engagementMultiplier = 0.4;
-                scoreAdjustment -= 15;
+                scoreAdjustment -= 8;
                 scoreImpactReason = "Relationship appears tense in recent interactions.";
             }
             case "at_risk" -> {
                 engagementMultiplier = 0.2;
-                scoreAdjustment -= 20;
+                scoreAdjustment -= 12;
                 scoreImpactReason = "Lead shows strong churn or withdrawal risk.";
             }
             case "stalled" -> {
                 engagementMultiplier = 0.7;
-                scoreAdjustment -= 8;
+                scoreAdjustment -= 5;
                 scoreImpactReason = "Momentum appears stalled and needs recovery.";
             }
             default -> {
             }
         }
         if ("decreasing".equals(trend) && !"positive".equals(overallSentiment)) {
-            scoreAdjustment -= 5;
+            scoreAdjustment -= 3;
             scoreImpactReason = scoreImpactReason + " Trend is decreasing.";
         }
         if (lead.getLastActivityAt() != null && lead.getLastActivityAt().isBefore(Instant.now().minusSeconds(3L * 24L * 3600L))
                 && !"positive".equals(overallSentiment)) {
-            scoreAdjustment -= 6;
+            scoreAdjustment -= 4;
             scoreImpactReason = scoreImpactReason + " No positive activity in the last 3 days.";
         }
         return new RelationshipSignal(overallSentiment, riskLevel, keyBlocker, trend, engagementMultiplier, scoreAdjustment, scoreImpactReason, isFallback);
@@ -1506,6 +1822,7 @@ public class LeadDetailsService {
             List<String> noteTexts,
             ConversationState conversationState,
             CategorizedNotes categorizedNotes,
+            List<String> formAnswerSummaries,
             String recentInsightMemory,
             GapAnalysis gapAnalysis,
             AntiRepetitionRules antiRepetitionRules,
@@ -1514,19 +1831,18 @@ public class LeadDetailsService {
             String fallbackAction,
             String fallbackApproach
     ) {
-        if (kbSnippets.isEmpty()) {
-            return fallbackStructuredGuidance(noteTexts, conversationState, categorizedNotes, gapAnalysis, fallbackAction, fallbackApproach);
-        }
-
         String prompt = """
                 You are building the backend AI orchestration layer for an AI Sales Intelligence system.
                 You must behave like a senior sales strategist, not a generic assistant.
 
                 Use the lead payload and internal sales knowledge below to generate one sharp recommendation.
                 Base every conclusion on evidence from the payload.
+                Prioritize the lead payload over generic playbook retrieval when the lead details are rich and specific.
                 Do not ask questions that repeat known facts.
                 If emotional resistance is visible, prioritize trust and clarity before pressure.
                 If urgency is weak, do not invent urgency; identify cost of inaction as missing.
+                Score the client mainly on urgency to change, clarity of the problem, awareness of the problem, cost of inaction, value orientation, and decision readiness.
+                If the objection details are vague, if the client is not aware of the problem, or if the client is more focused on price than on direction and transformation, score lower.
                 All explanatory text returned to the frontend must be in Romanian.
                 Keep machine-friendly identifiers such as next_best_action.type in snake_case.
                 Return only a strict JSON object with the exact schema requested.
@@ -1562,6 +1878,8 @@ public class LeadDetailsService {
                   "what_to_avoid": [],
                   "missing_information": [],
                   "scores": {
+                    "client_score": 0,
+                    "next_call_close_probability": 0,
                     "lead_readiness_score": 0,
                     "buying_intent_score": 0,
                     "psychological_resistance_score": 0
@@ -1608,6 +1926,7 @@ public class LeadDetailsService {
                     "source": "%s",
                     "has_email": %s,
                     "has_phone": %s,
+                    "form_answers": [%s],
                     "notes": [%s],
                     "recent_insight_memory": "%s",
                     "relationship_sentiment": "%s",
@@ -1646,6 +1965,7 @@ public class LeadDetailsService {
                 safeText(lead.getSource(), "unknown"),
                 standardFields != null && standardFields.getEmail() != null && !standardFields.getEmail().isBlank(),
                 standardFields != null && standardFields.getPhone() != null && !standardFields.getPhone().isBlank(),
+                toQuotedArray(formAnswerSummaries, 10),
                 toQuotedArray(noteTexts, 8),
                 safeText(recentInsightMemory, "none"),
                 relationshipSignal.overallSentiment(),
@@ -1658,7 +1978,7 @@ public class LeadDetailsService {
                 toQuotedArray(conversationState.confirmedFacts(), 5),
                 toQuotedArray(gapAnalysis.doNotAskAgain(), 4),
                 toQuotedArray(conversationState.openQuestions(), 4),
-                String.join("\n---\n", kbSnippets)
+                kbSnippets.isEmpty() ? "none" : String.join("\n---\n", kbSnippets)
         );
 
         try {
@@ -1732,6 +2052,8 @@ public class LeadDetailsService {
                 extractTextArray(json, "what_to_avoid", 5),
                 extractTextArray(json, "missing_information", 5),
                 new StrategyScores(
+                        extractPercentOrDefault(scoresNode, "client_score", 50),
+                        extractPercentOrDefault(scoresNode, "next_call_close_probability", 35),
                         extractIntOrDefault(scoresNode, "lead_readiness_score", 5),
                         extractIntOrDefault(scoresNode, "buying_intent_score", 5),
                         extractIntOrDefault(scoresNode, "psychological_resistance_score", 5)
@@ -1788,11 +2110,377 @@ public class LeadDetailsService {
         appendList(approach, "Ce trebuie evitat", strategy.whatToAvoid());
         appendList(approach, "Informații lipsă", strategy.missingInformation());
         if (strategy.scores() != null) {
+            appendLabeledLine(approach, "Scor client", String.valueOf(strategy.scores().clientScore()));
+            appendLabeledLine(approach, "Șansă închidere apel următor", strategy.scores().nextCallCloseProbability() + "%");
             appendLabeledLine(approach, "Scor pregătire lead", String.valueOf(strategy.scores().leadReadinessScore()));
             appendLabeledLine(approach, "Scor intenție de cumpărare", String.valueOf(strategy.scores().buyingIntentScore()));
             appendLabeledLine(approach, "Scor rezistență psihologică", String.valueOf(strategy.scores().psychologicalResistanceScore()));
         }
+        appendList(approach, "Script tactic recomandat", buildTacticalScript(strategy));
         return approach.length() > 0 ? approach.toString() : fallbackApproach;
+    }
+
+    private String buildWhyNow(
+            int score,
+            RelationshipSignal relationshipSignal,
+            AnswerSignals answerSignals,
+            StrategicRecommendation strategy
+    ) {
+        if ("high".equals(relationshipSignal.riskLevel())) {
+            return "Riscul relației este ridicat și cere intervenție imediată.";
+        }
+        if ("decreasing".equals(relationshipSignal.trend())) {
+            return "Momentumul lead-ului scade și trebuie stabilizat înainte să intre în stagnare.";
+        }
+        if (answerSignals.readyToStartNow()) {
+            return "Lead-ul vrea să înceapă imediat și fereastra de conversie este activă acum.";
+        }
+        if (answerSignals.highPriority()) {
+            return "Problema este declarată ca prioritate ridicată și merită un pas concret acum.";
+        }
+        if (strategy != null && strategy.scores() != null && strategy.scores().buyingIntentScore() >= 7) {
+            return "Intenția de cumpărare este suficient de clară pentru a avansa conversația.";
+        }
+        if (score >= 75) {
+            return "Lead-ul este suficient de solid pentru un pas decisiv.";
+        }
+        return "Lead-ul are nevoie de un pas următor clar pentru a nu pierde progresul.";
+    }
+
+    private void applyAnswerSignals(AnswerSignals answerSignals, List<LeadAiInsightFactorResponse> factors) {
+        if (answerSignals.readyToStartNow()) {
+            factors.add(new LeadAiInsightFactorResponse(
+                    "Start Urgency",
+                    16,
+                    "positive",
+                    "Lead a declarat că vrea să înceapă acum sau cât mai curând."
+            ));
+        }
+        if (answerSignals.highPriority()) {
+            factors.add(new LeadAiInsightFactorResponse(
+                    "Problem Priority",
+                    10,
+                    "positive",
+                    "Lead tratează această problemă ca prioritate ridicată."
+            ));
+        }
+        if (answerSignals.singleDecisionMaker()) {
+            factors.add(new LeadAiInsightFactorResponse(
+                    "Decision Authority",
+                    8,
+                    "positive",
+                    "Lead-ul este singurul decident și nu depinde de aprobări suplimentare."
+            ));
+        }
+        if (answerSignals.budgetDeclared()) {
+            factors.add(new LeadAiInsightFactorResponse(
+                    "Budget Clarity",
+                    answerSignals.lowBudget() ? 4 : 6,
+                    "positive",
+                    answerSignals.lowBudget()
+                            ? "Există buget declarat, dar sensibil la accesibilitate și ROI rapid."
+                            : "Există buget declarat, ceea ce reduce incertitudinea comercială."
+            ));
+        }
+        if (answerSignals.costOfInactionHigh()) {
+            factors.add(new LeadAiInsightFactorResponse(
+                    "Cost of Inaction",
+                    8,
+                    "positive",
+                    "Lead-ul verbalizează costul stagnării, ceea ce crește motivația de acțiune."
+            ));
+        }
+    }
+
+    private int calculateStrategyScoreAdjustment(StrategyScores scores) {
+        int clientScoreAdjustment = Math.round((scores.clientScore() - 50) * 0.30f);
+        int readinessBoost = Math.max(0, scores.leadReadinessScore() - 5) * 3;
+        int intentBoost = Math.max(0, scores.buyingIntentScore() - 5) * 2;
+        int resistancePenalty = Math.max(0, scores.psychologicalResistanceScore() - 6) * 2;
+        return clientScoreAdjustment + readinessBoost + intentBoost - resistancePenalty;
+    }
+
+    private String buildStrategyScoreReason(StrategyScores scores) {
+        return "client_score="
+                + scores.clientScore()
+                + ", close_probability="
+                + scores.nextCallCloseProbability()
+                + ", lead readiness="
+                + scores.leadReadinessScore()
+                + ", buying intent="
+                + scores.buyingIntentScore()
+                + ", psychological resistance="
+                + scores.psychologicalResistanceScore()
+                + ".";
+    }
+
+    private List<String> buildTacticalScript(StrategicRecommendation strategy) {
+        if (strategy == null) {
+            return List.of();
+        }
+        List<String> script = new ArrayList<>();
+        String blocker = strategy.psychologicalInsight() == null ? "" : strategy.psychologicalInsight().primaryBlocker();
+        String motivation = strategy.psychologicalInsight() == null ? "" : strategy.psychologicalInsight().dominantMotivation();
+        String reframe = strategy.objectionStrategy() == null ? "" : strategy.objectionStrategy().reframe();
+        String mainObjection = strategy.objectionStrategy() == null ? "" : strategy.objectionStrategy().mainObjectionToAddress();
+
+        if (!blocker.isBlank()) {
+            script.add("Deschidere: validează explicit blocajul \"" + blocker + "\" înainte să propui soluția.");
+        }
+        if (!reframe.isBlank()) {
+            script.add("Reîncadrare: " + reframe);
+        } else if (!mainObjection.isBlank()) {
+            script.add("Reîncadrare: transformă obiecția \"" + mainObjection + "\" într-un plan de progres controlabil.");
+        }
+        if (!motivation.isBlank()) {
+            script.add("Ancoră de valoare: leagă propunerea de motivația dominantă \"" + motivation + "\".");
+        }
+        List<String> supportingPoints = strategy.objectionStrategy() == null ? List.of() : strategy.objectionStrategy().supportingPoints();
+        if (!supportingPoints.isEmpty()) {
+            script.add("Dovadă: folosește primul exemplu concret disponibil: " + supportingPoints.get(0));
+        }
+        if (strategy.scores() != null && strategy.scores().leadReadinessScore() >= 7) {
+            script.add("Închidere: propune un pas imediat și cu risc scăzut, nu o discuție teoretică lungă.");
+        }
+        return script.stream().limit(5).toList();
+    }
+
+    private AnswerSignals extractAnswerSignals(List<LeadAnswer> leadAnswers) {
+        if (leadAnswers == null || leadAnswers.isEmpty()) {
+            return new AnswerSignals(false, false, false, false, false, false, 0);
+        }
+
+        boolean readyToStartNow = false;
+        boolean budgetDeclared = false;
+        boolean lowBudget = false;
+        boolean singleDecisionMaker = false;
+        boolean highPriority = false;
+        boolean costOfInactionHigh = false;
+
+        for (LeadAnswer answer : leadAnswers) {
+            String label = normalizeForMatch(answer.getQuestionLabelSnapshot());
+            String value = normalizeAnswerValue(answer.getAnswerValue());
+            if (value.isBlank()) {
+                continue;
+            }
+
+            if (label.contains("buget")) {
+                budgetDeclared = true;
+                if (value.contains("<1000") || value.contains("sub 1000") || value.contains("sub_1000")) {
+                    lowBudget = true;
+                }
+            }
+            if ((label.contains("cand vrei sa incepi") || label.contains("când vrei să începi") || label.contains("fereastra de timp"))
+                    && (value.contains("acum") || value.contains("imediat") || value.contains("cat mai curand") || value.contains("cât mai curând"))) {
+                readyToStartNow = true;
+            }
+            if ((label.contains("singurul decident") || label.contains("alte persoane implicate") || label.contains("procesul de decizie"))
+                    && (value.contains("singurul decident") || value.contains("sunt singurul") || value.contains("doar eu"))) {
+                singleDecisionMaker = true;
+            }
+            if ((label.contains("cat de prioritar") || label.contains("cât de prioritar"))
+                    && extractFirstInt(value) >= 8) {
+                highPriority = true;
+            }
+            if ((label.contains("ce pierzi") || label.contains("costul inactiunii") || label.contains("costul inacțiunii"))
+                    && (value.contains("pierd") || value.contains("stres") || value.contains("frustrare") || value.contains("oportunit"))) {
+                costOfInactionHigh = true;
+            }
+        }
+
+        int scoreBoost = 0;
+        if (readyToStartNow) {
+            scoreBoost += 16;
+        }
+        if (highPriority) {
+            scoreBoost += 10;
+        }
+        if (singleDecisionMaker) {
+            scoreBoost += 8;
+        }
+        if (budgetDeclared) {
+            scoreBoost += lowBudget ? 4 : 6;
+        }
+        if (costOfInactionHigh) {
+            scoreBoost += 8;
+        }
+
+        return new AnswerSignals(readyToStartNow, budgetDeclared, lowBudget, singleDecisionMaker, highPriority, costOfInactionHigh, scoreBoost);
+    }
+
+    private QualificationSignals extractQualificationSignals(
+            List<String> noteTexts,
+            List<String> formAnswerSummaries,
+            AnswerSignals answerSignals
+    ) {
+        String combined = normalizeForMatch(String.join(" ", noteTexts) + " " + String.join(" ", formAnswerSummaries));
+        boolean clearProblem = combined.contains("lipsa")
+                || combined.contains("blocaj")
+                || combined.contains("problema")
+                || combined.contains("obstacol")
+                || combined.contains("dificultat");
+        boolean problemAware = answerSignals.costOfInactionHigh()
+                || combined.contains("pierd")
+                || combined.contains("stres")
+                || combined.contains("frustr")
+                || combined.contains("fara progres")
+                || combined.contains("fără progres");
+        boolean priceSensitive = (combined.contains("pret") || combined.contains("preț") || combined.contains("scump"))
+                && !(combined.contains("valoare") || combined.contains("rezultat") || combined.contains("directie") || combined.contains("direcție"));
+        boolean urgencyHigh = answerSignals.readyToStartNow()
+                || answerSignals.highPriority()
+                || combined.contains("cat mai curand")
+                || combined.contains("cât mai curând")
+                || combined.contains("acum")
+                || combined.contains("1 2 luni")
+                || combined.contains("1-2 luni");
+        boolean valueOriented = combined.contains("valoare")
+                || combined.contains("rezultate masurabile")
+                || combined.contains("rezultate măsurabile")
+                || combined.contains("exemple concrete")
+                || combined.contains("directie clara")
+                || combined.contains("direcție clară");
+        boolean objectionVague = !clearProblem;
+
+        int scoreAdjustment = 0;
+        scoreAdjustment += clearProblem ? 16 : -18;
+        scoreAdjustment += problemAware ? 14 : -16;
+        if (urgencyHigh) {
+            scoreAdjustment += 18;
+        }
+        if (valueOriented) {
+            scoreAdjustment += 12;
+        }
+        if (priceSensitive) {
+            scoreAdjustment -= 16;
+        }
+        if (answerSignals.singleDecisionMaker()) {
+            scoreAdjustment += 6;
+        }
+
+        return new QualificationSignals(
+                clearProblem,
+                problemAware,
+                priceSensitive,
+                urgencyHigh,
+                valueOriented,
+                objectionVague,
+                scoreAdjustment
+        );
+    }
+
+    private void applyQualificationSignals(QualificationSignals signals, List<LeadAiInsightFactorResponse> factors) {
+        factors.add(new LeadAiInsightFactorResponse(
+                "Problem Clarity",
+                signals.clearProblem() ? 16 : -18,
+                signals.clearProblem() ? "positive" : "negative",
+                signals.clearProblem()
+                        ? "Lead-ul descrie clar blocajul principal și problema de rezolvat."
+                        : "Detaliile despre obiecție sau problemă sunt prea vagi."
+        ));
+        factors.add(new LeadAiInsightFactorResponse(
+                "Problem Awareness",
+                signals.problemAware() ? 14 : -16,
+                signals.problemAware() ? "positive" : "negative",
+                signals.problemAware()
+                        ? "Lead-ul este conștient de costul stagnării și de impactul problemei."
+                        : "Lead-ul nu exprimă suficient conștientizarea problemei sau a costului inacțiunii."
+        ));
+        if (signals.urgencyHigh()) {
+            factors.add(new LeadAiInsightFactorResponse(
+                    "Urgency To Change",
+                    18,
+                    "positive",
+                    "Lead-ul exprimă presiune de timp și dorință reală de schimbare."
+            ));
+        }
+        if (signals.valueOriented()) {
+            factors.add(new LeadAiInsightFactorResponse(
+                    "Value Orientation",
+                    12,
+                    "positive",
+                    "Lead-ul caută direcție, rezultate și exemple concrete, nu doar preț."
+            ));
+        }
+        if (signals.priceSensitive()) {
+            factors.add(new LeadAiInsightFactorResponse(
+                    "Price Fixation",
+                    -16,
+                    "negative",
+                    "Discuția pare dominată de preț, nu de direcția programului sau valoare."
+            ));
+        }
+    }
+
+    private int calculateDerivedClientScore(int score, QualificationSignals qualificationSignals, AnswerSignals answerSignals) {
+        int clientScore = 45;
+        clientScore += qualificationSignals.clearProblem() ? 12 : -18;
+        clientScore += qualificationSignals.problemAware() ? 10 : -16;
+        clientScore += qualificationSignals.urgencyHigh() ? 14 : 0;
+        clientScore += qualificationSignals.valueOriented() ? 8 : 0;
+        clientScore += qualificationSignals.priceSensitive() ? -18 : 0;
+        clientScore += answerSignals.singleDecisionMaker() ? 5 : 0;
+        clientScore += answerSignals.readyToStartNow() ? 8 : 0;
+        clientScore += Math.round((score - 50) * 0.20f);
+        return clampScore(clientScore);
+    }
+
+    private int calculateFallbackCloseProbability(int clientScore, RelationshipSignal relationshipSignal, AnswerSignals answerSignals) {
+        int probability = Math.round(clientScore * 0.65f);
+        if ("high".equals(relationshipSignal.riskLevel())) {
+            probability -= 12;
+        } else if ("medium".equals(relationshipSignal.riskLevel())) {
+            probability -= 6;
+        }
+        if (answerSignals.readyToStartNow()) {
+            probability += 8;
+        }
+        if (answerSignals.singleDecisionMaker()) {
+            probability += 5;
+        }
+        return clampScore(probability);
+    }
+
+    private int clampScore(int value) {
+        return Math.max(0, Math.min(100, value));
+    }
+
+    private List<String> noteTextsFromAnswersAndRecentMemory(List<String> formAnswerSummaries, List<LeadAiInsightMemory> recentMemories) {
+        List<String> values = new ArrayList<>(formAnswerSummaries == null ? List.of() : formAnswerSummaries);
+        if (recentMemories != null) {
+            recentMemories.stream()
+                    .map(LeadAiInsightMemory::getRecommendedAction)
+                    .filter(value -> value != null && !value.isBlank())
+                    .limit(2)
+                    .forEach(values::add);
+        }
+        return values;
+    }
+
+    private String normalizeAnswerValue(JsonNode value) {
+        if (value == null || value.isNull()) {
+            return "";
+        }
+        if (value.isTextual()) {
+            return normalizeForMatch(value.asText());
+        }
+        if (value.isArray()) {
+            List<String> values = new ArrayList<>();
+            value.forEach(item -> values.add(item.asText("")));
+            return normalizeForMatch(String.join(" ", values));
+        }
+        return normalizeForMatch(value.asText(""));
+    }
+
+    private int extractFirstInt(String value) {
+        if (value == null || value.isBlank()) {
+            return 0;
+        }
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("(\\d+)").matcher(value);
+        if (matcher.find()) {
+            return Integer.parseInt(matcher.group(1));
+        }
+        return 0;
     }
 
     private void appendLabeledLine(StringBuilder target, String label, String value) {
@@ -1909,6 +2597,144 @@ public class LeadDetailsService {
         return "Romanian";
     }
 
+    private List<String> summarizeLeadAnswers(List<LeadAnswer> leadAnswers) {
+        if (leadAnswers == null || leadAnswers.isEmpty()) {
+            return List.of();
+        }
+        return leadAnswers.stream()
+                .map(answer -> {
+                    String label = safeText(answer.getQuestionLabelSnapshot(), "Întrebare");
+                    String value = serializeAnswer(answer.getAnswerValue());
+                    if (value == null || value.isBlank()) {
+                        return "";
+                    }
+                    return truncate(label + ": " + value, 240);
+                })
+                .filter(value -> !value.isBlank())
+                .limit(10)
+                .toList();
+    }
+
+    private void validateAnswerValue(LeadFormQuestion question, JsonNode value) {
+        String questionType = question.getQuestionType();
+        UUID questionId = question.getId();
+
+        if (TEXT_TYPES.contains(questionType)) {
+            if (!value.isTextual()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "answers[questionId=" + questionId + "].value invalid type: expected string for " + questionType);
+            }
+            return;
+        }
+
+        if ("single_select".equals(questionType)) {
+            List<String> options = extractSelectOptions(question);
+            if (!value.isTextual()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "answers[questionId=" + questionId + "].value invalid type: expected string for single_select");
+            }
+            if (!options.contains(value.asText())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "answers[questionId=" + questionId + "].value invalid: not in options");
+            }
+            return;
+        }
+
+        if ("multi_select".equals(questionType)) {
+            List<String> options = extractSelectOptions(question);
+            if (!value.isArray()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "answers[questionId=" + questionId + "].value invalid type: expected array for multi_select");
+            }
+            for (JsonNode selected : value) {
+                if (!selected.isTextual()) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "answers[questionId=" + questionId + "].value invalid type: expected array of strings");
+                }
+                if (!options.contains(selected.asText())) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "answers[questionId=" + questionId + "].value invalid: contains option outside allowed list");
+                }
+            }
+            return;
+        }
+
+        if ("number".equals(questionType) && !value.isNumber()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "answers[questionId=" + questionId + "].value invalid type: expected number");
+        }
+
+        if ("boolean".equals(questionType) && !value.isBoolean()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "answers[questionId=" + questionId + "].value invalid type: expected boolean");
+        }
+
+        if ("date".equals(questionType)) {
+            if (!value.isTextual()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "answers[questionId=" + questionId + "].value invalid type: expected date string (yyyy-MM-dd)");
+            }
+            try {
+                LocalDate.parse(value.asText());
+            } catch (DateTimeParseException exception) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "answers[questionId=" + questionId + "].value invalid date format: expected yyyy-MM-dd");
+            }
+        }
+    }
+
+    private JsonNode normalizeAnswerValue(LeadFormQuestion question, JsonNode value) {
+        if (value == null || value.isNull()) {
+            return null;
+        }
+
+        String questionType = question.getQuestionType();
+        if (value.isTextual()) {
+            String trimmed = value.asText().trim();
+            if (trimmed.isEmpty()) {
+                return null;
+            }
+            if (TEXT_TYPES.contains(questionType) || "single_select".equals(questionType) || "date".equals(questionType)) {
+                return TextNode.valueOf(trimmed);
+            }
+            if ("number".equals(questionType)) {
+                try {
+                    return DecimalNode.valueOf(new BigDecimal(trimmed));
+                } catch (NumberFormatException exception) {
+                    return value;
+                }
+            }
+            if ("boolean".equals(questionType)) {
+                if ("true".equalsIgnoreCase(trimmed)) {
+                    return BooleanNode.TRUE;
+                }
+                if ("false".equalsIgnoreCase(trimmed)) {
+                    return BooleanNode.FALSE;
+                }
+                return value;
+            }
+        }
+
+        return value;
+    }
+
+    private List<String> extractSelectOptions(LeadFormQuestion question) {
+        JsonNode optionsNode = question.getOptionsJson();
+        if (optionsNode == null || !optionsNode.isArray() || optionsNode.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "optionsJson invalid JSON for questionId=" + question.getId() + ": expected non-empty JSON array of strings");
+        }
+        List<String> options = new ArrayList<>();
+        for (JsonNode optionNode : optionsNode) {
+            if (!optionNode.isTextual() || optionNode.asText().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "optionsJson invalid JSON for questionId=" + question.getId() + ": expected non-empty JSON array of strings");
+            }
+            options.add(optionNode.asText());
+        }
+        return options;
+    }
+
     private String safeText(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value;
     }
@@ -1980,6 +2806,13 @@ public class LeadDetailsService {
         return defaultValue;
     }
 
+    private int extractPercentOrDefault(JsonNode json, String field, int defaultValue) {
+        if (json != null && json.has(field) && json.get(field).isNumber()) {
+            return clampScore(json.get(field).asInt());
+        }
+        return clampScore(defaultValue);
+    }
+
     private JsonNode parseJsonSafely(String raw) throws JsonProcessingException {
         if (raw == null || raw.isBlank()) {
             throw new JsonProcessingException("empty model response") {};
@@ -2000,6 +2833,18 @@ public class LeadDetailsService {
     private Lead getLeadOrThrow(UUID leadId, UUID companyId) {
         return leadRepository.findByIdAndCompanyId(leadId, companyId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead not found"));
+    }
+
+    private Lead getLeadOrThrow(UUID leadId, CompanyMembership membership) {
+        Lead lead = getLeadOrThrow(leadId, membership.getCompany().getId());
+        if (membership.getRole() == com.salesway.common.enums.MembershipRole.AGENT) {
+            UUID currentUserId = membership.getUser().getId();
+            UUID assignedToUserId = lead.getAssignedToUserId();
+            if (assignedToUserId != null && !assignedToUserId.equals(currentUserId)) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead not found");
+            }
+        }
+        return lead;
     }
 
     private void validatePaging(int page, int size) {
@@ -2362,8 +3207,30 @@ public class LeadDetailsService {
     ) {}
 
     private record StrategyScores(
+            int clientScore,
+            int nextCallCloseProbability,
             int leadReadinessScore,
             int buyingIntentScore,
             int psychologicalResistanceScore
+    ) {}
+
+    private record QualificationSignals(
+            boolean clearProblem,
+            boolean problemAware,
+            boolean priceSensitive,
+            boolean urgencyHigh,
+            boolean valueOriented,
+            boolean objectionVague,
+            int scoreAdjustment
+    ) {}
+
+    private record AnswerSignals(
+            boolean readyToStartNow,
+            boolean budgetDeclared,
+            boolean lowBudget,
+            boolean singleDecisionMaker,
+            boolean highPriority,
+            boolean costOfInactionHigh,
+            int scoreBoost
     ) {}
 }

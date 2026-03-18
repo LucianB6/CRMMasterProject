@@ -7,10 +7,12 @@ import com.salesway.leads.dto.LeadActivityResponse;
 import com.salesway.leads.dto.LeadAiInsightsResponse;
 import com.salesway.leads.dto.LeadAiInsightFeedbackRequest;
 import com.salesway.leads.dto.LeadAssigneeUpdateRequest;
+import com.salesway.leads.dto.LeadAnswersUpdateRequest;
 import com.salesway.leads.dto.LeadCallCreateRequest;
 import com.salesway.leads.dto.LeadDetailAnswerItemResponse;
 import com.salesway.leads.dto.LeadNoteRequest;
 import com.salesway.leads.dto.LeadTaskCreateRequest;
+import com.salesway.leads.dto.LeadFormResponse;
 import com.salesway.leads.dto.LeadStageUpdateRequest;
 import com.salesway.leads.dto.LeadStatusUpdateRequest;
 import com.salesway.leads.service.LeadDetailsService;
@@ -22,6 +24,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -80,6 +83,19 @@ public class LeadManagementController {
     @GetMapping("/{leadId}/answers")
     public ResponseEntity<List<LeadDetailAnswerItemResponse>> getAnswers(@PathVariable("leadId") UUID leadId) {
         return ResponseEntity.ok(leadDetailsService.getAnswers(leadId));
+    }
+
+    @PutMapping("/{leadId}/answers")
+    public ResponseEntity<List<LeadDetailAnswerItemResponse>> updateAnswers(
+            @PathVariable("leadId") UUID leadId,
+            @Valid @RequestBody LeadAnswersUpdateRequest request
+    ) {
+        return ResponseEntity.ok(leadDetailsService.updateAnswers(leadId, request));
+    }
+
+    @GetMapping("/{leadId}/form")
+    public ResponseEntity<LeadFormResponse> getLeadForm(@PathVariable("leadId") UUID leadId) {
+        return ResponseEntity.ok(leadDetailsService.getLeadForm(leadId));
     }
 
     @PatchMapping("/{leadId}/status")

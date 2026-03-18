@@ -1,18 +1,24 @@
 package com.salesway.auth.service;
 
+import com.salesway.auth.dto.ForgotPasswordRequest;
 import com.salesway.auth.dto.GoogleLoginRequest;
 import com.salesway.auth.dto.GoogleSignupIntent;
 import com.salesway.auth.dto.LoginRequest;
 import com.salesway.auth.dto.LoginResponse;
+import com.salesway.auth.dto.ResetPasswordRequest;
 import com.salesway.auth.dto.SignupRequest;
 import com.salesway.auth.dto.SignupResponse;
 import com.salesway.auth.dto.UpdateProfileRequest;
+import com.salesway.auth.entity.PasswordResetToken;
 import com.salesway.auth.entity.User;
+import com.salesway.auth.repository.PasswordResetTokenRepository;
 import com.salesway.auth.repository.UserRepository;
 import com.salesway.common.enums.MembershipRole;
 import com.salesway.common.enums.MembershipStatus;
 import com.salesway.companies.entity.Company;
 import com.salesway.companies.repository.CompanyRepository;
+import com.salesway.email.dto.PasswordResetEmailPayload;
+import com.salesway.email.service.EmailService;
 import com.salesway.invitations.entity.Invitation;
 import com.salesway.invitations.enums.InvitationStatus;
 import com.salesway.invitations.repository.InvitationRepository;
@@ -24,6 +30,7 @@ import com.salesway.security.CustomUserDetails;
 import com.salesway.security.JwtService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -33,17 +40,28 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Base64;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class AuthService {
     private static final Logger LOG = LoggerFactory.getLogger(AuthService.class);
+    private static final int PASSWORD_RESET_TOKEN_BYTES = 32;
+    private static final long PASSWORD_RESET_TTL_HOURS = 2;
+    private static final long PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS = 900;
+    private static final int PASSWORD_RESET_RATE_LIMIT_MAX_ATTEMPTS = 5;
 
     private final AuthenticationManager authenticationManager;
     private final UserRepository userRepository;
@@ -55,6 +73,11 @@ public class AuthService {
     private final ManagerAccessService managerAccessService;
     private final GoogleIdTokenVerifier googleIdTokenVerifier;
     private final InvitationRepository invitationRepository;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final EmailService emailService;
+    private final String resetPasswordBaseUrl;
+    private final SecureRandom secureRandom = new SecureRandom();
+    private final Map<String, PasswordResetRateLimitEntry> passwordResetRateLimitEntries = new ConcurrentHashMap<>();
 
     public AuthService(
             AuthenticationManager authenticationManager,
@@ -66,7 +89,10 @@ public class AuthService {
             NotificationService notificationService,
             ManagerAccessService managerAccessService,
             GoogleIdTokenVerifier googleIdTokenVerifier,
-            InvitationRepository invitationRepository
+            InvitationRepository invitationRepository,
+            PasswordResetTokenRepository passwordResetTokenRepository,
+            EmailService emailService,
+            @Value("${app.auth.reset-password-base-url:http://localhost:3000/reset-password}") String resetPasswordBaseUrl
     ) {
         this.authenticationManager = authenticationManager;
         this.userRepository = userRepository;
@@ -78,6 +104,9 @@ public class AuthService {
         this.managerAccessService = managerAccessService;
         this.googleIdTokenVerifier = googleIdTokenVerifier;
         this.invitationRepository = invitationRepository;
+        this.passwordResetTokenRepository = passwordResetTokenRepository;
+        this.emailService = emailService;
+        this.resetPasswordBaseUrl = resetPasswordBaseUrl;
     }
 
     @Transactional
@@ -168,6 +197,63 @@ public class AuthService {
         return userRepository.save(user);
     }
 
+    @Transactional
+    public void requestPasswordReset(ForgotPasswordRequest request, String clientIp) {
+        String normalizedEmail = request.getEmail().trim().toLowerCase();
+        if (isPasswordResetRateLimited(normalizedEmail, clientIp == null ? "unknown" : clientIp.trim())) {
+            LOG.warn("Password reset rate limit reached for email={} ip={}", normalizedEmail, clientIp);
+            return;
+        }
+        User user = userRepository.findByEmailIgnoreCase(normalizedEmail).orElse(null);
+        if (user == null || Boolean.FALSE.equals(user.getIsActive())) {
+            LOG.info("Password reset requested for unknown or inactive email={}", normalizedEmail);
+            return;
+        }
+
+        invalidateActivePasswordResetTokens(user.getId());
+
+        String rawToken = generateSecureToken();
+        PasswordResetToken token = new PasswordResetToken();
+        token.setUser(user);
+        token.setTokenHash(hashToken(rawToken));
+        token.setExpiresAt(Instant.now().plus(PASSWORD_RESET_TTL_HOURS, ChronoUnit.HOURS));
+        passwordResetTokenRepository.save(token);
+
+        String resetLink = resetPasswordBaseUrl + "?token=" + rawToken;
+        try {
+            emailService.sendPasswordResetEmail(new PasswordResetEmailPayload(
+                    user.getEmail(),
+                    resetLink,
+                    token.getExpiresAt()
+            ));
+        } catch (RuntimeException ex) {
+            LOG.error("Password reset email processing failed for {}", user.getEmail(), ex);
+        }
+    }
+
+    @Transactional
+    public void resetPassword(ResetPasswordRequest request) {
+        String rawToken = request.getToken().trim();
+        PasswordResetToken resetToken = passwordResetTokenRepository
+                .findFirstByTokenHashAndUsedAtIsNullOrderByCreatedAtDesc(hashToken(rawToken))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid or expired reset token"));
+
+        if (resetToken.getExpiresAt().isBefore(Instant.now())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid or expired reset token");
+        }
+
+        User user = resetToken.getUser();
+        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        user.setPasswordUpdatedAt(Instant.now());
+        userRepository.save(user);
+
+        Instant usedAt = Instant.now();
+        resetToken.setUsedAt(usedAt);
+        passwordResetTokenRepository.save(resetToken);
+
+        invalidateActivePasswordResetTokens(user.getId(), usedAt);
+    }
+
     private void validateGoogleLoginRequest(GoogleLoginRequest request) {
         boolean hasInvite = hasText(request.getInviteToken());
         boolean hasManagerSignup = request.getSignupIntent() == GoogleSignupIntent.MANAGER;
@@ -196,6 +282,59 @@ public class AuthService {
             request.setFirstName(firstName);
             request.setLastName(lastName);
         }
+    }
+
+    private void invalidateActivePasswordResetTokens(UUID userId) {
+        invalidateActivePasswordResetTokens(userId, Instant.now());
+    }
+
+    private void invalidateActivePasswordResetTokens(UUID userId, Instant usedAt) {
+        List<PasswordResetToken> activeTokens = passwordResetTokenRepository
+                .findAllByUserIdAndUsedAtIsNullAndExpiresAtAfter(userId, usedAt);
+        for (PasswordResetToken activeToken : activeTokens) {
+            activeToken.setUsedAt(usedAt);
+        }
+        if (!activeTokens.isEmpty()) {
+            passwordResetTokenRepository.saveAll(activeTokens);
+        }
+    }
+
+    private String generateSecureToken() {
+        byte[] bytes = new byte[PASSWORD_RESET_TOKEN_BYTES];
+        secureRandom.nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private String hashToken(String token) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(token.getBytes(StandardCharsets.UTF_8));
+            StringBuilder builder = new StringBuilder(hash.length * 2);
+            for (byte value : hash) {
+                builder.append(String.format("%02x", value));
+            }
+            return builder.toString();
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 not available", ex);
+        }
+    }
+
+    private boolean isPasswordResetRateLimited(String normalizedEmail, String clientIp) {
+        Instant now = Instant.now();
+        passwordResetRateLimitEntries.entrySet().removeIf(entry -> entry.getValue().windowEndsAt().isBefore(now));
+
+        String key = normalizedEmail + "|" + clientIp;
+        PasswordResetRateLimitEntry currentEntry = passwordResetRateLimitEntries.compute(key, (ignored, existing) -> {
+            if (existing == null || existing.windowEndsAt().isBefore(now)) {
+                return new PasswordResetRateLimitEntry(1, now.plusSeconds(PASSWORD_RESET_RATE_LIMIT_WINDOW_SECONDS));
+            }
+            return new PasswordResetRateLimitEntry(existing.attempts() + 1, existing.windowEndsAt());
+        });
+
+        return currentEntry != null && currentEntry.attempts() > PASSWORD_RESET_RATE_LIMIT_MAX_ATTEMPTS;
+    }
+
+    private record PasswordResetRateLimitEntry(int attempts, Instant windowEndsAt) {
     }
 
     private User resolveOrCreateGoogleUser(GoogleIdTokenVerifier.GoogleTokenClaims claims) {

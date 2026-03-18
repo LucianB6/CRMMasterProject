@@ -5,6 +5,7 @@ public record LeadAiNextBestActionResponse(
         String priority,
         String reason,
         String whyNow,
-        String deadlineHint
+        String deadlineHint,
+        String channel
 ) {
 }

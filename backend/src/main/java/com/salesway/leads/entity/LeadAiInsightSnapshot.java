@@ -38,6 +38,12 @@ public class LeadAiInsightSnapshot extends AuditedEntity {
     @Column(name = "score", nullable = false)
     private int score;
 
+    @Column(name = "client_score", nullable = false)
+    private int clientScore;
+
+    @Column(name = "next_call_close_probability", nullable = false)
+    private int nextCallCloseProbability;
+
     @Column(name = "relationship_sentiment")
     private String relationshipSentiment;
 
@@ -113,6 +119,22 @@ public class LeadAiInsightSnapshot extends AuditedEntity {
 
     public void setScore(int score) {
         this.score = score;
+    }
+
+    public int getClientScore() {
+        return clientScore;
+    }
+
+    public void setClientScore(int clientScore) {
+        this.clientScore = clientScore;
+    }
+
+    public int getNextCallCloseProbability() {
+        return nextCallCloseProbability;
+    }
+
+    public void setNextCallCloseProbability(int nextCallCloseProbability) {
+        this.nextCallCloseProbability = nextCallCloseProbability;
     }
 
     public String getRelationshipSentiment() {

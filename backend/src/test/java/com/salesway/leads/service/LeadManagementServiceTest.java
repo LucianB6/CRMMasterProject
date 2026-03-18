@@ -13,6 +13,7 @@ import com.salesway.leads.repository.LeadAnswerRepository;
 import com.salesway.leads.repository.LeadRepository;
 import com.salesway.leads.repository.LeadStandardFieldsRepository;
 import com.salesway.leads.repository.PipelineStageRepository;
+import com.salesway.manager.service.CompanyAccessService;
 import com.salesway.manager.service.ManagerAccessService;
 import com.salesway.memberships.entity.CompanyMembership;
 import com.salesway.memberships.repository.CompanyMembershipRepository;
@@ -75,12 +76,15 @@ class LeadManagementServiceTest {
         managerMembership.setStatus(MembershipStatus.ACTIVE);
 
         ManagerAccessService managerAccessService = mock(ManagerAccessService.class);
+        CompanyAccessService companyAccessService = mock(CompanyAccessService.class);
+        when(companyAccessService.getActiveMembership()).thenReturn(managerMembership);
         when(managerAccessService.getManagerMembership()).thenReturn(managerMembership);
 
         leadManagementService = new LeadManagementService(
                 leadRepository,
                 standardFieldsRepository,
                 leadAnswerRepository,
+                companyAccessService,
                 managerAccessService,
                 companyMembershipRepository,
                 taskBoardService,

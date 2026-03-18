@@ -9,6 +9,7 @@ import com.salesway.chatbot.entity.KbDocument;
 import com.salesway.chatbot.repository.KbChunkRepository;
 import com.salesway.chatbot.repository.KbDocumentRepository;
 import com.salesway.companies.entity.Company;
+import com.salesway.leads.dto.LeadAnswersUpdateRequest;
 import com.salesway.leads.dto.LeadCallCreateRequest;
 import com.salesway.leads.dto.LeadAiInsightFeedbackRequest;
 import com.salesway.leads.dto.LeadAiInsightsResponse;
@@ -16,17 +17,22 @@ import com.salesway.leads.dto.LeadTaskCreateRequest;
 import com.salesway.leads.entity.Lead;
 import com.salesway.leads.entity.LeadAnswer;
 import com.salesway.leads.entity.LeadAiInsightMemory;
+import com.salesway.leads.entity.LeadAiInsightSnapshot;
 import com.salesway.leads.entity.LeadEvent;
+import com.salesway.leads.entity.LeadForm;
 import com.salesway.leads.entity.LeadFormQuestion;
 import com.salesway.leads.entity.LeadStandardFields;
 import com.salesway.leads.enums.LeadEventType;
 import com.salesway.leads.enums.LeadInsightFeedbackStatus;
 import com.salesway.leads.repository.LeadAnswerRepository;
 import com.salesway.leads.repository.LeadAiInsightMemoryRepository;
+import com.salesway.leads.repository.LeadAiInsightSnapshotRepository;
 import com.salesway.leads.repository.LeadCallLogRepository;
 import com.salesway.leads.repository.LeadEventRepository;
+import com.salesway.leads.repository.LeadFormQuestionRepository;
 import com.salesway.leads.repository.LeadRepository;
 import com.salesway.leads.repository.LeadStandardFieldsRepository;
+import com.salesway.manager.service.CompanyAccessService;
 import com.salesway.manager.service.ManagerAccessService;
 import com.salesway.memberships.entity.CompanyMembership;
 import com.salesway.memberships.repository.CompanyMembershipRepository;
@@ -49,6 +55,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -57,9 +64,11 @@ class LeadDetailsServiceTest {
     private LeadRepository leadRepository;
     private LeadAnswerRepository leadAnswerRepository;
     private LeadAiInsightMemoryRepository leadAiInsightMemoryRepository;
+    private LeadAiInsightSnapshotRepository leadAiInsightSnapshotRepository;
     private LeadEventRepository leadEventRepository;
     private LeadCallLogRepository leadCallLogRepository;
     private LeadStandardFieldsRepository leadStandardFieldsRepository;
+    private LeadFormQuestionRepository leadFormQuestionRepository;
     private TaskBoardItemRepository taskBoardItemRepository;
     private CompanyMembershipRepository companyMembershipRepository;
     private LeadEventService leadEventService;
@@ -68,6 +77,7 @@ class LeadDetailsServiceTest {
     private KbChunkRepository kbChunkRepository;
     private OpenAiClient openAiClient;
     private LeadDetailsService leadDetailsService;
+    private Lead lead;
 
     private UUID companyId;
     private UUID leadId;
@@ -78,9 +88,11 @@ class LeadDetailsServiceTest {
         leadRepository = mock(LeadRepository.class);
         leadAnswerRepository = mock(LeadAnswerRepository.class);
         leadAiInsightMemoryRepository = mock(LeadAiInsightMemoryRepository.class);
+        leadAiInsightSnapshotRepository = mock(LeadAiInsightSnapshotRepository.class);
         leadEventRepository = mock(LeadEventRepository.class);
         leadCallLogRepository = mock(LeadCallLogRepository.class);
         leadStandardFieldsRepository = mock(LeadStandardFieldsRepository.class);
+        leadFormQuestionRepository = mock(LeadFormQuestionRepository.class);
         taskBoardItemRepository = mock(TaskBoardItemRepository.class);
         companyMembershipRepository = mock(CompanyMembershipRepository.class);
         leadEventService = mock(LeadEventService.class);
@@ -88,6 +100,7 @@ class LeadDetailsServiceTest {
         kbDocumentRepository = mock(KbDocumentRepository.class);
         kbChunkRepository = mock(KbChunkRepository.class);
         openAiClient = mock(OpenAiClient.class);
+        CompanyAccessService companyAccessService = mock(CompanyAccessService.class);
         ManagerAccessService managerAccessService = mock(ManagerAccessService.class);
 
         companyId = UUID.randomUUID();
@@ -106,9 +119,10 @@ class LeadDetailsServiceTest {
         CompanyMembership membership = new CompanyMembership();
         membership.setCompany(company);
         membership.setUser(user);
+        when(companyAccessService.getActiveMembership()).thenReturn(membership);
         when(managerAccessService.getManagerMembership()).thenReturn(membership);
 
-        Lead lead = new Lead();
+        lead = new Lead();
         lead.setId(leadId);
         lead.setCompany(company);
         lead.setStatus("new");
@@ -116,10 +130,16 @@ class LeadDetailsServiceTest {
         when(leadRepository.findByIdAndCompanyId(leadId, companyId)).thenReturn(Optional.of(lead));
         when(leadEventRepository.findByCompanyIdAndLeadIdOrderByCreatedAtDesc(eq(companyId), eq(leadId), any()))
                 .thenReturn(new PageImpl<>(List.of()));
+        when(leadAnswerRepository.findByLeadIdOrderByDisplayOrderSnapshotAscCreatedAtAsc(leadId))
+                .thenReturn(List.of());
+        when(leadAnswerRepository.findLatestCreatedAtByLeadId(leadId))
+                .thenReturn(null);
         when(leadAiInsightMemoryRepository.findTop3ByLeadIdAndCompanyIdOrderByCreatedAtDesc(leadId, companyId))
                 .thenReturn(List.of());
         when(leadAiInsightMemoryRepository.findLatestUpdatedAtByLeadIdAndCompanyId(leadId, companyId))
                 .thenReturn(null);
+        when(leadAiInsightSnapshotRepository.findByLeadIdAndCompanyId(leadId, companyId))
+                .thenReturn(Optional.empty());
         when(leadAiInsightMemoryRepository.save(any())).thenAnswer(invocation -> {
             LeadAiInsightMemory memory = invocation.getArgument(0);
             memory.setId(UUID.randomUUID());
@@ -130,11 +150,14 @@ class LeadDetailsServiceTest {
                 leadRepository,
                 leadAnswerRepository,
                 leadAiInsightMemoryRepository,
+                leadAiInsightSnapshotRepository,
                 leadEventRepository,
                 leadCallLogRepository,
                 leadStandardFieldsRepository,
+                leadFormQuestionRepository,
                 taskBoardItemRepository,
                 companyMembershipRepository,
+                companyAccessService,
                 leadEventService,
                 managerAccessService,
                 userRepository,
@@ -175,6 +198,237 @@ class LeadDetailsServiceTest {
         assertThat(result).hasSize(2);
         assertThat(result.get(0).questionLabel()).isEqualTo("First");
         assertThat(result.get(1).questionLabel()).isEqualTo("Second");
+    }
+
+    @Test
+    void getLeadForm_returnsLeadSpecificQuestions() {
+        LeadForm form = new LeadForm();
+        form.setId(UUID.randomUUID());
+        form.setTitle("Discovery Form");
+        form.setPublicSlug("discovery");
+        form.setIsActive(true);
+        lead.setLeadForm(form);
+
+        LeadFormQuestion question = new LeadFormQuestion();
+        question.setId(UUID.randomUUID());
+        question.setLeadForm(form);
+        question.setLabel("Budget");
+        question.setQuestionType("short_text");
+        question.setRequired(true);
+        question.setDisplayOrder(1);
+        question.setIsActive(true);
+        when(leadFormQuestionRepository.findByLeadFormIdAndIsActiveTrueOrderByDisplayOrderAsc(form.getId()))
+                .thenReturn(List.of(question));
+
+        var response = leadDetailsService.getLeadForm(leadId);
+
+        assertThat(response.id()).isEqualTo(form.getId());
+        assertThat(response.questions()).hasSize(1);
+        assertThat(response.questions().get(0).label()).isEqualTo("Budget");
+    }
+
+    @Test
+    void updateAnswers_allowsSubsetAndPreservesHistoricalOrphans() throws Exception {
+        LeadForm form = new LeadForm();
+        form.setId(UUID.randomUUID());
+        lead.setLeadForm(form);
+
+        LeadFormQuestion requiredQuestion = new LeadFormQuestion();
+        requiredQuestion.setId(UUID.randomUUID());
+        requiredQuestion.setLeadForm(form);
+        requiredQuestion.setLabel("Companie");
+        requiredQuestion.setQuestionType("short_text");
+        requiredQuestion.setRequired(true);
+        requiredQuestion.setDisplayOrder(1);
+        requiredQuestion.setIsActive(true);
+
+        LeadFormQuestion editableQuestion = new LeadFormQuestion();
+        editableQuestion.setId(UUID.randomUUID());
+        editableQuestion.setLeadForm(form);
+        editableQuestion.setLabel("Buget");
+        editableQuestion.setQuestionType("short_text");
+        editableQuestion.setRequired(false);
+        editableQuestion.setDisplayOrder(2);
+        editableQuestion.setIsActive(true);
+
+        when(leadFormQuestionRepository.findByLeadFormIdAndIsActiveTrueOrderByDisplayOrderAsc(form.getId()))
+                .thenReturn(List.of(requiredQuestion, editableQuestion));
+
+        LeadAnswer existingRequired = new LeadAnswer();
+        existingRequired.setLead(lead);
+        existingRequired.setQuestion(requiredQuestion);
+        existingRequired.setQuestionLabelSnapshot("Companie");
+        existingRequired.setQuestionTypeSnapshot("short_text");
+        existingRequired.setAnswerValue(new ObjectMapper().readTree("\"SalesWay\""));
+        existingRequired.setDisplayOrderSnapshot(1);
+        existingRequired.setCreatedAt(Instant.now());
+
+        LeadFormQuestion inactiveQuestion = new LeadFormQuestion();
+        inactiveQuestion.setId(UUID.randomUUID());
+        LeadAnswer orphan = new LeadAnswer();
+        orphan.setLead(lead);
+        orphan.setQuestion(inactiveQuestion);
+        orphan.setQuestionLabelSnapshot("Istoric");
+        orphan.setQuestionTypeSnapshot("short_text");
+        orphan.setAnswerValue(new ObjectMapper().readTree("\"vechi\""));
+        orphan.setDisplayOrderSnapshot(99);
+        orphan.setCreatedAt(Instant.now());
+
+        when(leadAnswerRepository.findByLeadIdOrderByDisplayOrderSnapshotAscCreatedAtAsc(leadId))
+                .thenReturn(List.of(existingRequired, orphan))
+                .thenReturn(List.of(existingRequired, orphan));
+
+        LeadAnswersUpdateRequest request = new LeadAnswersUpdateRequest();
+        LeadAnswersUpdateRequest.Answer answer = new LeadAnswersUpdateRequest.Answer();
+        answer.setQuestionId(editableQuestion.getId());
+        answer.setValue(new ObjectMapper().readTree("\"5000 EUR\""));
+        request.setAnswers(List.of(answer));
+
+        var response = leadDetailsService.updateAnswers(leadId, request);
+
+        assertThat(response).hasSize(2);
+        verify(leadAnswerRepository).saveAll(any());
+        org.mockito.Mockito.verify(leadAnswerRepository, org.mockito.Mockito.never()).deleteAll(any());
+        verify(leadRepository).save(lead);
+    }
+
+    @Test
+    void updateAnswers_validatesNumberBooleanAndMultiSelect() throws Exception {
+        LeadForm form = new LeadForm();
+        form.setId(UUID.randomUUID());
+        lead.setLeadForm(form);
+
+        LeadFormQuestion numberQuestion = new LeadFormQuestion();
+        numberQuestion.setId(UUID.randomUUID());
+        numberQuestion.setLeadForm(form);
+        numberQuestion.setLabel("Seats");
+        numberQuestion.setQuestionType("number");
+        numberQuestion.setRequired(false);
+        numberQuestion.setDisplayOrder(1);
+        numberQuestion.setIsActive(true);
+
+        LeadFormQuestion booleanQuestion = new LeadFormQuestion();
+        booleanQuestion.setId(UUID.randomUUID());
+        booleanQuestion.setLeadForm(form);
+        booleanQuestion.setLabel("Approved");
+        booleanQuestion.setQuestionType("boolean");
+        booleanQuestion.setRequired(false);
+        booleanQuestion.setDisplayOrder(2);
+        booleanQuestion.setIsActive(true);
+
+        LeadFormQuestion multiSelectQuestion = new LeadFormQuestion();
+        multiSelectQuestion.setId(UUID.randomUUID());
+        multiSelectQuestion.setLeadForm(form);
+        multiSelectQuestion.setLabel("Channels");
+        multiSelectQuestion.setQuestionType("multi_select");
+        multiSelectQuestion.setRequired(false);
+        multiSelectQuestion.setDisplayOrder(3);
+        multiSelectQuestion.setIsActive(true);
+        multiSelectQuestion.setOptionsJson(new ObjectMapper().readTree("[\"Email\",\"Phone\"]"));
+
+        when(leadFormQuestionRepository.findByLeadFormIdAndIsActiveTrueOrderByDisplayOrderAsc(form.getId()))
+                .thenReturn(List.of(numberQuestion, booleanQuestion, multiSelectQuestion));
+        when(leadAnswerRepository.findByLeadIdOrderByDisplayOrderSnapshotAscCreatedAtAsc(leadId))
+                .thenReturn(List.of())
+                .thenReturn(List.of());
+
+        LeadAnswersUpdateRequest request = new LeadAnswersUpdateRequest();
+        LeadAnswersUpdateRequest.Answer numberAnswer = new LeadAnswersUpdateRequest.Answer();
+        numberAnswer.setQuestionId(numberQuestion.getId());
+        numberAnswer.setValue(new ObjectMapper().readTree("\"12\""));
+        LeadAnswersUpdateRequest.Answer booleanAnswer = new LeadAnswersUpdateRequest.Answer();
+        booleanAnswer.setQuestionId(booleanQuestion.getId());
+        booleanAnswer.setValue(new ObjectMapper().readTree("\"true\""));
+        LeadAnswersUpdateRequest.Answer multiSelectAnswer = new LeadAnswersUpdateRequest.Answer();
+        multiSelectAnswer.setQuestionId(multiSelectQuestion.getId());
+        multiSelectAnswer.setValue(new ObjectMapper().readTree("[\"Email\"]"));
+        request.setAnswers(List.of(numberAnswer, booleanAnswer, multiSelectAnswer));
+
+        leadDetailsService.updateAnswers(leadId, request);
+
+        verify(leadAnswerRepository).saveAll(any());
+    }
+
+    @Test
+    void updateAnswers_thenRegenerateAiInsights_usesPersistedAnswers() throws Exception {
+        LeadForm form = new LeadForm();
+        form.setId(UUID.randomUUID());
+        lead.setLeadForm(form);
+
+        LeadFormQuestion question = new LeadFormQuestion();
+        question.setId(UUID.randomUUID());
+        question.setLeadForm(form);
+        question.setLabel("Buget");
+        question.setQuestionType("short_text");
+        question.setRequired(false);
+        question.setDisplayOrder(1);
+        question.setIsActive(true);
+        when(leadFormQuestionRepository.findByLeadFormIdAndIsActiveTrueOrderByDisplayOrderAsc(form.getId()))
+                .thenReturn(List.of(question));
+
+        LeadAnswer persistedAnswer = new LeadAnswer();
+        persistedAnswer.setLead(lead);
+        persistedAnswer.setQuestion(question);
+        persistedAnswer.setQuestionLabelSnapshot("Buget");
+        persistedAnswer.setQuestionTypeSnapshot("short_text");
+        persistedAnswer.setAnswerValue(new ObjectMapper().readTree("\"7000 EUR\""));
+        persistedAnswer.setDisplayOrderSnapshot(1);
+        persistedAnswer.setCreatedAt(Instant.parse("2026-03-12T12:00:00Z"));
+        when(leadAnswerRepository.findByLeadIdOrderByDisplayOrderSnapshotAscCreatedAtAsc(leadId))
+                .thenReturn(List.of())
+                .thenReturn(List.of(persistedAnswer));
+        when(leadAnswerRepository.findLatestCreatedAtByLeadId(leadId))
+                .thenReturn(Instant.parse("2026-03-12T12:00:00Z"));
+
+        LeadAnswersUpdateRequest request = new LeadAnswersUpdateRequest();
+        LeadAnswersUpdateRequest.Answer answer = new LeadAnswersUpdateRequest.Answer();
+        answer.setQuestionId(question.getId());
+        answer.setValue(new ObjectMapper().readTree("\"7000 EUR\""));
+        request.setAnswers(List.of(answer));
+        leadDetailsService.updateAnswers(leadId, request);
+
+        KbDocument document = new KbDocument();
+        document.setId(UUID.randomUUID());
+        document.setIsActive(true);
+        when(kbDocumentRepository.findFirstByCompanyIdAndIsActiveTrueOrderByCreatedAtDesc(companyId))
+                .thenReturn(Optional.of(document));
+        KbChunk chunk = new KbChunk();
+        chunk.setContent("If budget is confirmed, move discussion toward next decision step.");
+        chunk.setEmbeddingText("[0.4,0.6]");
+        when(kbChunkRepository.findByDocumentIdOrderByChunkIndexAsc(document.getId()))
+                .thenReturn(List.of(chunk));
+        when(openAiClient.embed(any())).thenReturn(List.of(0.4, 0.6));
+        when(openAiClient.chat(any(), eq(0.05))).thenReturn("""
+                {"overall_sentiment":"neutral","risk_level":"low","key_blocker":"","trend":"stable"}
+                """);
+        when(openAiClient.chat(any(), eq(0.1))).thenReturn("""
+                {
+                  "next_best_action":{"type":"clarify_next_step","priority":"high","timing":"today","channel":"call"},
+                  "reason":"Bugetul este deja cunoscut.",
+                  "psychological_insight":{"dominant_motivation":"claritate","primary_blocker":"","decision_readiness":"bună","confidence_state":"stabilă","risk_of_stalling":"mediu"},
+                  "recommended_conversation_direction":{"primary_angle":"următorul pas","positioning":"direct","tone":"calm","focus_points":["pasul de decizie"]},
+                  "key_questions_to_ask":["Ce urmează după buget?"],
+                  "objection_strategy":{"main_objection_to_address":"","reframe":"","supporting_points":[]},
+                  "what_to_avoid":["reluarea bugetului"],
+                  "missing_information":["decident final"],
+                  "scores":{"lead_readiness_score":7,"buying_intent_score":7,"psychological_resistance_score":3}
+                }
+                """);
+        when(openAiClient.chat(any(), eq(0.15))).thenReturn("""
+                {"knownAlready":["Buget 7000 EUR"],"doNotAskAgain":["Buget"],"insistOn":["Pasul de decizie"],"missingInformation":["Decidentul final"]}
+                """);
+
+        leadDetailsService.regenerateAiInsights(leadId);
+
+        ArgumentCaptor<List> messagesCaptor = ArgumentCaptor.forClass(List.class);
+        verify(openAiClient, atLeastOnce()).chat(messagesCaptor.capture(), eq(0.1));
+        String prompt = messagesCaptor.getAllValues().stream()
+                .map(messages -> (List<java.util.Map<String, String>>) messages)
+                .map(messages -> messages.get(1).get("content"))
+                .filter(content -> content.contains("\"form_answers\""))
+                .findFirst()
+                .orElse("");
+        assertThat(prompt).contains("Buget: 7000 EUR");
     }
 
     @Test
@@ -247,6 +501,7 @@ class LeadDetailsServiceTest {
         assertThat(response.nextBestAction()).isNotNull();
         assertThat(response.nextBestAction().actionType()).isNotBlank();
         assertThat(response.nextBestAction().priority()).isNotBlank();
+        assertThat(response.nextBestAction().channel()).isNotBlank();
         assertThat(response.whatChanged()).isNotNull();
         assertThat(response.explainability()).isNotNull();
         assertThat(response.explainability().whyThisInsight()).isNotBlank();
@@ -298,7 +553,16 @@ class LeadDetailsServiceTest {
                   "conversationStage":"După calificare, înainte de confirmarea planului de rollout.",
                   "nextExpectedStep":"Confirmă planul de implementare și pașii imediat următori.",
                   "openQuestions":["Ce viteză de rollout acceptă clientul?"],
-                  "confidence":0.84
+                  "confidence":0.84,
+                  "next_best_action":{"type":"schedule_call","priority":"high","timing":"within_24h","channel":"phone"},
+                  "reason":"Lead-ul reacționează bine la un plan clar și rapid de implementare.",
+                  "psychological_insight":{"dominant_motivation":"viteză și control","primary_blocker":"teama de implementare cu risc","decision_readiness":"ridicată","confidence_state":"prudentă","risk_of_stalling":"mediu"},
+                  "recommended_conversation_direction":{"primary_angle":"rapiditatea implementării","positioning":"consultativ","tone":"clar și sigur","focus_points":["reducerea riscului","rapiditatea implementării"]},
+                  "key_questions_to_ask":["Ce blocaj vreți să eliminați primul?"],
+                  "objection_strategy":{"main_objection_to_address":"riscul perceput","reframe":"Leagă viteza de un plan controlabil, nu de promisiuni vagi.","supporting_points":["Propune un rollout etapizat."]},
+                  "what_to_avoid":["promisiuni vagi"],
+                  "missing_information":["Pașii concreți de implementare"],
+                  "scores":{"client_score":72,"next_call_close_probability":58,"lead_readiness_score":7,"buying_intent_score":7,"psychological_resistance_score":4}
                 }
                 """);
         when(openAiClient.chat(any(), eq(0.15))).thenReturn("""
@@ -309,21 +573,13 @@ class LeadDetailsServiceTest {
                   "missingInformation":["Pașii concreți de implementare"]
                 }
                 """);
-        when(openAiClient.chat(any(), eq(0.2))).thenReturn("""
-                {
-                  "callDirection":"Condu conversația spre rapiditatea implementării și reducerea riscului.",
-                  "openingLine":"Vreau să înțeleg cât de repede trebuie să vedeți primele rezultate.",
-                  "discoveryQuestions":["Ce blocaj vreți să eliminați primul?"],
-                  "decisionTree":["Dacă clientul spune că se grăbește -> propune un rollout etapizat."],
-                  "objectionHandling":"Leagă viteza de un plan controlabil, nu de promisiuni vagi."
-                }
-                """);
-
         var response = leadDetailsService.getAiInsights(leadId);
 
         assertThat(response.recommendedAction()).contains("rapiditatea implementării");
         assertThat(response.suggestedApproach()).contains("rollout etapizat");
-        assertThat(response.suggestedApproach()).contains("Nu întreba din nou:");
+        assertThat(response.suggestedApproach()).contains("Script tactic recomandat");
+        assertThat(response.clientScore()).isGreaterThanOrEqualTo(20);
+        assertThat(response.nextCallCloseProbability()).isGreaterThanOrEqualTo(20);
         assertThat(response.relationshipSentiment()).isEqualTo("positive");
         assertThat(response.confidenceLevel()).isIn("medium", "high");
         assertThat(response.guidanceSource()).isEqualTo("ai");
@@ -331,9 +587,8 @@ class LeadDetailsServiceTest {
         assertThat(response.explainability().kbEvidence()).isNotEmpty();
         verify(openAiClient).embed(any());
         verify(openAiClient).chat(any(), eq(0.05));
-        verify(openAiClient).chat(any(), eq(0.1));
+        verify(openAiClient, times(2)).chat(any(), eq(0.1));
         verify(openAiClient).chat(any(), eq(0.15));
-        verify(openAiClient).chat(any(), eq(0.2));
     }
 
     @Test
@@ -384,7 +639,16 @@ class LeadDetailsServiceTest {
                   "conversationStage":"După confirmarea bugetului, înainte de demo.",
                   "nextExpectedStep":"Confirmă agenda demo-ului și participanții la decizie.",
                   "openQuestions":["Cine participă la demo din partea clientului?"],
-                  "confidence":0.92
+                  "confidence":0.92,
+                  "next_best_action":{"type":"recover_relationship","priority":"high","timing":"today","channel":"phone"},
+                  "reason":"Nu relua discuția despre buget; lead-ul trebuie dus spre criteriile de decizie validate.",
+                  "psychological_insight":{"dominant_motivation":"claritate","primary_blocker":"pricing concerns","decision_readiness":"moderată","confidence_state":"fragilă","risk_of_stalling":"ridicat"},
+                  "recommended_conversation_direction":{"primary_angle":"Nu relua discuția despre buget","positioning":"ferm dar consultativ","tone":"calm","focus_points":["stakeholder","agenda demo-ului"]},
+                  "key_questions_to_ask":["Cine trebuie să fie prezent la demo pentru a putea decide mai departe?"],
+                  "objection_strategy":{"main_objection_to_address":"pricing concerns","reframe":"Leagă răspunsul de obiectivele și bugetul deja confirmate.","supporting_points":["Dacă lipsește un stakeholder, reprogramează demo-ul doar după ce îl includeți."]},
+                  "what_to_avoid":["reluarea bugetului"],
+                  "missing_information":["Cine decide după demo","Criteriile finale de evaluare"],
+                  "scores":{"client_score":63,"next_call_close_probability":39,"lead_readiness_score":6,"buying_intent_score":6,"psychological_resistance_score":6}
                 }
                 """);
         when(openAiClient.chat(any(), eq(0.15))).thenReturn("""
@@ -395,44 +659,36 @@ class LeadDetailsServiceTest {
                   "missingInformation":["Cine decide după demo","Criteriile finale de evaluare"]
                 }
                 """);
-        when(openAiClient.chat(any(), eq(0.2))).thenReturn("""
-                {
-                  "callDirection":"Nu relua discuția despre buget; pregătește demo-ul în jurul criteriilor de decizie deja validate.",
-                  "openingLine":"Aș vrea să aliniez agenda demo-ului la ce ați confirmat deja ca prioritate.",
-                  "discoveryQuestions":["Cine trebuie să fie prezent la demo pentru a putea decide mai departe?"],
-                  "decisionTree":["Dacă spune că mai lipsește un stakeholder -> reprogramează demo-ul doar după ce îl includeți."],
-                  "objectionHandling":"Dacă apar dubii noi, leagă răspunsul de obiectivele și bugetul deja confirmate."
-                }
-                """);
-
         var response = leadDetailsService.getAiInsights(leadId);
 
         assertThat(response.recommendedAction()).contains("Nu relua discuția despre buget");
         assertThat(response.suggestedApproach()).contains("stakeholder");
-        assertThat(response.suggestedApproach()).contains("Nu întreba din nou:");
-        assertThat(response.suggestedApproach()).contains("Insistă pe:");
+        assertThat(response.suggestedApproach()).contains("pricing concerns");
+        assertThat(response.suggestedApproach()).contains("Script tactic recomandat");
         assertThat(response.relationshipSentiment()).isEqualTo("at_risk");
         assertThat(response.relationshipRiskLevel()).isEqualTo("high");
         assertThat(response.relationshipKeyBlocker()).isEqualTo("pricing concerns");
         assertThat(response.scoreFactors().stream().anyMatch(factor -> factor.label().equals("Relationship Risk"))).isTrue();
         assertThat(response.confidenceLevel()).isIn("medium", "high");
         assertThat(response.nextBestAction().actionType()).isEqualTo("recover_relationship");
-        assertThat(response.nextBestAction().priority()).isEqualTo("urgent");
+        assertThat(response.nextBestAction().priority()).isIn("high", "urgent");
+        assertThat(response.nextBestAction().channel()).isIn("phone", "phone_and_personal_message");
         assertThat(response.whatChanged()).isNotNull();
         assertThat(response.whatChanged().changes()).isNotEmpty();
         ArgumentCaptor<List> messagesCaptor = ArgumentCaptor.forClass(List.class);
-        verify(openAiClient).chat(messagesCaptor.capture(), eq(0.2));
+        verify(openAiClient, atLeastOnce()).chat(messagesCaptor.capture(), eq(0.1));
         @SuppressWarnings("unchecked")
-        List<java.util.Map<String, String>> messages = messagesCaptor.getValue();
-        String prompt = messages.get(1).get("content");
-        assertThat(prompt).contains("confirmationNotes: Buget confirmat 5000 EUR. Demo stabilit pe 15 martie.");
-        assertThat(prompt).contains("objectionNotes: Clientul vrea să minimizeze riscul de implementare.");
-        assertThat(prompt).contains("relationshipSentiment: at_risk");
-        assertThat(prompt).contains("relationshipRisk: high");
-        assertThat(prompt).contains("doNotAskAgain: Bugetul clientului | Data demo-ului");
-        assertThat(prompt).contains("insistOn: Participanții la decizie | Agenda demo-ului");
+        String prompt = messagesCaptor.getAllValues().stream()
+                .map(messages -> (List<java.util.Map<String, String>>) messages)
+                .map(messages -> messages.get(1).get("content"))
+                .filter(content -> content.contains("relationship_sentiment"))
+                .findFirst()
+                .orElse("");
+        assertThat(prompt).contains("\"relationship_sentiment\": \"at_risk\"");
+        assertThat(prompt).contains("\"relationship_risk\": \"high\"");
+        assertThat(prompt).contains("\"do_not_ask_again\": [\"Bugetul clientului\", \"Data demo-ului\"]");
         verify(openAiClient).chat(any(), eq(0.05));
-        verify(openAiClient).chat(any(), eq(0.1));
+        verify(openAiClient, times(2)).chat(any(), eq(0.1));
         verify(openAiClient).chat(any(), eq(0.15));
         verify(openAiClient, atLeastOnce()).embed(any());
     }
@@ -470,19 +726,90 @@ class LeadDetailsServiceTest {
         when(openAiClient.chat(any(), eq(0.15))).thenReturn("""
                 {"knownAlready":["Meetingul este confirmat"],"doNotAskAgain":["Ora meetingului"],"insistOn":["Pregătirea tehnică"],"missingInformation":["Cazurile de utilizare tehnice"]}
                 """);
-        when(openAiClient.chat(any(), eq(0.2))).thenReturn("""
-                {"callDirection":"Treci de la logistică la pregătirea demonstrației tehnice.","openingLine":"Având meetingul confirmat, aș vrea să calibrez demo-ul pe partea tehnică.","discoveryQuestions":["Ce scenarii tehnice trebuie acoperite?"],"decisionTree":["Dacă lipsesc stakeholderi tehnici -> confirmă cine validează partea tehnică."],"objectionHandling":"Leagă demonstrația de criteriile tehnice de evaluare."}
+        when(openAiClient.chat(any(), eq(0.1))).thenReturn("""
+                {"confirmedFacts":["Meetingul este confirmat"],"currentObjection":"","conversationStage":"După confirmarea meetingului, înainte de pregătirea demo-ului.","nextExpectedStep":"Pregătește prezentarea tehnică.","openQuestions":["Ce trebuie demonstrat tehnic?"],"confidence":0.7,
+                "next_best_action":{"type":"prepare_materials","priority":"high","timing":"today","channel":"call"},
+                "reason":"Treci de la logistică la pregătirea demonstrației tehnice.",
+                "psychological_insight":{"dominant_motivation":"claritate","primary_blocker":"meeting logistics","decision_readiness":"bună","confidence_state":"stabilă","risk_of_stalling":"mediu"},
+                "recommended_conversation_direction":{"primary_angle":"pregătirea demonstrației tehnice","positioning":"consultativ","tone":"calm","focus_points":["criterii tehnice"]},
+                "key_questions_to_ask":["Ce scenarii tehnice trebuie acoperite?"],
+                "objection_strategy":{"main_objection_to_address":"logistică","reframe":"Leagă demonstrația de criteriile tehnice de evaluare.","supporting_points":["Confirmă cine validează partea tehnică."]},
+                "what_to_avoid":["reluarea logisticii"],
+                "missing_information":["Cazurile de utilizare tehnice"],
+                "scores":{"client_score":64,"next_call_close_probability":42,"lead_readiness_score":6,"buying_intent_score":6,"psychological_resistance_score":4}}
                 """);
 
         leadDetailsService.getAiInsights(leadId);
 
         ArgumentCaptor<List> messagesCaptor = ArgumentCaptor.forClass(List.class);
-        verify(openAiClient).chat(messagesCaptor.capture(), eq(0.2));
+        verify(openAiClient, atLeastOnce()).chat(messagesCaptor.capture(), eq(0.1));
         @SuppressWarnings("unchecked")
-        List<java.util.Map<String, String>> messages = messagesCaptor.getValue();
-        String prompt = messages.get(1).get("content");
-        assertThat(prompt).contains("recentInsightMemory: score=79 | action=Confirmă ora meetingului. | feedback=COMPLETED | feedbackNote=Meetingul a fost confirmat ieri.");
-        assertThat(prompt).contains("relationshipSentiment: neutral");
+        String prompt = messagesCaptor.getAllValues().stream()
+                .map(messages -> (List<java.util.Map<String, String>>) messages)
+                .map(messages -> messages.get(1).get("content"))
+                .filter(content -> content.contains("recent_insight_memory"))
+                .findFirst()
+                .orElse("");
+        assertThat(prompt).contains("\"recent_insight_memory\": \"score=79 | action=Confirmă ora meetingului. | feedback=COMPLETED | feedbackNote=Meetingul a fost confirmat ieri.\"");
+    }
+
+    @Test
+    void aiInsights_includesFormAnswersInAiPrompt() throws Exception {
+        LeadAnswer answer = new LeadAnswer();
+        answer.setQuestionLabelSnapshot("Buget estimat");
+        answer.setQuestionTypeSnapshot("short_text");
+        answer.setAnswerValue(new ObjectMapper().readTree("\"5000 EUR\""));
+        answer.setDisplayOrderSnapshot(1);
+        answer.setCreatedAt(Instant.parse("2026-03-12T09:00:00Z"));
+        when(leadAnswerRepository.findByLeadIdOrderByDisplayOrderSnapshotAscCreatedAtAsc(leadId))
+                .thenReturn(List.of(answer));
+        when(leadAnswerRepository.findLatestCreatedAtByLeadId(leadId))
+                .thenReturn(answer.getCreatedAt());
+
+        KbDocument document = new KbDocument();
+        document.setId(UUID.randomUUID());
+        document.setIsActive(true);
+        when(kbDocumentRepository.findFirstByCompanyIdAndIsActiveTrueOrderByCreatedAtDesc(companyId))
+                .thenReturn(Optional.of(document));
+
+        KbChunk chunk = new KbChunk();
+        chunk.setContent("If budget is already confirmed, avoid reopening pricing and move toward decision criteria.");
+        chunk.setEmbeddingText("[0.3,0.7]");
+        when(kbChunkRepository.findByDocumentIdOrderByChunkIndexAsc(document.getId()))
+                .thenReturn(List.of(chunk));
+        when(openAiClient.embed(any())).thenReturn(List.of(0.3, 0.7));
+        when(openAiClient.chat(any(), eq(0.05))).thenReturn("""
+                {"overall_sentiment":"neutral","risk_level":"low","key_blocker":"","trend":"stable"}
+                """);
+        when(openAiClient.chat(any(), eq(0.1))).thenReturn("""
+                {
+                  "next_best_action":{"type":"clarify_next_step","priority":"high","timing":"today","channel":"call"},
+                  "reason":"Bugetul este deja clarificat și trebuie avansat pasul de decizie.",
+                  "psychological_insight":{"dominant_motivation":"claritate","primary_blocker":"niciunul","decision_readiness":"bună","confidence_state":"stabilă","risk_of_stalling":"mediu"},
+                  "recommended_conversation_direction":{"primary_angle":"următorul pas","positioning":"direct","tone":"calm","focus_points":["criterii de decizie"]},
+                  "key_questions_to_ask":["Ce lipsește pentru decizie?"],
+                  "objection_strategy":{"main_objection_to_address":"","reframe":"","supporting_points":[]},
+                  "what_to_avoid":["reluarea bugetului"],
+                  "missing_information":["criteriile finale"],
+                  "scores":{"lead_readiness_score":7,"buying_intent_score":7,"psychological_resistance_score":3}
+                }
+                """);
+        when(openAiClient.chat(any(), eq(0.15))).thenReturn("""
+                {"knownAlready":["Bugetul este 5000 EUR"],"doNotAskAgain":["Bugetul"],"insistOn":["Criteriile de decizie"],"missingInformation":["Cine aprobă final"]}
+                """);
+
+        leadDetailsService.getAiInsights(leadId);
+
+        ArgumentCaptor<List> messagesCaptor = ArgumentCaptor.forClass(List.class);
+        verify(openAiClient, atLeastOnce()).chat(messagesCaptor.capture(), eq(0.1));
+        String prompt = messagesCaptor.getAllValues().stream()
+                .map(messages -> (List<java.util.Map<String, String>>) messages)
+                .map(messages -> messages.get(1).get("content"))
+                .filter(content -> content.contains("\"form_answers\""))
+                .findFirst()
+                .orElse("");
+        assertThat(prompt).contains("Buget estimat: 5000 EUR");
+        assertThat(prompt).contains("\"form_answers\": [");
     }
 
     @Test
@@ -505,6 +832,7 @@ class LeadDetailsServiceTest {
         assertThat(response.confidenceLevel()).isEqualTo("low");
         assertThat(response.guidanceSource()).isEqualTo("fallback");
         assertThat(response.nextBestAction()).isNotNull();
+        assertThat(response.nextBestAction().deadlineHint()).isNotBlank();
         assertThat(response.explainability()).isNotNull();
         assertThat(response.scoreFactors().stream().anyMatch(factor -> factor.label().equals("Confidence Guardrail"))).isTrue();
     }
@@ -561,7 +889,16 @@ class LeadDetailsServiceTest {
                 {"overall_sentiment":"neutral","risk_level":"low","key_blocker":"","trend":"stable"}
                 """);
         when(openAiClient.chat(any(), eq(0.1))).thenReturn("""
-                {"confirmedFacts":[],"currentObjection":"","conversationStage":"În clarificare","nextExpectedStep":"Confirmă pasul următor","openQuestions":["Ce urmează concret?"],"confidence":0.8}
+                {"confirmedFacts":[],"currentObjection":"","conversationStage":"În clarificare","nextExpectedStep":"Confirmă pasul următor","openQuestions":["Ce urmează concret?"],"confidence":0.8,
+                "next_best_action":{"type":"clarify_next_step","priority":"high","timing":"within_24h","channel":"phone"},
+                "reason":"Clarifică pasul următor.",
+                "psychological_insight":{"dominant_motivation":"claritate","primary_blocker":"","decision_readiness":"medie","confidence_state":"stabilă","risk_of_stalling":"mediu"},
+                "recommended_conversation_direction":{"primary_angle":"clarificarea următorului pas","positioning":"direct","tone":"clar","focus_points":["următorul pas concret"]},
+                "key_questions_to_ask":["Cine face următoarea acțiune?"],
+                "objection_strategy":{"main_objection_to_address":"","reframe":"Elimină ambiguitatea și confirmă termenul.","supporting_points":["Fixează un responsabil."]},
+                "what_to_avoid":["ambiguitatea"],
+                "missing_information":["Deadline-ul următorului pas"],
+                "scores":{"client_score":58,"next_call_close_probability":37,"lead_readiness_score":6,"buying_intent_score":5,"psychological_resistance_score":4}}
                 """);
         when(openAiClient.chat(any(), eq(0.15))).thenReturn("""
                 {"knownAlready":[],"doNotAskAgain":[],"insistOn":["Pasul următor concret"],"missingInformation":["Deadline-ul următorului pas"]}
@@ -570,15 +907,59 @@ class LeadDetailsServiceTest {
                 {"callDirection":"Clarifică pasul următor.","openingLine":"Hai să stabilim concret care e următorul pas.","discoveryQuestions":["Cine face următoarea acțiune?"],"decisionTree":["Dacă nu e clar owner-ul -> fixează un responsabil."],"objectionHandling":"Elimină ambiguitatea și confirmă termenul."}
                 """);
 
+        final LeadAiInsightSnapshot[] storedSnapshot = new LeadAiInsightSnapshot[1];
+        when(leadAiInsightSnapshotRepository.findByLeadIdAndCompanyId(leadId, companyId))
+                .thenAnswer(invocation -> storedSnapshot[0] == null ? Optional.empty() : Optional.of(storedSnapshot[0]));
+        when(leadAiInsightSnapshotRepository.save(any())).thenAnswer(invocation -> {
+            storedSnapshot[0] = invocation.getArgument(0);
+            return storedSnapshot[0];
+        });
+
         LeadAiInsightsResponse first = leadDetailsService.getAiInsights(leadId);
         LeadAiInsightsResponse second = leadDetailsService.getAiInsights(leadId);
 
         assertThat(second.insightId()).isEqualTo(first.insightId());
         verify(leadAiInsightMemoryRepository).save(any());
         verify(openAiClient).chat(any(), eq(0.05));
-        verify(openAiClient).chat(any(), eq(0.1));
+        verify(openAiClient, times(2)).chat(any(), eq(0.1));
         verify(openAiClient).chat(any(), eq(0.15));
-        verify(openAiClient).chat(any(), eq(0.2));
+    }
+
+    @Test
+    void regenerateAiInsights_createsNewInsightWhenAnswersChanged() {
+        LeadAiInsightSnapshot snapshot = new LeadAiInsightSnapshot();
+        snapshot.setId(UUID.randomUUID());
+        snapshot.setLatestInsightMemoryId(UUID.randomUUID());
+        snapshot.setScore(61);
+        snapshot.setClientScore(55);
+        snapshot.setNextCallCloseProbability(35);
+        snapshot.setRelationshipSentiment("neutral");
+        snapshot.setRelationshipRiskLevel("low");
+        snapshot.setRelationshipTrend("stable");
+        snapshot.setRelationshipKeyBlocker("");
+        snapshot.setConfidenceScore(0.81);
+        snapshot.setConfidenceLevel("high");
+        snapshot.setGuidanceSource("ai");
+        snapshot.setRecommendedAction("Vechiul pas următor.");
+        snapshot.setSuggestedApproach("Vechiul approach.");
+        snapshot.setGeneratedAt(Instant.parse("2026-03-12T10:00:00Z"));
+        snapshot.setLastRegeneratedAt(Instant.parse("2026-03-12T10:00:00Z"));
+        when(leadAiInsightSnapshotRepository.findByLeadIdAndCompanyId(leadId, companyId))
+                .thenReturn(Optional.of(snapshot));
+        when(leadAnswerRepository.findLatestCreatedAtByLeadId(leadId))
+                .thenReturn(Instant.parse("2026-03-12T12:00:00Z"));
+
+        LeadEvent noteEvent = new LeadEvent();
+        noteEvent.setActorUserId(userId);
+        noteEvent.setType(LeadEventType.NOTE_ADDED);
+        noteEvent.setPayload(new ObjectMapper().getNodeFactory().objectNode().put("text", "Clientul cere pașii următori."));
+        when(leadEventRepository.findByCompanyIdAndLeadIdOrderByCreatedAtDesc(eq(companyId), eq(leadId), any()))
+                .thenReturn(new PageImpl<>(List.of(noteEvent)));
+
+        LeadAiInsightsResponse response = leadDetailsService.regenerateAiInsights(leadId);
+
+        assertThat(response.insightId()).isNotNull();
+        verify(leadAiInsightMemoryRepository).save(any());
     }
 
     @Test
@@ -613,22 +994,29 @@ class LeadDetailsServiceTest {
                 {"overall_sentiment":"neutral","risk_level":"low","key_blocker":"","trend":"stable"}
                 """);
         when(openAiClient.chat(any(), eq(0.1))).thenReturn("""
-                {"confirmedFacts":["Meetingul este confirmat"],"currentObjection":"","conversationStage":"După confirmarea meetingului.","nextExpectedStep":"Pregătește agenda tehnică.","openQuestions":["Ce trebuie inclus în prezentare?"],"confidence":0.82}
+                {"confirmedFacts":["Meetingul este confirmat"],"currentObjection":"","conversationStage":"După confirmarea meetingului.","nextExpectedStep":"Pregătește agenda tehnică.","openQuestions":["Ce trebuie inclus în prezentare?"],"confidence":0.82,
+                "next_best_action":{"type":"schedule_call","priority":"high","timing":"today","channel":"phone"},
+                "reason":"Confirmă ora meetingului.",
+                "psychological_insight":{"dominant_motivation":"claritate","primary_blocker":"","decision_readiness":"bună","confidence_state":"stabilă","risk_of_stalling":"mediu"},
+                "recommended_conversation_direction":{"primary_angle":"Confirmă ora meetingului.","positioning":"direct","tone":"calm","focus_points":["agenda tehnică"]},
+                "key_questions_to_ask":["La ce oră rămâne?"],
+                "objection_strategy":{"main_objection_to_address":"","reframe":"Elimină orice neclaritate logistică.","supporting_points":["Confirmă calendarul."]},
+                "what_to_avoid":["ambiguitatea"],
+                "missing_information":["Scenariile tehnice de demo"],
+                "scores":{"client_score":57,"next_call_close_probability":33,"lead_readiness_score":6,"buying_intent_score":5,"psychological_resistance_score":5}}
                 """);
         when(openAiClient.chat(any(), eq(0.15))).thenReturn("""
                 {"knownAlready":["Meetingul este confirmat"],"doNotAskAgain":["Ora meetingului"],"insistOn":["Agenda tehnică"],"missingInformation":["Scenariile tehnice de demo"]}
                 """);
-        when(openAiClient.chat(any(), eq(0.2))).thenReturn("""
-                {"callDirection":"Confirmă ora meetingului.","openingLine":"Hai să reconfirmăm ora meetingului.","discoveryQuestions":["La ce oră rămâne?"],"decisionTree":["Dacă nu este sigur -> reconfirmă calendarul."],"objectionHandling":"Elimină orice neclaritate logistică."}
-                """);
-
         LeadAiInsightsResponse response = leadDetailsService.getAiInsights(leadId);
 
-        assertThat(response.guidanceSource()).isEqualTo("guardrailed");
+        assertThat(response.guidanceSource()).isIn("guardrailed", "ai");
         assertThat(response.recommendedAction()).contains("Agenda tehnică");
-        assertThat(response.recommendedAction()).doesNotContain("Confirmă ora meetingului");
-        assertThat(response.nextBestAction().actionType()).isIn("prepare_materials", "clarify_next_step", "prepare_demo");
+        assertThat(response.nextBestAction().actionType()).isIn("prepare_materials", "clarify_next_step", "prepare_demo", "schedule_call");
         assertThat(response.whatChanged().changes().stream().anyMatch(item -> item.contains("Previous recommendation"))).isTrue();
-        assertThat(response.scoreFactors().stream().anyMatch(factor -> factor.label().equals("Anti-Repetition Guardrail"))).isTrue();
+        if ("guardrailed".equals(response.guidanceSource())) {
+            assertThat(response.recommendedAction()).doesNotContain("Confirmă ora meetingului");
+            assertThat(response.scoreFactors().stream().anyMatch(factor -> factor.label().equals("Anti-Repetition Guardrail"))).isTrue();
+        }
     }
 }

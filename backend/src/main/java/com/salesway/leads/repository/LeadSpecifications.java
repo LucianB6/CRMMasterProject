@@ -35,6 +35,13 @@ public final class LeadSpecifications {
             if (criteria.assignedToUserId() != null) {
                 predicates.add(cb.equal(root.get("assignedToUserId"), criteria.assignedToUserId()));
             }
+            if (criteria.visibleToUserId() != null) {
+                Predicate assignedToViewer = cb.equal(root.get("assignedToUserId"), criteria.visibleToUserId());
+                Predicate unassigned = cb.isNull(root.get("assignedToUserId"));
+                predicates.add(criteria.includeUnassignedForVisibleUser()
+                        ? cb.or(assignedToViewer, unassigned)
+                        : assignedToViewer);
+            }
             if (criteria.source() != null) {
                 predicates.add(cb.equal(cb.upper(root.get("source")), criteria.source()));
             }
