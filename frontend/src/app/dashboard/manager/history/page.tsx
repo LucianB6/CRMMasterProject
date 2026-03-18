@@ -22,14 +22,7 @@ import {
   startOfYear,
   subDays,
 } from 'date-fns';
-import { ro } from 'date-fns/locale';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '../../../../components/ui/card';
+import { enUS } from 'date-fns/locale';
 import {
   Table,
   TableBody,
@@ -55,40 +48,41 @@ import {
   Phone,
   RefreshCw,
   CalendarPlus,
+  User,
 } from 'lucide-react';
 
 const metricsConfig = {
   sales: {
-    label: 'Vanzari',
+    label: 'Sales',
     dataKey: 'sales',
-    unitLabel: 'Unitati',
+    unitLabel: 'Units',
     icon: ShoppingCart,
     showValue: true,
-    barName: 'Vanzari',
+    barName: 'Sales',
   },
   calls: {
-    label: 'Apeluri Facute',
+    label: 'Calls Made',
     dataKey: 'calls',
-    unitLabel: 'Apeluri',
+    unitLabel: 'Calls',
     icon: Phone,
     showValue: false,
-    barName: 'Apeluri',
+    barName: 'Calls',
   },
   followUpSales: {
-    label: 'Vanzari Follow-up',
+    label: 'Sales Follow-up',
     dataKey: 'followUpSales',
-    unitLabel: 'Unitati',
+    unitLabel: 'Units',
     icon: RefreshCw,
     showValue: false,
-    barName: 'Vanzari Follow-up',
+    barName: 'Sales Follow-up',
   },
   outboundBookings: {
-    label: 'Programari Outbound',
+    label: 'Outbound Bookings',
     dataKey: 'outboundBookings',
-    unitLabel: 'Programari',
+    unitLabel: 'Bookings',
     icon: CalendarPlus,
     showValue: false,
-    barName: 'Programari',
+    barName: 'Bookings',
   },
 } as const;
 
@@ -106,6 +100,20 @@ type HistoryData = {
 type ManagerAgent = {
   membership_id: string;
   email: string;
+};
+
+type PersonalReportResponse = {
+  id: string;
+  reportDate: string;
+  status: 'DRAFT' | 'SUBMITTED' | 'AUTO_SUBMITTED';
+  inputs: {
+    outbound_dials: number | null;
+    sales_call_booked_from_outbound: number | null;
+    sales_one_call_close: number | null;
+    followup_sales: number | null;
+    upsells: number | null;
+    contract_value: number | null;
+  };
 };
 
 type ManagerReportResponse = {
@@ -165,6 +173,7 @@ export default function ManagerHistoryPage() {
     previousYear: [],
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
 
   const getAuthToken = useCallback(() => {
     if (typeof window === 'undefined') {
@@ -228,7 +237,7 @@ export default function ManagerHistoryPage() {
 
       reports.forEach((report) => {
         const agentId = report.agent_membership_id ?? 'unknown';
-        const email = report.agent_email ?? 'Agent necunoscut';
+        const email = report.agent_email ?? 'Unknown agent';
         const metrics = mapReportToMetrics(report);
         const current = totalsByAgent.get(agentId) ?? {
           email,
@@ -279,7 +288,7 @@ export default function ManagerHistoryPage() {
         const report = reportMap.get(key);
         const metrics = report ? mapReportToMetrics(report) : null;
         return {
-          period: format(day, 'EEE dd MMM', { locale: ro }),
+          period: format(day, 'EEE dd MMM', { locale: enUS }),
           calls: metrics?.calls ?? 0,
           outboundBookings: metrics?.outboundBookings ?? 0,
           followUpSales: metrics?.followUpSales ?? 0,
@@ -301,7 +310,7 @@ export default function ManagerHistoryPage() {
         }) + 1;
 
       const buckets = Array.from({ length: weekCount }, (_, index) => ({
-        period: `Sapt. ${index + 1}`,
+        period: `Wk. ${index + 1}`,
         calls: 0,
         outboundBookings: 0,
         followUpSales: 0,
@@ -336,7 +345,7 @@ export default function ManagerHistoryPage() {
       const months = Array.from({ length: 12 }, (_, index) => {
         const date = new Date(Date.UTC(from.getUTCFullYear(), index, 1));
         return {
-          period: format(date, 'MMM', { locale: ro }),
+          period: format(date, 'MMM', { locale: enUS }),
           calls: 0,
           outboundBookings: 0,
           followUpSales: 0,
@@ -368,15 +377,22 @@ export default function ManagerHistoryPage() {
   const fetchAgents = useCallback(async () => {
     try {
       const token = getAuthToken();
-      const data = await apiFetch<ManagerAgent[]>('/manager/overview/agents', {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
+      const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+      const [data, me] = await Promise.all([
+        apiFetch<ManagerAgent[]>('/manager/overview/agents', {
+          headers,
+        }),
+        apiFetch<{ email?: string | null }>('/auth/me', {
+          headers,
+        }),
+      ]);
       setAgents(data);
+      setCurrentUserEmail(me.email ?? null);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : 'Eroare necunoscuta';
+        error instanceof Error ? error.message : 'Unknown error';
       toast({
-        title: 'Eroare',
+        title: 'Error',
         description: message,
         variant: 'destructive',
       });
@@ -403,6 +419,35 @@ export default function ManagerHistoryPage() {
     [formatRangeQuery, getAuthToken]
   );
 
+  const fetchPersonalReports = useCallback(
+    async (from: Date, to: Date) => {
+      const token = getAuthToken();
+      const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+      const range = formatRangeQuery(from, to);
+      const query = new URLSearchParams(range);
+      const data = await apiFetch<PersonalReportResponse[]>(
+        `/reports/daily?${query.toString()}`,
+        {
+          headers,
+        }
+      );
+      return data.map<ManagerReportResponse>((report) => ({
+        report_date: report.reportDate,
+        agent_membership_id: 'self',
+        agent_email: currentUserEmail ?? 'Activitatea mea',
+        inputs: {
+          outbound_dials: report.inputs.outbound_dials ?? 0,
+          sales_call_booked_from_outbound: report.inputs.sales_call_booked_from_outbound ?? 0,
+          sales_one_call_close: report.inputs.sales_one_call_close ?? 0,
+          followup_sales: report.inputs.followup_sales ?? 0,
+          upsells: report.inputs.upsells ?? 0,
+          contract_value: report.inputs.contract_value ?? 0,
+        },
+      }));
+    },
+    [currentUserEmail, formatRangeQuery, getAuthToken]
+  );
+
   useEffect(() => {
     void fetchAgents();
   }, [fetchAgents]);
@@ -411,7 +456,8 @@ export default function ManagerHistoryPage() {
     const loadHistory = async () => {
       try {
         setIsLoading(true);
-        const agentId = selectedAgentId === 'all' ? null : selectedAgentId;
+        const agentId =
+          selectedAgentId === 'all' || selectedAgentId === 'self' ? null : selectedAgentId;
 
         const ranges = {
           last7Days: buildRange('last7Days'),
@@ -420,7 +466,7 @@ export default function ManagerHistoryPage() {
           previousYear: buildRange('previousYear'),
         };
 
-        const [last7Reports, monthReports, yearReports, previousYearReports] =
+        const [teamLast7Reports, teamMonthReports, teamYearReports, teamPreviousYearReports] =
           await Promise.all([
             fetchReports(ranges.last7Days.from, ranges.last7Days.to, agentId),
             fetchReports(
@@ -435,6 +481,40 @@ export default function ManagerHistoryPage() {
               agentId
             ),
           ]);
+
+        const shouldUsePersonalOnly = selectedAgentId === 'self';
+        const shouldIncludePersonalInAll = selectedAgentId === 'all';
+
+        const [personalLast7Reports, personalMonthReports, personalYearReports, personalPreviousYearReports] =
+          shouldUsePersonalOnly || shouldIncludePersonalInAll
+            ? await Promise.all([
+                fetchPersonalReports(ranges.last7Days.from, ranges.last7Days.to),
+                fetchPersonalReports(ranges.currentMonth.from, ranges.currentMonth.to),
+                fetchPersonalReports(ranges.currentYear.from, ranges.currentYear.to),
+                fetchPersonalReports(ranges.previousYear.from, ranges.previousYear.to),
+              ])
+            : [[], [], [], []];
+
+        const last7Reports = shouldUsePersonalOnly
+          ? personalLast7Reports
+          : shouldIncludePersonalInAll
+            ? [...teamLast7Reports, ...personalLast7Reports]
+            : teamLast7Reports;
+        const monthReports = shouldUsePersonalOnly
+          ? personalMonthReports
+          : shouldIncludePersonalInAll
+            ? [...teamMonthReports, ...personalMonthReports]
+            : teamMonthReports;
+        const yearReports = shouldUsePersonalOnly
+          ? personalYearReports
+          : shouldIncludePersonalInAll
+            ? [...teamYearReports, ...personalYearReports]
+            : teamYearReports;
+        const previousYearReports = shouldUsePersonalOnly
+          ? personalPreviousYearReports
+          : shouldIncludePersonalInAll
+            ? [...teamPreviousYearReports, ...personalPreviousYearReports]
+            : teamPreviousYearReports;
 
         setHistoryData({
           last7Days: aggregateByDay(
@@ -466,9 +546,9 @@ export default function ManagerHistoryPage() {
         });
       } catch (error) {
         const message =
-          error instanceof Error ? error.message : 'Eroare necunoscuta';
+          error instanceof Error ? error.message : 'Unknown error';
         toast({
-          title: 'Eroare',
+          title: 'Error',
           description: message,
           variant: 'destructive',
         });
@@ -483,6 +563,7 @@ export default function ManagerHistoryPage() {
     aggregateByMonth,
     aggregateByWeek,
     buildRange,
+    fetchPersonalReports,
     fetchReports,
     selectedAgentId,
     toast,
@@ -501,92 +582,72 @@ export default function ManagerHistoryPage() {
     return (
       <div className="space-y-6">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Total ({metric.unitLabel})
-              </CardTitle>
-              <Icon className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{totals.totalUnits}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Medie / Perioada
-              </CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {totals.averageUnits.toFixed(1)}
-              </div>
-            </CardContent>
-          </Card>
+          <HistoryMetricCard
+            label={`Total (${metric.unitLabel})`}
+            value={totals.totalUnits.toLocaleString('en-US')}
+            icon={<Icon className="h-5 w-5" />}
+            tone="blue"
+          />
+          <HistoryMetricCard
+            label="Average / Period"
+            value={totals.averageUnits.toFixed(1)}
+            icon={<TrendingUp className="h-5 w-5" />}
+            tone="emerald"
+          />
           {metric.showValue && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Valoare Totala (RON)
-                </CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {totals.totalValue > 0
-                    ? totals.totalValue.toLocaleString('ro-RO')
-                    : '-'}
-                </div>
-              </CardContent>
-            </Card>
+            <HistoryMetricCard
+              label="Total Value (RON)"
+              value={totals.totalValue > 0 ? totals.totalValue.toLocaleString('en-US') : '-'}
+              icon={<DollarSign className="h-5 w-5" />}
+              tone="indigo"
+            />
           )}
         </div>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>{`Grafic ${metric.label} - ${title}`}</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <div className="rounded-[28px] border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/40">
+            <div className="mb-4">
+              <h3 className="text-lg font-bold text-slate-800">{`Chart ${metric.label} - ${title}`}</h3>
+            </div>
+            <div>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={data}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eef2f7" />
                   <XAxis
                     dataKey="period"
-                    stroke="#888888"
-                    fontSize={12}
+                    stroke="#94a3b8"
+                    fontSize={11}
                     tickLine={false}
                     axisLine={false}
                   />
                   <YAxis
-                    stroke="#888888"
-                    fontSize={12}
+                    stroke="#94a3b8"
+                    fontSize={11}
                     tickLine={false}
                     axisLine={false}
                     allowDecimals={false}
                   />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: 'hsl(var(--card))',
-                      borderColor: 'hsl(var(--border))',
+                      borderRadius: 12,
+                      border: '1px solid #e2e8f0',
+                      backgroundColor: '#ffffff',
                     }}
                   />
                   <Bar
                     dataKey={metric.dataKey}
                     name={metric.barName}
-                    fill="hsl(var(--primary))"
+                    fill="#38bdf8"
                     radius={[4, 4, 0, 0]}
                   />
                 </BarChart>
               </ResponsiveContainer>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>{`Tabel ${metric.label} - ${title}`}</CardTitle>
-            </CardHeader>
-            <CardContent>
+            </div>
+          </div>
+          <div className="rounded-[28px] border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/40">
+            <div className="mb-4">
+              <h3 className="text-lg font-bold text-slate-800">{`Table ${metric.label} - ${title}`}</h3>
+            </div>
+            <div>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -595,7 +656,7 @@ export default function ManagerHistoryPage() {
                       {metric.label} ({metric.unitLabel})
                     </TableHead>
                     {metric.showValue && (
-                      <TableHead className="text-right">Valoare (RON)</TableHead>
+                      <TableHead className="text-right">Value (RON)</TableHead>
                     )}
                   </TableRow>
                 </TableHeader>
@@ -608,15 +669,15 @@ export default function ManagerHistoryPage() {
                       </TableCell>
                       {metric.showValue && (
                         <TableCell className="text-right">
-                          {(item.value || 0).toLocaleString('ro-RO')}
+                          {(item.value || 0).toLocaleString('en-US')}
                         </TableCell>
                       )}
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -646,6 +707,20 @@ export default function ManagerHistoryPage() {
   };
 
   const currentData = historyData;
+  const selectedAgentLabel =
+    selectedAgentId === 'all'
+      ? 'All agents'
+      : selectedAgentId === 'self'
+        ? currentUserEmail ?? 'Activitatea mea'
+        : agents.find((agent) => agent.membership_id === selectedAgentId)?.email ?? 'Selected agent';
+
+  const periodLabelMap: Record<typeof periodKey, string> = {
+    last7Days: 'Last 7 days',
+    currentMonth: 'Current month',
+    currentYear: 'Current year',
+    previousYear: 'Previous year',
+  };
+
   const topStats = useMemo(() => {
     if (selectedAgentId !== 'all') {
       return null;
@@ -654,117 +729,60 @@ export default function ManagerHistoryPage() {
   }, [buildTopStats, periodKey, reportsByPeriod, selectedAgentId]);
 
   return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="font-headline text-2xl">Istoric Echipa</h1>
-        <p className="text-muted-foreground">
-          Analizeaza performanta istorica a echipei sau a unui agent specific.
-        </p>
-      </header>
+    <div className="w-full min-w-0 max-w-none space-y-8">
+      <div className="flex w-full flex-col gap-6 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h2 className="text-3xl font-black tracking-tight text-slate-800">Team History</h2>
+          <p className="mt-1 font-medium text-slate-500">
+            Analyze historical team performance using real values from daily reports.
+          </p>
+        </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Filtru Agent</CardTitle>
-          <CardDescription>
-            Selecteaza &quot;Toti Agentii&quot; pentru date agregate sau alege un agent.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
-            <SelectTrigger className="w-full sm:w-[280px]">
-              <SelectValue placeholder="Selecteaza o optiune" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Toti Agentii</SelectItem>
-              {agents.map((agent) => (
-                <SelectItem
-                  key={agent.membership_id}
-                  value={agent.membership_id}
-                >
-                  {agent.email}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </CardContent>
-      </Card>
+        <div className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm md:w-auto">
+          <div className="min-w-0 flex-1 md:min-w-[260px]">
+            <Select value={selectedAgentId} onValueChange={setSelectedAgentId}>
+              <SelectTrigger className="h-10 border-none bg-slate-50 px-3 font-bold text-slate-700 shadow-none">
+                <SelectValue placeholder="All Agents" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Agents</SelectItem>
+                <SelectItem value="self">Activitatea mea</SelectItem>
+                {agents.map((agent) => (
+                  <SelectItem key={agent.membership_id} value={agent.membership_id}>
+                    {agent.email}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="h-6 w-px bg-slate-200" />
+          <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1 text-xs font-bold text-slate-600">
+            <User className="h-3.5 w-3.5" />
+            {selectedAgentLabel}
+          </div>
+        </div>
+      </div>
 
       {isLoading && (
-        <p className="text-sm text-muted-foreground">
-          Se incarca istoricul...
+        <p className="text-sm text-slate-500">
+          Loading history...
         </p>
       )}
 
       {selectedAgentId !== 'all' ? (
         <p className="text-sm text-muted-foreground">
-          Selecteaza &quot;Toti Agentii&quot; pentru topuri pe echipa.
+          Select &quot;All Agents&quot; for team rankings.
         </p>
       ) : (
         <div className="space-y-2">
-          <h2 className="text-lg font-semibold tracking-tight">
-            Top performanta echipa
+          <h2 className="text-lg font-semibold tracking-tight text-slate-800">
+            Team performance leaders
           </h2>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Top Vanzari</CardTitle>
-                <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {topStats?.sales.sales ?? 0}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {topStats?.sales.email ?? '-'}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Top Apeluri</CardTitle>
-                <Phone className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {topStats?.calls.calls ?? 0}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {topStats?.calls.email ?? '-'}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Top Vanzari Follow-up
-                </CardTitle>
-                <RefreshCw className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {topStats?.followUpSales.followUpSales ?? 0}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {topStats?.followUpSales.email ?? '-'}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Top Programari Outbound
-                </CardTitle>
-                <CalendarPlus className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {topStats?.outboundBookings.outboundBookings ?? 0}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {topStats?.outboundBookings.email ?? '-'}
-                </p>
-              </CardContent>
-            </Card>
+            <HistoryLeaderCard title="Top Sales" value={topStats?.sales.sales ?? 0} subtitle={topStats?.sales.email ?? '-'} icon={<ShoppingCart className="h-5 w-5" />} tone="indigo" />
+            <HistoryLeaderCard title="Top Calls" value={topStats?.calls.calls ?? 0} subtitle={topStats?.calls.email ?? '-'} icon={<Phone className="h-5 w-5" />} tone="blue" />
+            <HistoryLeaderCard title="Top Sales Follow-up" value={topStats?.followUpSales.followUpSales ?? 0} subtitle={topStats?.followUpSales.email ?? '-'} icon={<RefreshCw className="h-5 w-5" />} tone="emerald" />
+            <HistoryLeaderCard title="Top Outbound Bookings" value={topStats?.outboundBookings.outboundBookings ?? 0} subtitle={topStats?.outboundBookings.email ?? '-'} icon={<CalendarPlus className="h-5 w-5" />} tone="orange" />
           </div>
         </div>
       )}
@@ -779,41 +797,98 @@ export default function ManagerHistoryPage() {
           )
         }
       >
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
-          <TabsTrigger value="last7Days">Ultimele 7 zile</TabsTrigger>
-          <TabsTrigger value="currentMonth">Luna curenta</TabsTrigger>
-          <TabsTrigger value="currentYear">Anul curent</TabsTrigger>
-          <TabsTrigger value="previousYear">Anul precedent</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 rounded-2xl bg-slate-100 p-1 sm:grid-cols-4">
+          <TabsTrigger value="last7Days">Last 7 days</TabsTrigger>
+          <TabsTrigger value="currentMonth">Current month</TabsTrigger>
+          <TabsTrigger value="currentYear">Current year</TabsTrigger>
+          <TabsTrigger value="previousYear">Previous year</TabsTrigger>
         </TabsList>
+        <p className="mt-3 text-sm font-medium text-slate-500">{periodLabelMap[periodKey]}</p>
         <TabsContent value="last7Days" className="mt-6">
           {renderPeriodContent(
-            'Ultimele 7 zile',
+            'Last 7 days',
             currentData.last7Days,
-            'Ziua'
+            'Day'
           )}
         </TabsContent>
         <TabsContent value="currentMonth" className="mt-6">
           {renderPeriodContent(
-            'Luna Curenta',
+            'Current Month',
             currentData.currentMonth,
-            'Saptamana'
+            'Week'
           )}
         </TabsContent>
         <TabsContent value="currentYear" className="mt-6">
           {renderPeriodContent(
-            'Anul Curent',
+            'Current Year',
             currentData.currentYear,
-            'Luna'
+            'Month'
           )}
         </TabsContent>
         <TabsContent value="previousYear" className="mt-6">
           {renderPeriodContent(
-            'Anul Precedent',
+            'Previous Year',
             currentData.previousYear,
-            'Luna'
+            'Month'
           )}
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+function HistoryMetricCard({
+  label,
+  value,
+  subtitle,
+  icon,
+  tone,
+}: {
+  label: string;
+  value: string;
+  subtitle?: string;
+  icon: React.ReactNode;
+  tone: 'blue' | 'emerald' | 'orange' | 'indigo';
+}) {
+  const tones = {
+    blue: 'bg-blue-50 text-blue-600 border-blue-100',
+    emerald: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+    orange: 'bg-orange-50 text-orange-600 border-orange-100',
+    indigo: 'bg-indigo-50 text-indigo-600 border-indigo-100',
+  };
+
+  return (
+    <div className="rounded-[24px] border border-slate-100 bg-white p-5 shadow-xl shadow-slate-200/35">
+      <div className="mb-3 flex items-start justify-between">
+        <div className={`rounded-xl border p-2.5 ${tones[tone]}`}>{icon}</div>
+      </div>
+      <p className="mb-1 text-xs font-bold uppercase tracking-widest text-slate-400">{label}</p>
+      <p className="text-2xl font-black text-slate-900">{value}</p>
+      {subtitle ? <p className="mt-1 truncate text-xs font-medium text-slate-500">{subtitle}</p> : null}
+    </div>
+  );
+}
+
+function HistoryLeaderCard({
+  title,
+  value,
+  subtitle,
+  icon,
+  tone,
+}: {
+  title: string;
+  value: number;
+  subtitle: string;
+  icon: React.ReactNode;
+  tone: 'blue' | 'emerald' | 'orange' | 'indigo';
+}) {
+  return (
+    <HistoryMetricCard
+      label={title}
+      value={value.toLocaleString('en-US')}
+      subtitle={subtitle}
+      icon={icon}
+      tone={tone}
+    />
   );
 }

@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { format } from 'date-fns';
-import { ro } from 'date-fns/locale';
+import { enUS } from 'date-fns/locale';
 
 import {
   Card,
@@ -40,43 +40,51 @@ import {
   FormMessage,
 } from '../../../components/ui/form';
 import { Input } from '../../../components/ui/input';
-import { Plus, Target, Trash2 } from 'lucide-react';
+import {
+  Plus,
+  Target,
+  Trash2,
+  Trophy,
+  TrendingUp,
+  CalendarRange,
+} from 'lucide-react';
 import { useToast } from '../../../hooks/use-toast';
 import { apiFetch } from '../../../lib/api';
+import { cn } from '../../../lib/utils';
 
 const availableMetrics = [
-  { key: 'outbound_dials', label: 'Apeluri outbound efectuate' },
-  { key: 'pickups', label: 'Apeluri preluate' },
-  { key: 'conversations_30s_plus', label: 'Conversații > 30s' },
-  { key: 'sales_call_booked_from_outbound', label: 'Programări din Outbound' },
-  { key: 'sales_call_on_calendar', label: 'Apeluri pe Calendar' },
+  { key: 'outbound_dials', label: 'Calls outbound efectuate' },
+  { key: 'pickups', label: 'Calls preluate' },
+  { key: 'conversations_30s_plus', label: 'Conversations > 30s' },
+  { key: 'sales_call_booked_from_outbound', label: 'Bookings din Outbound' },
+  { key: 'sales_call_on_calendar', label: 'Calls on Calendar' },
   { key: 'no_show', label: 'No Show' },
   { key: 'reschedule_request', label: 'Cereri reprogramare' },
-  { key: 'cancel', label: 'Anulări' },
-  { key: 'deposits', label: 'Avansuri încasate' },
-  { key: 'sales_one_call_close', label: 'Vânzări închise la primul apel' },
-  { key: 'followup_sales', label: 'Vânzări din follow-up' },
-  { key: 'upsell_conversation_taken', label: 'Discuții de upsell purtate' },
+  { key: 'cancel', label: 'Cancellations' },
+  { key: 'deposits', label: 'Deposits collected' },
+  { key: 'sales_one_call_close', label: 'Sales closed on first call' },
+  { key: 'followup_sales', label: 'Sales din follow-up' },
+  { key: 'upsell_conversation_taken', label: 'Upsell conversations held' },
   { key: 'upsells', label: 'Upsell-uri realizate' },
-  { key: 'contract_value', label: 'Valoare totală contracte' },
-  { key: 'new_cash_collected', label: 'Bani noi încasați' },
-  { key: 'total_sales', label: 'Vânzări închise (Total)' },
+  { key: 'contract_value', label: 'Total contract value' },
+  { key: 'new_cash_collected', label: 'New cash collected' },
+  { key: 'total_sales', label: 'Closed sales (Total)' },
 ];
 
 const goalSchema = z
   .object({
-    metricKey: z.string().min(1, 'Trebuie să selectezi o categorie.'),
-    target: z.coerce.number().min(1, 'Ținta trebuie să fie mai mare ca 0.'),
+    metricKey: z.string().min(1, 'You must select a category.'),
+    target: z.coerce.number().min(1, 'Target must be greater than 0.'),
     dateFrom: z.coerce.date({
-      required_error: 'Data de început este obligatorie.',
+      required_error: 'Start date este obligatorie.',
     }),
     dateTo: z.coerce.date({
-      required_error: 'Data de sfârșit este obligatorie.',
+      required_error: 'End date is required.',
     }),
   })
   .refine((data) => data.dateTo >= data.dateFrom, {
     message:
-      'Data de sfârșit trebuie să fie după sau în aceeași zi cu data de început.',
+      'End date must be after or on the same day as the start date.',
     path: ['dateTo'],
   });
 
@@ -177,9 +185,9 @@ export default function GoalsPage() {
       });
       setGoals(data.map(normalizeGoal));
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Eroare necunoscută';
+      const message = error instanceof Error ? error.message : 'Unknown error';
       toast({
-        title: 'Nu am putut încărca obiectivele',
+        title: 'Unable to load goals',
         description: message,
         variant: 'destructive',
       });
@@ -213,8 +221,8 @@ export default function GoalsPage() {
       } catch (error) {
         console.error('Failed to load report inputs', error);
         toast({
-          title: 'Nu am putut încărca raportul de azi.',
-          description: 'Verifică conexiunea și încearcă din nou.',
+          title: "Unable to load today's report.",
+          description: 'Check your connection and try again.',
           variant: 'destructive',
         });
       } finally {
@@ -249,13 +257,13 @@ export default function GoalsPage() {
       setIsAddGoalDialogOpen(false);
       form.reset();
       toast({
-        title: 'Obiectiv adăugat!',
-        description: `Ai setat un nou obiectiv: ${savedGoal.title}.`,
+        title: 'Goal added!',
+        description: `You set a new goal: ${savedGoal.title}.`,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Eroare necunoscută';
+      const message = error instanceof Error ? error.message : 'Unknown error';
       toast({
-        title: 'Nu am putut salva obiectivul',
+        title: 'Unable to save goal',
         description: message,
         variant: 'destructive',
       });
@@ -272,13 +280,13 @@ export default function GoalsPage() {
 
       setGoals((prev) => prev.filter((g) => g.id !== goalId));
       toast({
-        title: 'Obiectiv șters.',
+        title: 'Goal deleted.',
         variant: 'destructive',
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Eroare necunoscută';
+      const message = error instanceof Error ? error.message : 'Unknown error';
       toast({
-        title: 'Nu am putut șterge obiectivul',
+        title: 'Unable to delete goal',
         description: message,
         variant: 'destructive',
       });
@@ -289,33 +297,84 @@ export default function GoalsPage() {
     void fetchGoals();
   }, [fetchGoals]);
 
+  const summary = goals.reduce(
+    (acc, goal) => {
+      let currentValue = 0;
+      if (goal.metricKey === 'total_sales') {
+        currentValue =
+          reportInputs.sales_one_call_close + reportInputs.followup_sales;
+      } else {
+        const reportValue = reportInputs[goal.metricKey as keyof ReportInputs];
+        currentValue = typeof reportValue === 'number' ? reportValue : 0;
+      }
+
+      const progressPercentage =
+        goal.target > 0 ? Math.min((currentValue / goal.target) * 100, 100) : 0;
+
+      acc.total += 1;
+      if (progressPercentage >= 100) {
+        acc.completed += 1;
+      }
+      acc.averageProgress += progressPercentage;
+      return acc;
+    },
+    { total: 0, completed: 0, averageProgress: 0 }
+  );
+
+  const averageProgress =
+    summary.total > 0 ? summary.averageProgress / summary.total : 0;
+
   return (
-    <div className="space-y-6">
-      <header className="flex items-start justify-between sm:items-center">
+    <div className="w-full min-w-0 max-w-none space-y-8">
+      <div className="flex w-full flex-col gap-6 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="font-headline text-2xl">Obiective</h1>
-          <p className="text-muted-foreground">
-            Adaugă și urmărește progresul obiectivelor tale.
+          <h1 className="text-3xl font-black tracking-tight text-slate-800">Goals</h1>
+          <p className="mt-1 font-medium text-slate-500">
+            Defineste-ti obiectivele si urmareste progresul lor in acelasi stil cu restul dashboard-ului.
           </p>
         </div>
-        <Button onClick={() => setIsAddGoalDialogOpen(true)}>
+        <Button
+          onClick={() => setIsAddGoalDialogOpen(true)}
+          className="bg-[#38bdf8] text-white hover:bg-sky-500"
+        >
           <Plus className="mr-0 h-4 w-4 sm:mr-2" />
-          <span className="hidden sm:inline">Adaugă Obiectiv</span>
+          <span className="hidden sm:inline">Add Goal</span>
         </Button>
-      </header>
+      </div>
+
+      <div className="grid w-full grid-cols-1 gap-6 sm:grid-cols-3">
+        <GoalSummaryCard
+          label="Obiective active"
+          value={summary.total.toLocaleString('ro-RO')}
+          icon={<Target className="h-5 w-5" />}
+          tone="blue"
+        />
+        <GoalSummaryCard
+          label="Obiective atinse"
+          value={summary.completed.toLocaleString('ro-RO')}
+          icon={<Trophy className="h-5 w-5" />}
+          tone="emerald"
+        />
+        <GoalSummaryCard
+          label="Progres mediu"
+          value={`${averageProgress.toFixed(0)}%`}
+          icon={<TrendingUp className="h-5 w-5" />}
+          tone="orange"
+        />
+      </div>
 
       {goals.length === 0 ? (
-        <Card className="flex flex-col items-center justify-center gap-4 py-16 text-center">
-          <Target className="h-16 w-16 text-muted-foreground" />
-          <h3 className="text-xl font-semibold">
-            {isGoalsLoading ? 'Se încarcă obiectivele...' : 'Niciun obiectiv setat'}
+        <div className="flex flex-col items-center justify-center gap-4 rounded-[28px] border border-dashed border-slate-200 bg-white py-16 text-center shadow-xl shadow-slate-200/30">
+          <Target className="h-16 w-16 text-slate-300" />
+          <h3 className="text-xl font-semibold text-slate-800">
+            {isGoalsLoading ? 'Se incarca obiectivele...' : 'Nu exista obiective'}
           </h3>
-          <p className="text-muted-foreground">
+          <p className="font-medium text-slate-500">
             {isGoalsLoading
-              ? 'Așteaptă puțin, încărcăm datele.'
-              : 'Apasă pe &quot;Adaugă Obiectiv&quot; pentru a începe.'}
+              ? 'Te rog asteapta putin.'
+              : 'Apasa pe "Add Goal" pentru a incepe.'}
           </p>
-        </Card>
+        </div>
       ) : (
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
           {goals.map((goal) => {
@@ -345,39 +404,66 @@ export default function GoalsPage() {
               : `${currentValue} / ${goal.target}`;
 
             const fromDate = goal.dateFrom
-              ? format(goal.dateFrom, 'dd-MM-yyyy', { locale: ro })
+              ? format(goal.dateFrom, 'dd-MM-yyyy', { locale: enUS })
               : '';
             const toDate = goal.dateTo
-              ? format(goal.dateTo, 'dd-MM-yyyy', { locale: ro })
+              ? format(goal.dateTo, 'dd-MM-yyyy', { locale: enUS })
               : '';
             const periodDisplay =
               fromDate && toDate
                 ? `${fromDate} - ${toDate}`
-                : 'Perioadă nedefinită';
+                : 'Perioada nedefinita';
 
             return (
-              <Card key={goal.id} className="group relative">
-                <CardHeader>
-                  <CardTitle className="pr-12">{goal.title}</CardTitle>
-                  <CardDescription>
-                    {periodDisplay} | Țintă: {targetDisplay}
-                  </CardDescription>
+              <Card
+                key={goal.id}
+                className="group relative overflow-hidden rounded-[28px] border border-slate-100 bg-white shadow-xl shadow-slate-200/35"
+              >
+                <CardHeader className="space-y-4 pb-3">
+                  <div>
+                    <div className="mb-4 inline-flex rounded-2xl border border-blue-100 bg-blue-50 p-3 text-blue-600">
+                      <Target className="h-5 w-5" />
+                    </div>
+                    <CardTitle className="pr-12 text-xl text-slate-800">{goal.title}</CardTitle>
+                    <CardDescription className="mt-2 flex items-center gap-2 text-sm font-medium text-slate-500">
+                      <CalendarRange className="h-4 w-4" />
+                      {periodDisplay}
+                    </CardDescription>
+                  </div>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="absolute right-2 top-2 h-8 w-8 opacity-0 transition-opacity group-hover:opacity-100"
+                    className="absolute right-3 top-3 h-8 w-8 rounded-full opacity-0 transition-opacity group-hover:bg-red-50 group-hover:opacity-100"
                     onClick={() => handleDeleteGoal(goal.id)}
                   >
                     <Trash2 className="h-4 w-4 text-destructive" />
-                    <span className="sr-only">Șterge obiectiv</span>
+                    <span className="sr-only">Delete goal</span>
                   </Button>
                 </CardHeader>
-                <CardContent className="space-y-2">
-                  <Progress value={progressPercentage} />
-                  <div className="flex justify-between text-sm font-medium text-muted-foreground">
-                    <span>Progres</span>
+                <CardContent className="space-y-4">
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                      Target
+                    </p>
+                    <p className="mt-1 text-lg font-black text-slate-900">{targetDisplay}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm font-medium text-slate-500">
+                      <span>Progres</span>
+                      <span>{Math.min(progressPercentage, 100).toFixed(0)}%</span>
+                    </div>
+                    <Progress
+                      value={progressPercentage}
+                      className={cn(
+                        '[&>div]:bg-[#38bdf8]',
+                        progressPercentage >= 100 && '[&>div]:bg-emerald-500'
+                      )}
+                    />
+                  </div>
+                  <div className="flex justify-between text-sm font-medium text-slate-500">
+                    <span>Valoare curenta</span>
                     <span>
-                      {isReportLoading ? 'Se încarcă...' : fullDisplay}
+                      {isReportLoading ? 'Se incarca...' : fullDisplay}
                     </span>
                   </div>
                 </CardContent>
@@ -390,9 +476,9 @@ export default function GoalsPage() {
       <Dialog open={isAddGoalDialogOpen} onOpenChange={setIsAddGoalDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Adaugă un Obiectiv Nou</DialogTitle>
+            <DialogTitle>Add a New Goal</DialogTitle>
             <DialogDescription>
-              Selectează metrica, perioada și ținta pentru noul tău obiectiv.
+              Select the metric, period, and target for your new goal.
             </DialogDescription>
           </DialogHeader>
           <Form {...form}>
@@ -412,7 +498,7 @@ export default function GoalsPage() {
                     >
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Selectează o categorie din raport" />
+                          <SelectValue placeholder="Select a category from the report" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -433,7 +519,7 @@ export default function GoalsPage() {
                   name="dateFrom"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Data de început</FormLabel>
+                      <FormLabel>Start date</FormLabel>
                       <FormControl>
                         <Input
                           type="date"
@@ -454,7 +540,7 @@ export default function GoalsPage() {
                   name="dateTo"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Data de sfârșit</FormLabel>
+                      <FormLabel>End date</FormLabel>
                       <FormControl>
                         <Input
                           type="date"
@@ -476,7 +562,7 @@ export default function GoalsPage() {
                 name="target"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Țintă</FormLabel>
+                    <FormLabel>Target</FormLabel>
                     <FormControl>
                       <Input type="number" min="1" placeholder="Ex: 100" {...field} />
                     </FormControl>
@@ -490,14 +576,42 @@ export default function GoalsPage() {
                   type="button"
                   onClick={() => setIsAddGoalDialogOpen(false)}
                 >
-                  Anulează
+                  Cancel
                 </Button>
-                <Button type="submit">Adaugă Obiectiv</Button>
+                <Button type="submit">Add Goal</Button>
               </DialogFooter>
             </form>
           </Form>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function GoalSummaryCard({
+  label,
+  value,
+  icon,
+  tone,
+}: {
+  label: string;
+  value: string;
+  icon: React.ReactNode;
+  tone: 'blue' | 'emerald' | 'orange';
+}) {
+  const tones = {
+    blue: 'bg-blue-50 text-blue-600 border-blue-100',
+    emerald: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+    orange: 'bg-orange-50 text-orange-600 border-orange-100',
+  };
+
+  return (
+    <div className="rounded-[28px] border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/40">
+      <div className="mb-4 flex items-start justify-between">
+        <div className={`rounded-2xl border p-3 ${tones[tone]}`}>{icon}</div>
+      </div>
+      <p className="mb-1 text-xs font-bold uppercase tracking-widest text-slate-400">{label}</p>
+      <p className="text-2xl font-black text-slate-900">{value}</p>
     </div>
   );
 }

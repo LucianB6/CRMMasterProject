@@ -3,11 +3,16 @@ package com.salesway.auth.controller;
 import com.salesway.auth.dto.LoginRequest;
 import com.salesway.auth.dto.LoginResponse;
 import com.salesway.auth.dto.CurrentUserResponse;
+import com.salesway.auth.dto.AuthMessageResponse;
+import com.salesway.auth.dto.ForgotPasswordRequest;
+import com.salesway.auth.dto.GoogleLoginRequest;
+import com.salesway.auth.dto.ResetPasswordRequest;
 import com.salesway.auth.dto.SignupRequest;
 import com.salesway.auth.dto.SignupResponse;
 import com.salesway.auth.dto.UpdateProfileRequest;
 import com.salesway.auth.service.AuthService;
 import com.salesway.security.CustomUserDetails;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -35,9 +40,44 @@ public class AuthController {
         return ResponseEntity.ok(authService.login(request));
     }
 
+    @PostMapping("/google")
+    public ResponseEntity<LoginResponse> googleLogin(@Valid @RequestBody GoogleLoginRequest request) {
+        return ResponseEntity.ok(authService.googleLogin(request));
+    }
+
     @PostMapping("/signup")
     public ResponseEntity<SignupResponse> signup(@Valid @RequestBody SignupRequest request) {
         return ResponseEntity.ok(authService.signup(request));
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<AuthMessageResponse> forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequest request,
+            HttpServletRequest httpServletRequest
+    ) {
+        authService.requestPasswordReset(request, resolveClientIp(httpServletRequest));
+        return ResponseEntity.ok(new AuthMessageResponse(
+                "Dacă adresa există în sistem, am trimis instrucțiunile pentru resetarea parolei."
+        ));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+        return ResponseEntity.noContent().build();
+    }
+
+    private String resolveClientIp(HttpServletRequest request) {
+        String forwardedFor = request.getHeader("X-Forwarded-For");
+        if (forwardedFor != null && !forwardedFor.isBlank()) {
+            int separatorIndex = forwardedFor.indexOf(',');
+            return separatorIndex >= 0 ? forwardedFor.substring(0, separatorIndex).trim() : forwardedFor.trim();
+        }
+        String realIp = request.getHeader("X-Real-IP");
+        if (realIp != null && !realIp.isBlank()) {
+            return realIp.trim();
+        }
+        return request.getRemoteAddr();
     }
 
     @GetMapping("/me")

@@ -10,7 +10,7 @@ export const teamPerformanceData = {
   calls: {
     '7': [
       { day: 'Luni', 'Alex Doe': 32, 'John Popescu': 25, 'Maria Ionescu': 40 },
-      { day: 'Marți', 'Alex Doe': 45, 'John Popescu': 38, 'Maria Ionescu': 50 },
+      { day: 'Tue', 'Alex Doe': 45, 'John Popescu': 38, 'Maria Ionescu': 50 },
       {
         day: 'Miercuri',
         'Alex Doe': 28,
@@ -27,25 +27,25 @@ export const teamPerformanceData = {
     ],
     '30': [
       {
-        day: 'Săpt. 1',
+        day: 'Wk 1',
         'Alex Doe': 218,
         'John Popescu': 190,
         'Maria Ionescu': 240,
       },
       {
-        day: 'Săpt. 2',
+        day: 'Wk 2',
         'Alex Doe': 250,
         'John Popescu': 220,
         'Maria Ionescu': 260,
       },
       {
-        day: 'Săpt. 3',
+        day: 'Wk 3',
         'Alex Doe': 230,
         'John Popescu': 210,
         'Maria Ionescu': 250,
       },
       {
-        day: 'Săpt. 4',
+        day: 'Wk 4',
         'Alex Doe': 280,
         'John Popescu': 260,
         'Maria Ionescu': 300,
@@ -55,7 +55,7 @@ export const teamPerformanceData = {
   sales: {
     '7': [
       { day: 'Luni', 'Alex Doe': 2, 'John Popescu': 1, 'Maria Ionescu': 3 },
-      { day: 'Marți', 'Alex Doe': 3, 'John Popescu': 2, 'Maria Ionescu': 4 },
+      { day: 'Tue', 'Alex Doe': 3, 'John Popescu': 2, 'Maria Ionescu': 4 },
       {
         day: 'Miercuri',
         'Alex Doe': 1,
@@ -67,25 +67,25 @@ export const teamPerformanceData = {
     ],
     '30': [
       {
-        day: 'Săpt. 1',
+        day: 'Wk 1',
         'Alex Doe': 15,
         'John Popescu': 12,
         'Maria Ionescu': 18,
       },
       {
-        day: 'Săpt. 2',
+        day: 'Wk 2',
         'Alex Doe': 18,
         'John Popescu': 15,
         'Maria Ionescu': 20,
       },
       {
-        day: 'Săpt. 3',
+        day: 'Wk 3',
         'Alex Doe': 16,
         'John Popescu': 14,
         'Maria Ionescu': 19,
       },
       {
-        day: 'Săpt. 4',
+        day: 'Wk 4',
         'Alex Doe': 22,
         'John Popescu': 19,
         'Maria Ionescu': 25,
@@ -114,7 +114,7 @@ export const agentReports = {
       contract_value: 12500,
       new_cash_collected: 5000,
       observations:
-        'O zi productivă, majoritatea clienților au fost receptivi.',
+        'A productive day, most clients were receptive.',
       confirmation: true,
     },
   },
@@ -136,7 +136,7 @@ export const agentReports = {
       upsells: 1,
       contract_value: 9800,
       new_cash_collected: 4200,
-      observations: 'Am avut câteva reprogramări. Follow-up necesar mâine.',
+      observations: 'We had a few reschedules. Follow-up needed tomorrow.',
       confirmation: false,
     },
   },
@@ -169,41 +169,41 @@ export const managerNotifications = [
     id: 1,
     agent: 'Alex Doe',
     agentAvatarId: 'avatar-2',
-    text: 'a trimis raportul zilnic.',
-    time: 'Acum 5 minute',
+    text: 'submitted the daily report.',
+    time: '5 minute',
     read: false,
   },
   {
     id: 2,
     agent: 'John Popescu',
     agentAvatarId: 'avatar-1',
-    text: 'a salvat un draft pentru raportul zilnic.',
-    time: 'Acum 30 minute',
+    text: 'saved a draft for the daily report.',
+    time: '30 minute',
     read: false,
   },
   {
     id: 3,
     agent: 'Alex Doe',
     agentAvatarId: 'avatar-2',
-    text: 'a închis o vânzare de 2,500 RON.',
-    time: 'Acum 2 ore',
+    text: 'closed a sale of 2,500 RON.',
+    time: '2 ore',
     read: true,
   },
   {
     id: 4,
     agent: 'Maria Ionescu',
     agentAvatarId: 'avatar-3',
-    text: 'a solicitat editarea raportului de ieri.',
-    time: 'Ieri',
+    text: "requested edits to yesterday's report.",
+    time: 'Yesterday',
     read: true,
   },
 ];
 
 export const reportStatusConfig = {
-  submitted: { text: 'Trimis', Icon: CheckCircle2, color: 'text-green-500' },
+  submitted: { text: 'Submitted', Icon: CheckCircle2, color: 'text-green-500' },
   draft: { text: 'Draft', Icon: Edit, color: 'text-yellow-500' },
   unfilled: { text: 'Necompletat', Icon: XCircle, color: 'text-destructive' },
-  locked: { text: 'Blocat', Icon: XCircle, color: 'text-muted-foreground' },
+  locked: { text: 'Locked', Icon: XCircle, color: 'text-muted-foreground' },
 };
 
 export const quickStats = {
@@ -236,49 +236,49 @@ export const quickStats = {
 export const personalHistory = {
   last7Days: [
     {
-      period: 'Acum 6 zile',
+      period: '6 days ago',
       sales: 2,
       calls: 30,
       followUpSales: 1,
       outboundBookings: 5,
     },
     {
-      period: 'Acum 5 zile',
+      period: '5 days ago',
       sales: 3,
       calls: 45,
       followUpSales: 1,
       outboundBookings: 7,
     },
     {
-      period: 'Acum 4 zile',
+      period: '4 days ago',
       sales: 1,
       calls: 28,
       followUpSales: 0,
       outboundBookings: 4,
     },
     {
-      period: 'Acum 3 zile',
+      period: '3 days ago',
       sales: 4,
       calls: 52,
       followUpSales: 2,
       outboundBookings: 8,
     },
     {
-      period: 'Acum 2 zile',
+      period: '2 days ago',
       sales: 3,
       calls: 48,
       followUpSales: 1,
       outboundBookings: 6,
     },
     {
-      period: 'Ieri',
+      period: 'Yesterday',
       sales: 5,
       calls: 61,
       followUpSales: 3,
       outboundBookings: 10,
     },
     {
-      period: 'Azi',
+      period: 'Today',
       sales: 2,
       calls: 35,
       followUpSales: 1,
@@ -287,7 +287,7 @@ export const personalHistory = {
   ],
   currentMonth: [
     {
-      period: 'Săpt. 1',
+      period: 'Wk 1',
       sales: 15,
       value: 37500,
       calls: 218,
@@ -295,7 +295,7 @@ export const personalHistory = {
       outboundBookings: 30,
     },
     {
-      period: 'Săpt. 2',
+      period: 'Wk 2',
       sales: 18,
       value: 45000,
       calls: 250,
@@ -303,7 +303,7 @@ export const personalHistory = {
       outboundBookings: 35,
     },
     {
-      period: 'Săpt. 3',
+      period: 'Wk 3',
       sales: 12,
       value: 30000,
       calls: 230,
@@ -311,7 +311,7 @@ export const personalHistory = {
       outboundBookings: 28,
     },
     {
-      period: 'Săpt. 4',
+      period: 'Wk 4',
       sales: 20,
       value: 50000,
       calls: 280,
@@ -521,7 +521,7 @@ export const teamHistory = {
   all: {
     last7Days: [
       {
-        period: 'Acum 6 zile',
+        period: '6 days ago',
         sales: 6,
         calls: 110,
         followUpSales: 3,
@@ -529,7 +529,7 @@ export const teamHistory = {
         value: 7200,
       },
       {
-        period: 'Acum 5 zile',
+        period: '5 days ago',
         sales: 8,
         calls: 130,
         followUpSales: 4,
@@ -537,7 +537,7 @@ export const teamHistory = {
         value: 9200,
       },
       {
-        period: 'Acum 4 zile',
+        period: '4 days ago',
         sales: 5,
         calls: 95,
         followUpSales: 2,
@@ -545,7 +545,7 @@ export const teamHistory = {
         value: 6400,
       },
       {
-        period: 'Acum 3 zile',
+        period: '3 days ago',
         sales: 10,
         calls: 150,
         followUpSales: 6,
@@ -553,7 +553,7 @@ export const teamHistory = {
         value: 11800,
       },
       {
-        period: 'Acum 2 zile',
+        period: '2 days ago',
         sales: 9,
         calls: 140,
         followUpSales: 5,
@@ -561,7 +561,7 @@ export const teamHistory = {
         value: 10400,
       },
       {
-        period: 'Ieri',
+        period: 'Yesterday',
         sales: 12,
         calls: 170,
         followUpSales: 7,
@@ -569,7 +569,7 @@ export const teamHistory = {
         value: 14200,
       },
       {
-        period: 'Azi',
+        period: 'Today',
         sales: 7,
         calls: 125,
         followUpSales: 4,
@@ -812,7 +812,7 @@ export const teamHistory = {
   'john-p': {
     last7Days: [
       {
-        period: 'Acum 6 zile',
+        period: '6 days ago',
         sales: 1,
         calls: 25,
         followUpSales: 1,
@@ -820,7 +820,7 @@ export const teamHistory = {
         value: 1600,
       },
       {
-        period: 'Acum 5 zile',
+        period: '5 days ago',
         sales: 2,
         calls: 35,
         followUpSales: 1,
@@ -828,7 +828,7 @@ export const teamHistory = {
         value: 2200,
       },
       {
-        period: 'Acum 4 zile',
+        period: '4 days ago',
         sales: 1,
         calls: 30,
         followUpSales: 0,
@@ -836,7 +836,7 @@ export const teamHistory = {
         value: 1400,
       },
       {
-        period: 'Acum 3 zile',
+        period: '3 days ago',
         sales: 3,
         calls: 42,
         followUpSales: 1,
@@ -844,7 +844,7 @@ export const teamHistory = {
         value: 3600,
       },
       {
-        period: 'Acum 2 zile',
+        period: '2 days ago',
         sales: 2,
         calls: 38,
         followUpSales: 1,
@@ -852,7 +852,7 @@ export const teamHistory = {
         value: 2600,
       },
       {
-        period: 'Ieri',
+        period: 'Yesterday',
         sales: 3,
         calls: 46,
         followUpSales: 2,
@@ -860,7 +860,7 @@ export const teamHistory = {
         value: 3900,
       },
       {
-        period: 'Azi',
+        period: 'Today',
         sales: 2,
         calls: 34,
         followUpSales: 1,
@@ -1102,7 +1102,7 @@ export const teamHistory = {
   'maria-i': {
     last7Days: [
       {
-        period: 'Acum 6 zile',
+        period: '6 days ago',
         sales: 2,
         calls: 28,
         followUpSales: 1,
@@ -1110,7 +1110,7 @@ export const teamHistory = {
         value: 1800,
       },
       {
-        period: 'Acum 5 zile',
+        period: '5 days ago',
         sales: 3,
         calls: 32,
         followUpSales: 1,
@@ -1118,7 +1118,7 @@ export const teamHistory = {
         value: 2500,
       },
       {
-        period: 'Acum 4 zile',
+        period: '4 days ago',
         sales: 2,
         calls: 26,
         followUpSales: 1,
@@ -1126,7 +1126,7 @@ export const teamHistory = {
         value: 2100,
       },
       {
-        period: 'Acum 3 zile',
+        period: '3 days ago',
         sales: 4,
         calls: 40,
         followUpSales: 2,
@@ -1134,7 +1134,7 @@ export const teamHistory = {
         value: 3600,
       },
       {
-        period: 'Acum 2 zile',
+        period: '2 days ago',
         sales: 4,
         calls: 38,
         followUpSales: 2,
@@ -1142,7 +1142,7 @@ export const teamHistory = {
         value: 3400,
       },
       {
-        period: 'Ieri',
+        period: 'Yesterday',
         sales: 6,
         calls: 50,
         followUpSales: 3,
@@ -1150,7 +1150,7 @@ export const teamHistory = {
         value: 5200,
       },
       {
-        period: 'Azi',
+        period: 'Today',
         sales: 3,
         calls: 36,
         followUpSales: 1,

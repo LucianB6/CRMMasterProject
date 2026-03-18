@@ -17,7 +17,7 @@ import {
   subMonths,
   subWeeks,
 } from 'date-fns';
-import { ro } from 'date-fns/locale';
+import { enUS, ro } from 'date-fns/locale';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { useForm } from 'react-hook-form';
@@ -55,19 +55,22 @@ import { cn } from '../../../lib/utils';
 const eventSchema = z
   .object({
     title: z.string().min(1, 'Motivul este obligatoriu.'),
+    eventDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, { message: 'Data este obligatorie.' }),
     startTime: z
       .string()
       .regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9](?::[0-5][0-9])?$/, {
-        message: 'Format oră invalid (HH:mm).',
+        message: 'Invalid time format (HH:mm).',
       }),
     endTime: z
       .string()
       .regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9](?::[0-5][0-9])?$/, {
-        message: 'Format oră invalid (HH:mm).',
+        message: 'Invalid time format (HH:mm).',
       }),
   })
   .refine((data) => data.startTime < data.endTime, {
-    message: 'Ora de sfârșit trebuie să fie după ora de început.',
+    message: 'End time must be after start time.',
     path: ['endTime'],
   });
 
@@ -85,6 +88,12 @@ type ApiCalendarEvent = {
   title: string;
   start_time: string;
   end_time: string;
+};
+
+type EventLayout = {
+  event: Event;
+  column: number;
+  columns: number;
 };
 
 const normalizeTimeForInput = (value: string) => {
@@ -109,6 +118,75 @@ const minutesToTimeString = (minutes: number) => {
   return `${hours.toString().padStart(2, '0')}:${mins
     .toString()
     .padStart(2, '0')}`;
+};
+
+const computeEventLayout = (dayEvents: Event[]): EventLayout[] => {
+  if (!dayEvents.length) {
+    return [];
+  }
+
+  const sorted = [...dayEvents].sort((a, b) => {
+    const startDiff = parseTimeToMinutes(a.startTime) - parseTimeToMinutes(b.startTime);
+    if (startDiff !== 0) {
+      return startDiff;
+    }
+    return parseTimeToMinutes(a.endTime) - parseTimeToMinutes(b.endTime);
+  });
+
+  const active: Array<{
+    event: Event;
+    end: number;
+    column: number;
+    maxColumns: number;
+  }> = [];
+  const layoutMap = new Map<
+    string,
+    { event: Event; column: number; columns: number }
+  >();
+
+  for (const event of sorted) {
+    const start = parseTimeToMinutes(event.startTime);
+    const end = parseTimeToMinutes(event.endTime);
+
+    for (let i = active.length - 1; i >= 0; i -= 1) {
+      if (active[i].end <= start) {
+        const finished = active[i];
+        const existing = layoutMap.get(finished.event.id);
+        if (existing) {
+          existing.columns = Math.max(existing.columns, finished.maxColumns);
+        }
+        active.splice(i, 1);
+      }
+    }
+
+    const usedColumns = new Set(active.map((item) => item.column));
+    let column = 0;
+    while (usedColumns.has(column)) {
+      column += 1;
+    }
+
+    const entry = { event, end, column, maxColumns: 1 };
+    active.push(entry);
+
+    const currentColumns = active.length;
+    for (const item of active) {
+      item.maxColumns = Math.max(item.maxColumns, currentColumns);
+    }
+
+    layoutMap.set(event.id, { event, column, columns: currentColumns });
+  }
+
+  for (const item of active) {
+    const existing = layoutMap.get(item.event.id);
+    if (existing) {
+      existing.columns = Math.max(existing.columns, item.maxColumns);
+    }
+  }
+
+  return sorted.map((event) => {
+    const layout = layoutMap.get(event.id);
+    return layout ?? { event, column: 0, columns: 1 };
+  });
 };
 
 export default function CalendarPage() {
@@ -157,7 +235,7 @@ export default function CalendarPage() {
   useEffect(() => {
     const handleResize = () => {
       const isMobile = window.innerWidth < 640;
-      setHourHeight(isMobile ? 48 : 64);
+      setHourHeight(isMobile ? 40 : 52);
     };
     handleResize();
     window.addEventListener('resize', handleResize);
@@ -168,6 +246,7 @@ export default function CalendarPage() {
     resolver: zodResolver(eventSchema),
     defaultValues: {
       title: '',
+      eventDate: '',
       startTime: '',
       endTime: '',
     },
@@ -227,12 +306,12 @@ export default function CalendarPage() {
 
   const weekDays = [
     'Luni',
-    'Marți',
+    'Tue',
     'Miercuri',
     'Joi',
     'Vineri',
-    'Sâmbătă',
-    'Duminică',
+    'Sat',
+    'Sun',
   ];
 
   const handlePrev = () => {
@@ -255,7 +334,12 @@ export default function CalendarPage() {
     setEditingEventId(null);
     setSelectedDate(day);
     setIsDialogOpen(true);
-    form.reset({ title: '', startTime: '', endTime: '' });
+    form.reset({
+      title: '',
+      eventDate: formatIsoDate(day),
+      startTime: '',
+      endTime: '',
+    });
   };
 
   const handleEventClick = (
@@ -272,6 +356,7 @@ export default function CalendarPage() {
     setIsDialogOpen(true);
     form.reset({
       title: eventItem.title,
+      eventDate: formatIsoDate(eventItem.date),
       startTime: normalizeTimeForInput(eventItem.startTime),
       endTime: normalizeTimeForInput(eventItem.endTime),
     });
@@ -304,9 +389,9 @@ export default function CalendarPage() {
         setEvents(data.map(normalizeEvent));
       } catch (error) {
         const message =
-          error instanceof Error ? error.message : 'Eroare necunoscută';
+          error instanceof Error ? error.message : 'Unknown error';
         toast({
-          title: 'Nu am putut încărca evenimentele',
+          title: 'Unable to load events',
           description: message,
           variant: 'destructive',
         });
@@ -337,13 +422,14 @@ export default function CalendarPage() {
   }, []);
 
   async function onSubmit(values: z.infer<typeof eventSchema>) {
-    if (!selectedDate) {
+    if (!values.eventDate) {
       return;
     }
 
     try {
       const token = getAuthToken();
       const isEditing = Boolean(editingEventId);
+      const targetDate = parseISO(values.eventDate);
       const createdEvent = normalizeEvent(await apiFetch<ApiCalendarEvent>(
         isEditing
           ? `/calendar/events/${editingEventId}`
@@ -357,7 +443,7 @@ export default function CalendarPage() {
         body: JSON.stringify({
           ...(isEditing ? { id: editingEventId } : {}),
           title: values.title,
-          event_date: formatIsoDate(selectedDate),
+          event_date: values.eventDate,
           start_time: normalizeTimeForInput(values.startTime),
           end_time: normalizeTimeForInput(values.endTime),
         }),
@@ -365,22 +451,22 @@ export default function CalendarPage() {
       ));
       upsertEvent(createdEvent);
       toast({
-        title: isEditing ? 'Eveniment actualizat' : 'Eveniment adăugat',
+        title: isEditing ? 'Event updated' : 'Event added',
         description: `Evenimentul "${values.title}" a fost ${
-          isEditing ? 'actualizat' : 'adăugat'
+          isEditing ? 'actualizat' : 'added'
         } pe ${format(
-          selectedDate,
+          targetDate,
           'dd MMMM yyyy',
-          { locale: ro }
-        )} între orele ${values.startTime} - ${values.endTime}.`,
+          { locale: enUS }
+        )} between ${values.startTime} - ${values.endTime}.`,
       });
       setIsDialogOpen(false);
       setEditingEventId(null);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : 'Eroare necunoscută';
+        error instanceof Error ? error.message : 'Unknown error';
       toast({
-        title: 'Nu am putut salva evenimentul',
+        title: 'Unable to save event',
         description: message,
         variant: 'destructive',
       });
@@ -545,15 +631,15 @@ export default function CalendarPage() {
       ));
       upsertEvent(savedEvent);
       toast({
-        title: 'Eveniment actualizat',
+        title: 'Event updated',
         description: `Evenimentul "${savedEvent.title}" a fost mutat la ${savedEvent.startTime} - ${savedEvent.endTime}.`,
       });
     } catch (error) {
       upsertEvent(previousEvent);
       const message =
-        error instanceof Error ? error.message : 'Eroare necunoscută';
+        error instanceof Error ? error.message : 'Unknown error';
       toast({
-        title: 'Nu am putut actualiza evenimentul',
+        title: 'Unable to update event',
         description: message,
         variant: 'destructive',
       });
@@ -609,22 +695,25 @@ export default function CalendarPage() {
   }, [finalizeDrag, handleDragMove, isDragging]);
 
   return (
-    <div className="space-y-6">
-      <header className="flex items-center justify-between">
+    <div className="w-full min-w-0 max-w-none space-y-8">
+      <div className="flex w-full flex-col gap-6 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="font-headline text-2xl">Calendar</h1>
-          <p className="text-muted-foreground">
-            Vezi și adaugă evenimente în calendarul tău.
+          <h1 className="text-3xl font-black tracking-tight text-slate-800">Calendar</h1>
+          <p className="mt-1 font-medium text-slate-500">
+            Organizeaza-ti programul si gestioneaza evenimentele intr-un calendar aliniat cu design-ul curent.
           </p>
         </div>
-        <Button onClick={() => handleDayClick(new Date())}>
-          <Plus className="mr-2 h-4 w-4" /> Adaugă Eveniment
+        <Button
+          onClick={() => handleDayClick(new Date())}
+          className="bg-[#38bdf8] text-white hover:bg-sky-500"
+        >
+          <Plus className="mr-2 h-4 w-4" /> Add Event
         </Button>
-      </header>
+      </div>
 
-      <Card>
-        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <CardTitle className="font-headline text-xl capitalize">
+      <Card className="overflow-hidden rounded-[32px] border border-slate-100 bg-white shadow-xl shadow-slate-200/40">
+        <CardHeader className="flex flex-col gap-4 border-b border-slate-100 bg-slate-50/80 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+          <CardTitle className="text-2xl font-black capitalize text-slate-800">
             {calendarTitle}
           </CardTitle>
           <div className="flex w-full items-center gap-2 sm:w-auto">
@@ -633,28 +722,32 @@ export default function CalendarPage() {
               onValueChange={(value) => setView(value as 'month' | 'week')}
               className="flex-grow sm:flex-grow-0"
             >
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="month">Lună</TabsTrigger>
-                <TabsTrigger value="week">Săptămână</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-2 rounded-xl bg-slate-100 p-1">
+                <TabsTrigger value="month" className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#38bdf8]">
+                  Luna
+                </TabsTrigger>
+                <TabsTrigger value="week" className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#38bdf8]">
+                  Saptamana
+                </TabsTrigger>
               </TabsList>
             </Tabs>
-            <Button variant="outline" size="icon" onClick={handlePrev}>
+            <Button variant="outline" size="icon" onClick={handlePrev} className="border-slate-200 bg-white">
               <ChevronLeft className="h-4 w-4" />
-              <span className="sr-only">Perioada precedentă</span>
+              <span className="sr-only">Perioada anterioara</span>
             </Button>
-            <Button variant="outline" size="icon" onClick={handleNext}>
+            <Button variant="outline" size="icon" onClick={handleNext} className="border-slate-200 bg-white">
               <ChevronRight className="h-4 w-4" />
-              <span className="sr-only">Perioada următoare</span>
+              <span className="sr-only">Perioada urmatoare</span>
             </Button>
           </div>
         </CardHeader>
-        <CardContent className={cn(view === 'week' && 'p-0')}>
+        <CardContent className={cn('px-0 pb-0 pt-0', view === 'week' && 'p-0')}>
           {view === 'month' && (
-            <div className="grid grid-cols-7 gap-px border-l border-t border-border bg-border">
+            <div className="grid grid-cols-7 gap-px border-l border-t border-slate-200 bg-slate-200">
               {weekDays.map((day) => (
                 <div
                   key={day}
-                  className="bg-card p-1 text-center text-xs font-medium capitalize text-muted-foreground sm:p-2 sm:text-sm"
+                  className="bg-white p-2 text-center text-xs font-bold capitalize text-slate-500 sm:p-3 sm:text-sm"
                 >
                   <span className="hidden sm:inline">{day.substring(0, 3)}</span>
                   <span className="sm:hidden">{day.substring(0, 1)}</span>
@@ -666,35 +759,48 @@ export default function CalendarPage() {
                   <div
                     key={day.toString()}
                     className={cn(
-                      'relative min-h-[100px] cursor-pointer bg-card p-1 transition-colors hover:bg-muted/50 sm:min-h-[120px] sm:p-2',
+                      'relative min-h-[88px] cursor-pointer bg-white p-2 transition-colors hover:bg-slate-50 sm:min-h-[104px] sm:p-2.5',
                       !isSameMonth(day, currentDate) &&
-                        'bg-muted/50 text-muted-foreground'
+                        'bg-slate-50/70 text-slate-400'
                     )}
                     onClick={() => handleDayClick(day)}
                   >
                     <time
                       dateTime={format(day, 'yyyy-MM-dd')}
                       className={cn(
-                        'absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full text-sm sm:right-2 sm:top-2',
-                        isToday(day) && 'bg-primary text-primary-foreground'
+                        'absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold sm:right-3 sm:top-3',
+                        isToday(day) ? 'bg-[#38bdf8] text-white' : 'text-slate-700'
                       )}
                     >
                       {format(day, 'd')}
                     </time>
-                    <div className="mt-7 space-y-1 sm:mt-8">
-                      {dayEvents.slice(0, 2).map((event, index) => (
+                    <div className="mt-7 space-y-1 sm:mt-7">
+                      {dayEvents.slice(0, 2).map((event) => (
                         <div
                           key={event.id}
-                          className="overflow-hidden rounded-md bg-accent p-1 px-1.5 text-xs text-accent-foreground sm:px-2"
+                          className="overflow-hidden rounded-xl bg-sky-100 p-1.5 px-2 text-xs text-sky-900 sm:px-2.5"
                           onClick={(e) => handleEventClick(event, e)}
                         >
                           <div className="font-semibold">{`${event.startTime}`}</div>
                           <div className="truncate">{event.title}</div>
                         </div>
                       ))}
+                      {dayEvents.length > 2 && (
+                        <button
+                          type="button"
+                          className="w-full rounded-xl border border-dashed border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-slate-500 transition-colors hover:bg-slate-50"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setView('week');
+                            setCurrentDate(day);
+                          }}
+                        >
+                          {`Inca ${dayEvents.length - 2} evenimente`}
+                        </button>
+                      )}
                       {isLoadingEvents && dayEvents.length === 0 && (
-                        <div className="text-[10px] text-muted-foreground">
-                          Se încarcă...
+                        <div className="text-[10px] text-slate-400">
+                          Se incarca...
                         </div>
                       )}
                     </div>
@@ -705,16 +811,17 @@ export default function CalendarPage() {
           )}
 
           {view === 'week' && (
-            <div className="flex">
+            <div className="max-h-[68vh] overflow-auto">
+              <div className="flex min-w-[860px]">
               <div className="flex w-14 flex-col">
-                <div className="h-[65px] border-r sm:h-[69px]">&nbsp;</div>
+                <div className="h-[65px] border-r border-slate-200 bg-slate-50 sm:h-[69px]">&nbsp;</div>
                 {hours.map((hour) => (
                   <div
                     key={hour}
-                    className="shrink-0 border-r pt-1 text-center"
+                    className="shrink-0 border-r border-slate-200 pt-1 text-center"
                     style={{ height: `${hourHeight}px` }}
                   >
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs text-slate-400">
                       {hour}:00
                     </span>
                   </div>
@@ -722,22 +829,22 @@ export default function CalendarPage() {
               </div>
 
               <div className="flex-1 overflow-x-hidden">
-                <div className="sticky top-0 z-20 grid grid-cols-7 bg-background">
+                <div className="sticky top-0 z-20 grid grid-cols-7 bg-white">
                   {days.map((day) => (
                     <div
                       key={day.toString()}
-                      className="border-b border-l p-1 text-center sm:p-2"
+                      className="border-b border-l border-slate-200 p-2 text-center sm:p-3"
                     >
-                      <p className="hidden text-sm capitalize text-muted-foreground sm:block">
+                      <p className="hidden text-sm capitalize text-slate-500 sm:block">
                         {format(day, 'E', { locale: ro })}
                       </p>
-                      <p className="text-sm capitalize text-muted-foreground sm:hidden">
+                      <p className="text-sm capitalize text-slate-500 sm:hidden">
                         {format(day, 'EEEEE', { locale: ro })}
                       </p>
                       <p
                         className={cn(
-                          'text-lg font-semibold sm:text-xl',
-                          isToday(day) && 'text-primary'
+                          'text-lg font-semibold text-slate-800 sm:text-xl',
+                          isToday(day) && 'text-[#38bdf8]'
                         )}
                       >
                         {format(day, 'd')}
@@ -750,15 +857,15 @@ export default function CalendarPage() {
                     <div
                       key={dayIndex}
                       className={cn(
-                        'relative h-full w-full border-l',
-                        isToday(day) && 'bg-primary/5'
+                        'relative h-full w-full border-l border-slate-200',
+                        isToday(day) && 'bg-sky-50/40'
                       )}
                       onClick={() => handleDayClick(day)}
                     >
                       {hours.map((hour) => (
                         <div
                           key={hour}
-                          className="border-b"
+                          className="border-b border-slate-200"
                           style={{ height: `${hourHeight}px` }}
                         />
                       ))}
@@ -776,10 +883,11 @@ export default function CalendarPage() {
                             startTime: dragPreview.startTime,
                             endTime: dragPreview.endTime,
                           };
-                          return [...baseEvents, previewEvent];
+                          return computeEventLayout([...baseEvents, previewEvent]);
                         }
-                        return baseEvents;
-                      })().map((event) => {
+                        return computeEventLayout(baseEvents);
+                      })().map((layout) => {
+                        const event = layout.event;
                         const preview =
                           dragPreview && dragPreview.id === event.id
                             ? dragPreview
@@ -789,20 +897,21 @@ export default function CalendarPage() {
                         const top = timeToPosition(startTime);
                         const height =
                           timeToPosition(endTime) - timeToPosition(startTime);
+                        const widthPercent = 100 / layout.columns;
+                        const leftOffset = layout.column * widthPercent;
 
                         return (
                           <div
                             key={event.id}
                             className={cn(
-                              'absolute z-10 w-full cursor-grab overflow-hidden rounded-md border bg-primary/80 p-1 text-xs text-primary-foreground shadow-md backdrop-blur-sm active:cursor-grabbing sm:p-2',
+                              'absolute z-10 cursor-grab overflow-hidden rounded-xl border border-sky-200 bg-[#38bdf8] p-1 text-xs text-white shadow-lg shadow-sky-200/50 backdrop-blur-sm active:cursor-grabbing sm:p-2',
                               preview && 'opacity-90'
                             )}
                             style={{
                               top: `${top}px`,
                               height: `${Math.max(height, 24)}px`,
-                              left: '2px',
-                              right: '2px',
-                              width: 'calc(100% - 4px)',
+                              left: `calc(${leftOffset}% + 2px)`,
+                              width: `calc(${widthPercent}% - 4px)`,
                             }}
                             onClick={(e) => handleEventClick(event, e)}
                             onMouseDown={(e) => {
@@ -837,20 +946,21 @@ export default function CalendarPage() {
                   ))}
                 </div>
               </div>
+              </div>
             </div>
           )}
         </CardContent>
       </Card>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>
-              {editingEventId ? 'Editează eveniment' : 'Adaugă eveniment nou'}
+        <DialogContent className="overflow-hidden rounded-[28px] border border-slate-100 bg-white p-0 shadow-2xl shadow-slate-300/30 sm:max-w-[520px]">
+          <DialogHeader className="border-b border-slate-100 bg-slate-50 px-6 py-5">
+            <DialogTitle className="text-xl font-black text-slate-800">
+              {editingEventId ? 'Editeaza evenimentul' : 'Adauga eveniment nou'}
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="mt-1 font-medium text-slate-500">
               {selectedDate &&
-                `Adaugă un eveniment pentru data de ${format(
+                `Adauga un eveniment pentru ${format(
                   selectedDate,
                   'dd MMMM yyyy',
                   { locale: ro }
@@ -860,18 +970,42 @@ export default function CalendarPage() {
           <Form {...form}>
             <form
               onSubmit={form.handleSubmit(onSubmit)}
-              className="space-y-4 py-4"
+              className="space-y-5 px-6 py-6"
             >
               <FormField
                 control={form.control}
                 name="title"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Motivul</FormLabel>
+                    <FormLabel className="text-sm font-semibold text-slate-800">Titlu</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="Ex: Întâlnire de vânzări"
+                        placeholder="Ex: Sales meeting"
+                        className="h-12 rounded-xl border-slate-200 px-4"
                         {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="eventDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-sm font-semibold text-slate-800">Data</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="date"
+                        className="h-12 rounded-xl border-slate-200 px-4"
+                        {...field}
+                        onChange={(event) => {
+                          field.onChange(event);
+                          if (event.target.value) {
+                            setSelectedDate(parseISO(event.target.value));
+                          }
+                        }}
                       />
                     </FormControl>
                     <FormMessage />
@@ -884,9 +1018,9 @@ export default function CalendarPage() {
                   name="startTime"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Ora de început</FormLabel>
+                      <FormLabel className="text-sm font-semibold text-slate-800">Ora inceput</FormLabel>
                       <FormControl>
-                        <Input type="time" {...field} />
+                        <Input type="time" className="h-12 rounded-xl border-slate-200 px-4" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -897,17 +1031,27 @@ export default function CalendarPage() {
                   name="endTime"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Ora de sfârșit</FormLabel>
+                      <FormLabel className="text-sm font-semibold text-slate-800">Ora final</FormLabel>
                       <FormControl>
-                        <Input type="time" {...field} />
+                        <Input type="time" className="h-12 rounded-xl border-slate-200 px-4" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
-              <DialogFooter>
-                <Button type="submit">Salvează Eveniment</Button>
+              <DialogFooter className="border-t border-slate-100 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-slate-200 text-slate-700"
+                  onClick={() => setIsDialogOpen(false)}
+                >
+                  Anuleaza
+                </Button>
+                <Button type="submit" className="bg-[#38bdf8] text-white hover:bg-sky-500">
+                  Salveaza evenimentul
+                </Button>
               </DialogFooter>
             </form>
           </Form>

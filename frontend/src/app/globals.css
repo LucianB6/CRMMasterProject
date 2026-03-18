@@ -4,14 +4,14 @@
 
 @layer base {
   :root {
-    --background: 210 29% 97%;
+    --background: 0 0% 100%;
     --foreground: 220 20% 20%;
     --card: 0 0% 100%;
     --card-foreground: 220 20% 20%;
     --popover: 0 0% 100%;
     --popover-foreground: 220 20% 20%;
-    --primary: 220 39% 26%;
-    --primary-foreground: 0 0% 98%;
+    --primary: 198 80% 67%;
+    --primary-foreground: 0 0% 100%;
     --secondary: 210 25% 90%;
     --secondary-foreground: 220 25% 25%;
     --muted: 210 25% 92%;
@@ -22,21 +22,21 @@
     --destructive-foreground: 0 0% 98%;
     --border: 210 20% 88%;
     --input: 210 20% 88%;
-    --ring: 220 39% 26%;
+    --ring: 198 80% 67%;
     --chart-1: 220 70% 50%;
     --chart-2: 37 100% 50%;
     --chart-3: 160 60% 45%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
     --radius: 0.5rem;
-    --sidebar-background: 220 39% 26%;
-    --sidebar-foreground: 0 0% 98%;
-    --sidebar-primary: 37 100% 42%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 220 39% 32%;
-    --sidebar-accent-foreground: 0 0% 98%;
-    --sidebar-border: 220 39% 32%;
-    --sidebar-ring: 37 100% 42%;
+    --sidebar-background: 198.4 93.2% 59.6%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 198.4 93.2% 59.6%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 199 89% 48%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 198.4 93.2% 59.6%;
+    --sidebar-ring: 198.4 93.2% 59.6%;
   }
 
   .dark {
@@ -81,5 +81,49 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer components {
+  .dark .dashboard-shell {
+    color: rgb(241 245 249);
+  }
+
+  .dark .dashboard-shell [class*='bg-white'] {
+    background-color: rgb(15 23 42) !important;
+  }
+
+  .dark .dashboard-shell [class*='bg-slate-50'] {
+    background-color: rgb(15 23 42 / 0.88) !important;
+  }
+
+  .dark .dashboard-shell [class*='bg-slate-100'] {
+    background-color: rgb(30 41 59 / 0.92) !important;
+  }
+
+  .dark .dashboard-shell [class*='border-slate-100'],
+  .dark .dashboard-shell [class*='border-slate-200'],
+  .dark .dashboard-shell [class*='border-[#38bdf8]/35'] {
+    border-color: rgb(51 65 85 / 0.9) !important;
+  }
+
+  .dark .dashboard-shell [class*='text-slate-900'],
+  .dark .dashboard-shell [class*='text-slate-800'],
+  .dark .dashboard-shell [class*='text-slate-700'] {
+    color: rgb(241 245 249) !important;
+  }
+
+  .dark .dashboard-shell [class*='text-slate-600'],
+  .dark .dashboard-shell [class*='text-slate-500'],
+  .dark .dashboard-shell [class*='text-slate-400'] {
+    color: rgb(148 163 184) !important;
+  }
+
+  .dark .dashboard-shell [class*='shadow-slate-200'],
+  .dark .dashboard-shell [class*='shadow-slate-300'] {
+    --tw-shadow-color: rgb(2 6 23 / 0.55) !important;
   }
 }

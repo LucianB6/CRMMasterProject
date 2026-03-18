@@ -2,6 +2,7 @@ package com.salesway.tasks.controller;
 
 import com.salesway.tasks.dto.TaskBoardRequest;
 import com.salesway.tasks.dto.TaskBoardResponse;
+import com.salesway.tasks.dto.TaskBoardStatusRequest;
 import com.salesway.tasks.service.TaskBoardService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -12,8 +13,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -27,8 +30,14 @@ public class TaskBoardController {
     }
 
     @GetMapping
-    public ResponseEntity<List<TaskBoardResponse>> getTasks() {
-        return ResponseEntity.ok(taskBoardService.getTasks());
+    public ResponseEntity<List<TaskBoardResponse>> getTasks(
+            @RequestParam(name = "leadId", required = false) UUID leadId,
+            @RequestParam(name = "assignee", required = false) String assignee,
+            @RequestParam(name = "status", required = false) TaskBoardStatusRequest status,
+            @RequestParam(name = "dueFrom", required = false) LocalDate dueFrom,
+            @RequestParam(name = "dueTo", required = false) LocalDate dueTo
+    ) {
+        return ResponseEntity.ok(taskBoardService.getTasks(leadId, assignee, status, dueFrom, dueTo));
     }
 
     @PostMapping

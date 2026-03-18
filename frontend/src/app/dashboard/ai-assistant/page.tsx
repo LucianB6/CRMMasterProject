@@ -3,13 +3,7 @@
 import { Bot, Send } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '../../../components/ui/card';
+import type { ReactNode } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { ApiError, apiFetch } from '../../../lib/api';
@@ -18,6 +12,32 @@ type ChatMessage = {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+};
+
+const formatAssistantMessage = (value: string) =>
+  value
+    .replace(/\s+([0-9]+\.)\s+\*\*/g, '\n\n$1 **')
+    .replace(/:\s+([0-9]+\.)\s+\*\*/g, ':\n\n$1 **')
+    .trim();
+
+const renderMessageContent = (value: string) => {
+  const lines = value.split('\n');
+
+  return lines.map((line, lineIndex) => {
+    const parts = line.split(/(\*\*.*?\*\*)/g);
+
+    return (
+      <div key={`${line}-${lineIndex}`}>
+        {parts.map((part, partIndex) => {
+          if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
+            return <strong key={`${part}-${partIndex}`}>{part.slice(2, -2)}</strong>;
+          }
+
+          return <span key={`${part}-${partIndex}`}>{part}</span>;
+        })}
+      </div>
+    );
+  }) as ReactNode;
 };
 
 const buildId = () =>
@@ -90,19 +110,19 @@ export default function AiAssistantPage() {
           {
             id: buildId(),
             role: 'assistant',
-            content: response.answer,
+            content: formatAssistantMessage(response.answer),
           },
         ]);
       }
     } catch (error) {
       if (error instanceof ApiError) {
         const message =
-          error.body || error.message || 'A apărut o eroare la trimitere.';
+          error.body || error.message || 'An error occurred while sending.';
         setErrorMessage(message);
       } else if (error instanceof Error) {
         setErrorMessage(error.message);
       } else {
-        setErrorMessage('A apărut o eroare la trimitere.');
+        setErrorMessage('An error occurred while sending.');
       }
     } finally {
       setIsSending(false);
@@ -117,20 +137,22 @@ export default function AiAssistantPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="w-full min-w-0 max-w-none space-y-8">
       <header>
-        <h1 className="font-headline text-2xl">AI Assistant</h1>
-        <p className="text-muted-foreground">
-          Îți oferă răspunsuri rapide și idei pentru fluxurile tale de lucru.
+        <h1 className="text-3xl font-black tracking-tight text-slate-800">AI Assistant</h1>
+        <p className="mt-1 font-medium text-slate-500">
+          Get quick answers and ideas for your workflows.
         </p>
       </header>
 
       <div className="flex h-[70vh] flex-col">
-        <Card className="flex flex-1 flex-col overflow-hidden">
-          <CardContent className="flex-1 space-y-6 overflow-y-auto p-6">
+        <div className="flex flex-1 flex-col overflow-hidden rounded-[28px] border border-slate-100 bg-white shadow-xl shadow-slate-200/40">
+          <div className="flex-1 space-y-6 overflow-y-auto p-6">
             {!hasMessages && !isSending ? (
-              <div className="flex h-full flex-col items-center justify-center gap-4 text-center text-muted-foreground">
-                <Bot className="h-16 w-16" />
+              <div className="flex h-full flex-col items-center justify-center gap-4 text-center text-slate-500">
+                <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                  <Bot className="h-12 w-12 text-[#38bdf8]" />
+                </div>
                 <p className="max-w-md">
                   I am your AI sales assistant, SalesWay AI. Select or create a
                   conversation to get started.
@@ -147,32 +169,32 @@ export default function AiAssistantPage() {
                   <div
                     className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm ${
                       message.role === 'user'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-card text-foreground'
+                        ? 'bg-[#38bdf8] text-white'
+                        : 'border border-slate-200 bg-slate-50 text-slate-700'
                     }`}
                   >
-                    {message.content}
+                    <div className="leading-7">{renderMessageContent(message.content)}</div>
                   </div>
                 </div>
               ))
             )}
             {isSending && (
               <div className="flex justify-start">
-                <div className="max-w-[80%] rounded-2xl bg-card px-4 py-2 text-sm text-muted-foreground">
-                  AI Assistant scrie...
+                <div className="max-w-[80%] rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-500">
+                  AI Assistant is typing...
                 </div>
               </div>
             )}
             <div ref={endRef} />
-          </CardContent>
+          </div>
 
           {errorMessage && (
-            <div className="border-t border-destructive/30 bg-destructive/10 px-6 py-3 text-sm text-destructive">
+            <div className="border-t border-red-200 bg-red-50 px-6 py-3 text-sm font-medium text-red-700">
               {errorMessage}
             </div>
           )}
 
-          <div className="border-t p-4">
+          <div className="border-t border-slate-200 bg-white p-4">
             <form className="flex w-full items-center gap-2">
               <Input
                 value={inputValue}
@@ -181,19 +203,21 @@ export default function AiAssistantPage() {
                 placeholder={placeholder}
                 disabled={isSending}
                 autoComplete="off"
+                className="border-slate-200 bg-slate-50 focus:border-[#38bdf8] focus:ring-[#38bdf8]/20"
               />
               <Button
                 type="button"
                 onClick={handleSend}
                 size="icon"
                 disabled={isSending || !inputValue.trim()}
+                className="bg-[#38bdf8] text-white hover:bg-[#0ea5e9]"
               >
                 <Send className="h-4 w-4" />
-                <span className="sr-only">Trimite</span>
+                <span className="sr-only">Send</span>
               </Button>
             </form>
           </div>
-        </Card>
+        </div>
       </div>
     </div>
   );

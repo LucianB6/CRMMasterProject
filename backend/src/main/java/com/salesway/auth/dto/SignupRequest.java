@@ -6,6 +6,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
+import java.util.UUID;
+
 public class SignupRequest {
     @Email
     @NotBlank
@@ -30,6 +32,11 @@ public class SignupRequest {
 
     @NotNull
     private MembershipRole role;
+
+    @Size(max = 255)
+    private String companyName;
+
+    private UUID companyId;
 
     public String getEmail() {
         return email;
@@ -77,5 +84,21 @@ public class SignupRequest {
 
     public void setRole(MembershipRole role) {
         this.role = role;
+    }
+
+    public String getCompanyName() {
+        return companyName;
+    }
+
+    public void setCompanyName(String companyName) {
+        this.companyName = companyName;
+    }
+
+    public UUID getCompanyId() {
+        return companyId;
+    }
+
+    public void setCompanyId(UUID companyId) {
+        this.companyId = companyId;
     }
 }

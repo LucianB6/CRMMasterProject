@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.salesway.leads.controller.LeadManagementControllerIntegrationTest
+-------------------------------------------------------------------------------
+Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.600 s -- in com.salesway.leads.controller.LeadManagementControllerIntegrationTest

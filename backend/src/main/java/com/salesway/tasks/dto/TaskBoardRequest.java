@@ -16,12 +16,24 @@ public class TaskBoardRequest {
     @JsonProperty("goal")
     private String goal;
 
+    @JsonProperty("description")
+    private String description;
+
     @JsonProperty("deadline")
     private LocalDate deadline;
+
+    @JsonProperty("dueDate")
+    private LocalDate dueDate;
 
     @NotNull
     @JsonProperty("status")
     private TaskBoardStatusRequest status;
+
+    @JsonProperty("leadId")
+    private java.util.UUID leadId;
+
+    @JsonProperty("assigneeUserId")
+    private java.util.UUID assigneeUserId;
 
     public String getTitle() {
         return title;
@@ -39,6 +51,14 @@ public class TaskBoardRequest {
         this.goal = goal;
     }
 
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
     public LocalDate getDeadline() {
         return deadline;
     }
@@ -47,11 +67,43 @@ public class TaskBoardRequest {
         this.deadline = deadline;
     }
 
+    public LocalDate getDueDate() {
+        return dueDate;
+    }
+
+    public void setDueDate(LocalDate dueDate) {
+        this.dueDate = dueDate;
+    }
+
     public TaskBoardStatusRequest getStatus() {
         return status;
     }
 
     public void setStatus(TaskBoardStatusRequest status) {
         this.status = status;
+    }
+
+    public java.util.UUID getLeadId() {
+        return leadId;
+    }
+
+    public void setLeadId(java.util.UUID leadId) {
+        this.leadId = leadId;
+    }
+
+    public java.util.UUID getAssigneeUserId() {
+        return assigneeUserId;
+    }
+
+    public void setAssigneeUserId(java.util.UUID assigneeUserId) {
+        this.assigneeUserId = assigneeUserId;
+    }
+
+    public String resolvedGoal() {
+        return description != null ? description : goal;
+    }
+
+    public LocalDate resolvedDeadline() {
+        return dueDate != null ? dueDate : deadline;
     }
 }
