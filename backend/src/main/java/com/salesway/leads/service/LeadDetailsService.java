@@ -2133,44 +2133,39 @@ public class LeadDetailsService {
 
     private void applyAnswerSignals(AnswerSignals answerSignals, List<LeadAiInsightFactorResponse> factors) {
         if (answerSignals.readyToStartNow()) {
-            factors.add(new LeadAiInsightFactorResponse(
+            factors.add(impactFactor(
                     "Start Urgency",
                     16,
-                    "positive",
                     "Lead a declarat că vrea să înceapă acum sau cât mai curând."
             ));
         }
         if (answerSignals.highPriority()) {
-            factors.add(new LeadAiInsightFactorResponse(
+            factors.add(impactFactor(
                     "Problem Priority",
                     10,
-                    "positive",
                     "Lead tratează această problemă ca prioritate ridicată."
             ));
         }
         if (answerSignals.singleDecisionMaker()) {
-            factors.add(new LeadAiInsightFactorResponse(
+            factors.add(impactFactor(
                     "Decision Authority",
                     8,
-                    "positive",
                     "Lead-ul este singurul decident și nu depinde de aprobări suplimentare."
             ));
         }
         if (answerSignals.budgetDeclared()) {
-            factors.add(new LeadAiInsightFactorResponse(
+            factors.add(impactFactor(
                     "Budget Clarity",
                     answerSignals.lowBudget() ? 4 : 6,
-                    "positive",
                     answerSignals.lowBudget()
                             ? "Există buget declarat, dar sensibil la accesibilitate și ROI rapid."
                             : "Există buget declarat, ceea ce reduce incertitudinea comercială."
             ));
         }
         if (answerSignals.costOfInactionHigh()) {
-            factors.add(new LeadAiInsightFactorResponse(
+            factors.add(impactFactor(
                     "Cost of Inaction",
                     8,
-                    "positive",
                     "Lead-ul verbalizează costul stagnării, ceea ce crește motivația de acțiune."
             ));
         }
@@ -2354,46 +2349,85 @@ public class LeadDetailsService {
     }
 
     private void applyQualificationSignals(QualificationSignals signals, List<LeadAiInsightFactorResponse> factors) {
-        factors.add(new LeadAiInsightFactorResponse(
+        factors.add(impactFactor(
                 "Problem Clarity",
                 signals.clearProblem() ? 16 : -18,
-                signals.clearProblem() ? "positive" : "negative",
                 signals.clearProblem()
                         ? "Lead-ul descrie clar blocajul principal și problema de rezolvat."
                         : "Detaliile despre obiecție sau problemă sunt prea vagi."
         ));
-        factors.add(new LeadAiInsightFactorResponse(
+        factors.add(impactFactor(
                 "Problem Awareness",
                 signals.problemAware() ? 14 : -16,
-                signals.problemAware() ? "positive" : "negative",
                 signals.problemAware()
                         ? "Lead-ul este conștient de costul stagnării și de impactul problemei."
                         : "Lead-ul nu exprimă suficient conștientizarea problemei sau a costului inacțiunii."
         ));
         if (signals.urgencyHigh()) {
-            factors.add(new LeadAiInsightFactorResponse(
+            factors.add(impactFactor(
                     "Urgency To Change",
                     18,
-                    "positive",
                     "Lead-ul exprimă presiune de timp și dorință reală de schimbare."
             ));
         }
         if (signals.valueOriented()) {
-            factors.add(new LeadAiInsightFactorResponse(
+            factors.add(impactFactor(
                     "Value Orientation",
                     12,
-                    "positive",
                     "Lead-ul caută direcție, rezultate și exemple concrete, nu doar preț."
             ));
         }
         if (signals.priceSensitive()) {
-            factors.add(new LeadAiInsightFactorResponse(
+            factors.add(impactFactor(
                     "Price Fixation",
                     -16,
-                    "negative",
                     "Discuția pare dominată de preț, nu de direcția programului sau valoare."
             ));
         }
+    }
+
+    private LeadAiInsightFactorResponse impactFactor(String label, int impact, String detail) {
+        return ratedFactor(label, impactToRating(impact), detail);
+    }
+
+    private LeadAiInsightFactorResponse ratedFactor(String label, int rating, String detail) {
+        int normalizedRating = Math.max(0, Math.min(10, rating));
+        String type = normalizedRating >= 7 ? "positive" : normalizedRating >= 4 ? "neutral" : "negative";
+        return new LeadAiInsightFactorResponse(label, normalizedRating, type, detail);
+    }
+
+    private int impactToRating(int impact) {
+        if (impact >= 18) {
+            return 10;
+        }
+        if (impact >= 15) {
+            return 9;
+        }
+        if (impact >= 12) {
+            return 8;
+        }
+        if (impact >= 8) {
+            return 7;
+        }
+        if (impact >= 4) {
+            return 6;
+        }
+        if (impact > 0) {
+            return 5;
+        }
+        if (impact == 0) {
+            return 5;
+        }
+        if (impact <= -18) {
+            return 1;
+        }
+        if (impact <= -16) {
+            return 2;
+        }
+        if (impact <= -12) {
+            return 3;
+        }
+        return 4;
     }
 
     private int calculateDerivedClientScore(int score, QualificationSignals qualificationSignals, AnswerSignals answerSignals) {
