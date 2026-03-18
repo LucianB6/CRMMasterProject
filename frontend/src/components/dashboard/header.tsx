@@ -9,7 +9,7 @@ import {
   User
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import React from "react";
 
 import { Button } from "../ui/button";
@@ -44,17 +44,28 @@ const toTitleCase = (value: string) =>
 
 export function DashboardHeader({ showNotifications = true }: { showNotifications?: boolean }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const normalizedPathname = React.useMemo(
+    () => pathname.replace(/\/+$/, '') || '/',
+    [pathname]
+  );
   const [displayName, setDisplayName] = React.useState("Cont");
   const [initials, setInitials] = React.useState("?");
   const [isProfileOpen, setIsProfileOpen] = React.useState(false);
   const profileRef = React.useRef<HTMLDivElement | null>(null);
   const currentPageLabel = React.useMemo(() => {
-    if (breadcrumbLabelByPath[pathname]) return breadcrumbLabelByPath[pathname];
-    const normalized = pathname.replace(/\/$/, "");
+    if (breadcrumbLabelByPath[normalizedPathname]) return breadcrumbLabelByPath[normalizedPathname];
+    const normalized = normalizedPathname.replace(/\/$/, "");
     const lastSegment = normalized.split("/").filter(Boolean).pop();
     if (!lastSegment) return "Dashboard";
     return toTitleCase(lastSegment);
-  }, [pathname]);
+  }, [normalizedPathname]);
+  const dashboardHref = React.useMemo(() => {
+    if (normalizedPathname.startsWith("/dashboard/manager")) {
+      return "/dashboard/manager/overview";
+    }
+    return "/dashboard";
+  }, [normalizedPathname]);
 
   React.useEffect(() => {
     const fetchUser = async () => {
@@ -108,13 +119,30 @@ export function DashboardHeader({ showNotifications = true }: { showNotification
   }, []);
 
   return (
-    <header className="sticky top-0 z-10 flex h-16 items-center justify-between gap-4 border-b bg-background px-4 md:px-6">
+    <header className="sticky top-0 z-10 flex h-16 items-center justify-between gap-4 border-b bg-background px-4 md:px-6 dark:border-slate-800 dark:bg-slate-950">
       <div className="flex items-center gap-2">
-        <div className="flex items-center gap-2 text-sm text-slate-500">
-          <span>Dashboard</span>
-          <ChevronRight size={14} />
-          <span className="font-medium text-slate-900">{currentPageLabel}</span>
-        </div>
+        {normalizedPathname === dashboardHref ? (
+          <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span className="font-medium text-slate-900 dark:text-slate-100">Overview</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <Link
+              href={dashboardHref}
+              className="rounded-sm transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+            >
+              Overview
+            </Link>
+            <ChevronRight size={14} />
+            <button
+              type="button"
+              onClick={() => router.refresh()}
+              className="rounded-sm font-medium text-slate-900 transition-colors hover:text-[#38bdf8] dark:text-slate-100 dark:hover:text-sky-300"
+            >
+              {currentPageLabel}
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-4">
@@ -131,43 +159,43 @@ export function DashboardHeader({ showNotifications = true }: { showNotification
           <button
             type="button"
             onClick={() => setIsProfileOpen((current) => !current)}
-            className="flex items-center gap-3 rounded-full p-1 transition-all hover:bg-slate-50 focus:outline-none"
+            className="flex items-center gap-3 rounded-full p-1 transition-all hover:bg-slate-50 focus:outline-none dark:hover:bg-slate-900"
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-sm font-bold text-slate-600 shadow-sm">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-sm font-bold text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
               {initials}
             </div>
-            <span className="hidden text-sm font-semibold text-slate-700 md:block">{displayName}</span>
+            <span className="hidden text-sm font-semibold text-slate-700 dark:text-slate-100 md:block">{displayName}</span>
             <ChevronDown
               size={16}
-              className={`text-slate-400 transition-transform ${isProfileOpen ? "rotate-180" : ""}`}
+              className={`text-slate-400 transition-transform dark:text-slate-500 ${isProfileOpen ? "rotate-180" : ""}`}
             />
           </button>
 
           {isProfileOpen && (
-            <div className="animate-in fade-in zoom-in absolute right-0 mt-2 w-56 origin-top-right rounded-xl border border-slate-200 bg-white py-2 shadow-2xl duration-100">
+            <div className="animate-in fade-in zoom-in absolute right-0 mt-2 w-56 origin-top-right rounded-xl border border-slate-200 bg-white py-2 shadow-2xl duration-100 dark:border-slate-800 dark:bg-slate-900">
               <div className="mb-1 px-4 py-2">
-                <p className="text-xs font-bold uppercase tracking-widest text-slate-400">My Account</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">My Account</p>
               </div>
 
               <Link
                 href="/dashboard/profile"
                 onClick={() => setIsProfileOpen(false)}
-                className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-slate-700 transition-colors hover:bg-slate-50"
+                className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-slate-700 transition-colors hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
               >
-                <User size={18} className="text-slate-400" />
+                <User size={18} className="text-slate-400 dark:text-slate-500" />
                 <span>Profile</span>
               </Link>
 
               <Link
                 href="/dashboard/settings"
                 onClick={() => setIsProfileOpen(false)}
-                className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-slate-700 transition-colors hover:bg-slate-50"
+                className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-slate-700 transition-colors hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
               >
-                <Settings size={18} className="text-slate-400" />
+                <Settings size={18} className="text-slate-400 dark:text-slate-500" />
                 <span>Settings</span>
               </Link>
 
-              <div className="my-2 border-t border-slate-100" />
+              <div className="my-2 border-t border-slate-100 dark:border-slate-800" />
 
               <Link
                 href="/"

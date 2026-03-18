@@ -61,6 +61,15 @@ export type LeadAnswerResponse = {
   answeredAt: string | null;
 };
 
+export type LeadAnswerUpdateValue = string | number | boolean | string[];
+
+export type LeadAnswerUpdatePayload = {
+  answers: Array<{
+    questionId: string;
+    value: LeadAnswerUpdateValue;
+  }>;
+};
+
 export type LeadFormQuestion = {
   id: string;
   questionType: string;
@@ -149,42 +158,85 @@ export type LeadAiScoreFactor = {
 };
 
 export type LeadAiNextBestAction = {
-  actionType: string | null;
+  actionType?: string | null;
+  type?: string | null;
   priority: string | null;
-  reason: string | null;
-  whyNow: string | null;
-  deadlineHint: string | null;
+  timing?: string | null;
+  reason?: string | null;
+  whyNow?: string | null;
+  deadlineHint?: string | null;
+  channel?: string | null;
+};
+
+export type LeadAiPsychologicalInsight = {
+  dominant_motivation?: string | null;
+  primary_blocker?: string | null;
+  decision_readiness?: string | null;
+  confidence_state?: string | null;
+  risk_of_stalling?: string | null;
+};
+
+export type LeadAiConversationDirection = {
+  primary_angle?: string | null;
+  positioning?: string | null;
+  tone?: string | null;
+  focus_points?: string[];
+};
+
+export type LeadAiObjectionStrategy = {
+  main_objection_to_address?: string | null;
+  reframe?: string | null;
+  supporting_points?: string[];
+};
+
+export type LeadAiScores = {
+  client_score?: number | null;
+  next_call_close_probability?: number | null;
+  lead_readiness_score?: number | null;
+  buying_intent_score?: number | null;
+  psychological_resistance_score?: number | null;
 };
 
 export type LeadAiWhatChanged = {
-  previousRecommendation: string | null;
-  previousFeedbackStatus: string | null;
-  changes: string[];
+  previousRecommendation?: string | null;
+  previousFeedbackStatus?: string | null;
+  changes?: string[];
 };
 
 export type LeadAiExplainability = {
-  whyThisInsight: string | null;
-  basedOnSignals: string[];
-  kbEvidence: string[];
+  whyThisInsight?: string | null;
+  basedOnSignals?: string[];
+  kbEvidence?: string[];
 };
 
 export type LeadAiInsightsResponse = {
-  insightId: string;
-  score: number;
-  relationshipSentiment: string | null;
-  relationshipRiskLevel: string | null;
-  relationshipTrend: string | null;
-  relationshipKeyBlocker: string | null;
-  confidenceScore: number | null;
-  confidenceLevel: string | null;
-  guidanceSource: string | null;
-  nextBestAction: LeadAiNextBestAction | null;
-  whatChanged: LeadAiWhatChanged | null;
-  explainability: LeadAiExplainability | null;
-  recommendedAction: string;
-  suggestedApproach: string;
-  scoreFactors: LeadAiScoreFactor[];
-  generatedAt: string;
+  insightId?: string;
+  generatedAt?: string | null;
+  score?: number | null;
+  clientScore?: number | null;
+  nextCallCloseProbability?: number | null;
+  relationshipSentiment?: string | null;
+  relationshipRiskLevel?: string | null;
+  relationshipTrend?: string | null;
+  relationshipKeyBlocker?: string | null;
+  confidenceScore?: number | null;
+  confidenceLevel?: string | null;
+  guidanceSource?: string | null;
+  nextBestAction?: LeadAiNextBestAction | null;
+  whatChanged?: LeadAiWhatChanged | null;
+  explainability?: LeadAiExplainability | null;
+  recommendedAction?: string | null;
+  suggestedApproach?: string | null;
+  scoreFactors?: LeadAiScoreFactor[];
+  next_best_action?: LeadAiNextBestAction | null;
+  reason?: string | null;
+  psychological_insight?: LeadAiPsychologicalInsight | null;
+  recommended_conversation_direction?: LeadAiConversationDirection | null;
+  key_questions_to_ask?: string[];
+  objection_strategy?: LeadAiObjectionStrategy | null;
+  what_to_avoid?: string[];
+  missing_information?: string[];
+  scores?: LeadAiScores | null;
 };
 
 export type ManagerAgent = {
@@ -320,10 +372,39 @@ export const fetchManagerLeadAnswers = async (
   );
 };
 
+export const updateManagerLeadAnswers = async (
+  leadId: string,
+  payload: LeadAnswerUpdatePayload,
+  token: string | null
+): Promise<LeadAnswerResponse[]> => {
+  return apiFetch<LeadAnswerResponse[]>(
+    `/manager/leads/${encodeURIComponent(leadId)}/answers`,
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(withAuthHeaders(token) ?? {}),
+      },
+      body: JSON.stringify(payload),
+    }
+  );
+};
+
 export const fetchManagerLeadForm = async (
   token: string | null
 ): Promise<LeadFormResponse> => {
   return apiFetch<LeadFormResponse>('/manager/lead-form', {
+    method: 'GET',
+    headers: withAuthHeaders(token),
+    cache: 'no-store',
+  });
+};
+
+export const fetchManagerLeadFormForLead = async (
+  leadId: string,
+  token: string | null
+): Promise<LeadFormResponse> => {
+  return apiFetch<LeadFormResponse>(`/manager/leads/${encodeURIComponent(leadId)}/form`, {
     method: 'GET',
     headers: withAuthHeaders(token),
     cache: 'no-store',
@@ -486,6 +567,19 @@ export const fetchManagerLeadAiInsights = async (
       method: 'GET',
       headers: withAuthHeaders(token),
       cache: 'no-store',
+    }
+  );
+};
+
+export const regenerateManagerLeadAiInsights = async (
+  leadId: string,
+  token: string | null
+): Promise<LeadAiInsightsResponse> => {
+  return apiFetch<LeadAiInsightsResponse>(
+    `/manager/leads/${encodeURIComponent(leadId)}/ai-insights/regenerate`,
+    {
+      method: 'POST',
+      headers: withAuthHeaders(token),
     }
   );
 };
