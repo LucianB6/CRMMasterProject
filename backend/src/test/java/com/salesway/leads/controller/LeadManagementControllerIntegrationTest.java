@@ -8,11 +8,13 @@ import com.salesway.leads.dto.LeadAiExplainabilityResponse;
 import com.salesway.leads.dto.LeadAiInsightsResponse;
 import com.salesway.leads.dto.LeadAiNextBestActionResponse;
 import com.salesway.leads.dto.LeadAiWhatChangedResponse;
+import com.salesway.leads.dto.LeadScoringEnqueueResponse;
 import com.salesway.leads.dto.LeadAnswersUpdateRequest;
 import com.salesway.leads.dto.LeadDetailAnswerItemResponse;
 import com.salesway.leads.dto.LeadFormResponse;
 import com.salesway.leads.dto.LeadQuestionResponse;
 import com.salesway.leads.enums.LeadInsightFeedbackStatus;
+import com.salesway.leads.service.LeadAsyncScoringService;
 import com.salesway.leads.service.LeadDetailsService;
 import com.salesway.leads.service.LeadManagementService;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,7 +47,12 @@ class LeadManagementControllerIntegrationTest {
     void setUp() {
         LeadManagementService leadManagementService = mock(LeadManagementService.class);
         leadDetailsService = mock(LeadDetailsService.class);
-        LeadManagementController controller = new LeadManagementController(leadManagementService, leadDetailsService);
+        LeadAsyncScoringService leadAsyncScoringService = mock(LeadAsyncScoringService.class);
+        LeadManagementController controller = new LeadManagementController(
+                leadManagementService,
+                leadDetailsService,
+                leadAsyncScoringService
+        );
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new ApiExceptionHandler())
                 .build();
@@ -116,6 +123,28 @@ class LeadManagementControllerIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title").value("Discovery Form"))
                 .andExpect(jsonPath("$.questions[0].label").value("Budget"));
+    }
+
+    @Test
+    void postScore_enqueuesLeadScoring() throws Exception {
+        UUID leadId = UUID.randomUUID();
+        LeadAsyncScoringService leadAsyncScoringService = mock(LeadAsyncScoringService.class);
+        LeadManagementService leadManagementService = mock(LeadManagementService.class);
+        LeadManagementController controller = new LeadManagementController(
+                leadManagementService,
+                leadDetailsService,
+                leadAsyncScoringService
+        );
+        mockMvc = MockMvcBuilders.standaloneSetup(controller)
+                .setControllerAdvice(new ApiExceptionHandler())
+                .build();
+        when(leadAsyncScoringService.requestScoring(leadId))
+                .thenReturn(new LeadScoringEnqueueResponse("pending", leadId));
+
+        mockMvc.perform(post("/manager/leads/{leadId}/score", leadId))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status").value("pending"))
+                .andExpect(jsonPath("$.leadId").value(leadId.toString()));
     }
 
     @Test
