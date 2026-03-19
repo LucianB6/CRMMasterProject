@@ -37,7 +37,7 @@ public class ReportNotificationScheduler {
             DailyReportRepository dailyReportRepository,
             NotificationRepository notificationRepository,
             NotificationService notificationService,
-            @Value("${app.notifications.report-deadline-time:18:00}") String reportDeadlineTime,
+            @Value("${app.notifications.report-deadline-time:23:59:59}") String reportDeadlineTime,
             @Value("${app.notifications.report-reminder-minutes:30}") int reminderMinutes
     ) {
         this.companyMembershipRepository = companyMembershipRepository;
@@ -100,7 +100,7 @@ public class ReportNotificationScheduler {
         }
     }
 
-    @Scheduled(cron = "0 */15 * * * *")
+    @Scheduled(cron = "${app.notifications.report-deadline-cron:59 59 23 * * *}")
     @Transactional
     public void sendMissingReportNotifications() {
         List<CompanyMembership> agents = companyMembershipRepository.findByRoleAndStatusInAndManagerMembershipIsNotNull(
