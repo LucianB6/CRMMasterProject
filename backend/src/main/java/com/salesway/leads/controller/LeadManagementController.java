@@ -16,6 +16,8 @@ import com.salesway.leads.dto.LeadFormResponse;
 import com.salesway.leads.dto.LeadStageUpdateRequest;
 import com.salesway.leads.dto.LeadStatusUpdateRequest;
 import com.salesway.leads.service.LeadDetailsService;
+import com.salesway.leads.dto.LeadScoringEnqueueResponse;
+import com.salesway.leads.service.LeadAsyncScoringService;
 import com.salesway.tasks.dto.TaskBoardResponse;
 import com.salesway.leads.service.LeadManagementService;
 import jakarta.validation.Valid;
@@ -39,13 +41,16 @@ import java.util.UUID;
 public class LeadManagementController {
     private final LeadManagementService leadManagementService;
     private final LeadDetailsService leadDetailsService;
+    private final LeadAsyncScoringService leadAsyncScoringService;
 
     public LeadManagementController(
             LeadManagementService leadManagementService,
-            LeadDetailsService leadDetailsService
+            LeadDetailsService leadDetailsService,
+            LeadAsyncScoringService leadAsyncScoringService
     ) {
         this.leadManagementService = leadManagementService;
         this.leadDetailsService = leadDetailsService;
+        this.leadAsyncScoringService = leadAsyncScoringService;
     }
 
     @GetMapping
@@ -182,6 +187,11 @@ public class LeadManagementController {
     @PostMapping("/{leadId}/ai-insights/regenerate")
     public ResponseEntity<LeadAiInsightsResponse> regenerateAiInsights(@PathVariable("leadId") UUID leadId) {
         return ResponseEntity.ok(leadDetailsService.regenerateAiInsights(leadId));
+    }
+
+    @PostMapping("/{leadId}/score")
+    public ResponseEntity<LeadScoringEnqueueResponse> scoreLead(@PathVariable("leadId") UUID leadId) {
+        return ResponseEntity.accepted().body(leadAsyncScoringService.requestScoring(leadId));
     }
 
     @PatchMapping("/{leadId}/ai-insights/{insightId}/feedback")

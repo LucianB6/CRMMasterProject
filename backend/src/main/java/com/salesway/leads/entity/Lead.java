@@ -85,6 +85,18 @@ public class Lead extends AuditedEntity {
     @Column(name = "duplicate_of_lead_id")
     private UUID duplicateOfLeadId;
 
+    @Column(name = "ai_status")
+    private String aiStatus;
+
+    @Column(name = "ai_score")
+    private Integer aiScore;
+
+    @Column(name = "ai_summary")
+    private String aiSummary;
+
+    @Column(name = "ai_error")
+    private String aiError;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "stage_id")
     private PipelineStage stage;
@@ -250,6 +262,38 @@ public class Lead extends AuditedEntity {
 
     public void setDuplicateOfLeadId(UUID duplicateOfLeadId) {
         this.duplicateOfLeadId = duplicateOfLeadId;
+    }
+
+    public String getAiStatus() {
+        return aiStatus;
+    }
+
+    public void setAiStatus(String aiStatus) {
+        this.aiStatus = aiStatus;
+    }
+
+    public Integer getAiScore() {
+        return aiScore;
+    }
+
+    public void setAiScore(Integer aiScore) {
+        this.aiScore = aiScore;
+    }
+
+    public String getAiSummary() {
+        return aiSummary;
+    }
+
+    public void setAiSummary(String aiSummary) {
+        this.aiSummary = aiSummary;
+    }
+
+    public String getAiError() {
+        return aiError;
+    }
+
+    public void setAiError(String aiError) {
+        this.aiError = aiError;
     }
 
     public PipelineStage getStage() {

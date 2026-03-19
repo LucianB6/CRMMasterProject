@@ -107,6 +107,7 @@
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/dto/LeadQuestionReorderRequest.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/dto/LeadQuestionRequest.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/dto/LeadQuestionResponse.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/dto/LeadScoringEnqueueResponse.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/dto/LeadSearchCriteria.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/dto/LeadStageUpdateRequest.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/dto/LeadStatusUpdateRequest.java
@@ -128,6 +129,7 @@
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/entity/LeadStandardFields.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/entity/PipelineStage.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/enums/CampaignChannel.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/enums/LeadAiStatus.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/enums/LeadEventType.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/enums/LeadInsightFeedbackStatus.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/enums/LeadNoteCategory.java
@@ -145,12 +147,15 @@
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/repository/LeadSpecifications.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/repository/LeadStandardFieldsRepository.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/repository/PipelineStageRepository.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/service/LeadAsyncScoringService.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/service/LeadCampaignService.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/service/LeadCaptureService.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/service/LeadDetailsService.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/service/LeadEventService.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/service/LeadFormService.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/service/LeadManagementService.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/service/LeadScoringQueueService.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/service/LeadScoringWorker.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/leads/service/PipelineStageService.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/manager/controller/ManagerInvitationController.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/manager/controller/ManagerNotificationController.java
