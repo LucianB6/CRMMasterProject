@@ -63,6 +63,7 @@ com/salesway/invitations/service/InvitationPreviewService.class
 com/salesway/auth/service/AuthService$PasswordResetRateLimitEntry.class
 com/salesway/ml/client/MlFastApiClient.class
 com/salesway/leads/repository/LeadRepository.class
+com/salesway/config/RedisConfig.class
 com/salesway/leads/service/LeadEventService.class
 com/salesway/leads/repository/PipelineStageRepository.class
 com/salesway/leads/service/LeadDetailsService$PsychologicalInsight.class
