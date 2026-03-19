@@ -5,6 +5,7 @@ import com.salesway.leads.dto.LeadEventResponse;
 import com.salesway.leads.dto.LeadListItemResponse;
 import com.salesway.leads.dto.LeadActivityResponse;
 import com.salesway.leads.dto.LeadAiInsightsResponse;
+import com.salesway.leads.dto.LeadAiInsightsRegenerateResponse;
 import com.salesway.leads.dto.LeadAiInsightFeedbackRequest;
 import com.salesway.leads.dto.LeadAssigneeUpdateRequest;
 import com.salesway.leads.dto.LeadAnswersUpdateRequest;
@@ -17,6 +18,7 @@ import com.salesway.leads.dto.LeadStageUpdateRequest;
 import com.salesway.leads.dto.LeadStatusUpdateRequest;
 import com.salesway.leads.service.LeadDetailsService;
 import com.salesway.leads.dto.LeadScoringEnqueueResponse;
+import com.salesway.leads.service.LeadAiInsightsAsyncService;
 import com.salesway.leads.service.LeadAsyncScoringService;
 import com.salesway.tasks.dto.TaskBoardResponse;
 import com.salesway.leads.service.LeadManagementService;
@@ -42,15 +44,18 @@ public class LeadManagementController {
     private final LeadManagementService leadManagementService;
     private final LeadDetailsService leadDetailsService;
     private final LeadAsyncScoringService leadAsyncScoringService;
+    private final LeadAiInsightsAsyncService leadAiInsightsAsyncService;
 
     public LeadManagementController(
             LeadManagementService leadManagementService,
             LeadDetailsService leadDetailsService,
-            LeadAsyncScoringService leadAsyncScoringService
+            LeadAsyncScoringService leadAsyncScoringService,
+            LeadAiInsightsAsyncService leadAiInsightsAsyncService
     ) {
         this.leadManagementService = leadManagementService;
         this.leadDetailsService = leadDetailsService;
         this.leadAsyncScoringService = leadAsyncScoringService;
+        this.leadAiInsightsAsyncService = leadAiInsightsAsyncService;
     }
 
     @GetMapping
@@ -185,8 +190,8 @@ public class LeadManagementController {
     }
 
     @PostMapping("/{leadId}/ai-insights/regenerate")
-    public ResponseEntity<LeadAiInsightsResponse> regenerateAiInsights(@PathVariable("leadId") UUID leadId) {
-        return ResponseEntity.ok(leadDetailsService.regenerateAiInsights(leadId));
+    public ResponseEntity<LeadAiInsightsRegenerateResponse> regenerateAiInsights(@PathVariable("leadId") UUID leadId) {
+        return ResponseEntity.accepted().body(leadAiInsightsAsyncService.requestRegeneration(leadId));
     }
 
     @PostMapping("/{leadId}/score")

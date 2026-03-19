@@ -18,6 +18,7 @@ com/salesway/leads/controller/LeadManagementController.class
 com/salesway/leads/enums/LeadNoteCategory.class
 com/salesway/leads/service/LeadAsyncScoringService$ScoringResult.class
 com/salesway/auth/dto/GoogleSignupIntent.class
+com/salesway/leads/service/LeadAiInsightsAsyncService.class
 com/salesway/auth/dto/GoogleLoginRequest.class
 com/salesway/leads/dto/LeadAiWhatChangedResponse.class
 com/salesway/leads/dto/LeadDetailAnswerItemResponse.class
@@ -84,6 +85,7 @@ com/salesway/ml/service/MlService.class
 com/salesway/auth/service/GoogleIdTokenVerifier.class
 com/salesway/leads/service/LeadAsyncScoringService.class
 com/salesway/leads/entity/LeadAiInsightSnapshot.class
+com/salesway/leads/enums/LeadAiInsightsStatus.class
 com/salesway/manager/dto/ManagerInviteCreateRequest.class
 com/salesway/leads/entity/LeadAnswer.class
 com/salesway/leads/dto/LeadCallCreateRequest.class
@@ -116,6 +118,7 @@ com/salesway/manager/service/CompanyContextResolver.class
 com/salesway/ml/dto/PredictRequest.class
 com/salesway/leads/service/LeadDetailsService$HybridChunkScore.class
 com/salesway/ml/dto/TrainResponse.class
+com/salesway/leads/service/LeadAiInsightsWorker.class
 com/salesway/config/AppProperties$Prediction.class
 com/salesway/auth/service/AuthService$CreationContext.class
 com/salesway/leads/entity/LeadFormCampaign.class
@@ -132,10 +135,12 @@ com/salesway/leads/dto/PublicLeadSubmitRequest$Standard.class
 com/salesway/leads/service/LeadDetailsService$RelationshipSignal.class
 com/salesway/invitations/entity/Invitation.class
 com/salesway/invitations/enums/InvitationStatus.class
+com/salesway/leads/dto/LeadAiInsightsRegenerateResponse.class
 com/salesway/leads/repository/LeadEventRepository.class
 com/salesway/leads/service/LeadScoringQueueService.class
 com/salesway/leads/service/LeadAsyncScoringService$CriterionScore.class
 com/salesway/ml/dto/MlModelResponse.class
+com/salesway/leads/service/LeadAiInsightsQueueService$LeadAiInsightsJob.class
 com/salesway/leads/dto/LeadAssigneeUpdateRequest.class
 com/salesway/ml/dto/PredictResponse.class
 com/salesway/leads/dto/LeadActivityResponse.class
@@ -152,4 +157,5 @@ com/salesway/ml/client/PredictionClientService.class
 com/salesway/leads/dto/LeadCampaignCreateRequest.class
 com/salesway/email/service/SmtpEmailService.class
 com/salesway/leads/dto/LeadListItemResponse.class
+com/salesway/leads/service/LeadAiInsightsQueueService.class
 com/salesway/leads/dto/PipelineStageReorderRequest.class

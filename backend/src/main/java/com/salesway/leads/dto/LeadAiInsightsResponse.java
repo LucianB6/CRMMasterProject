@@ -22,6 +22,8 @@ public record LeadAiInsightsResponse(
         String recommendedAction,
         String suggestedApproach,
         List<LeadAiInsightFactorResponse> scoreFactors,
-        Instant generatedAt
+        Instant generatedAt,
+        String regenerationStatus,
+        String regenerationError
 ) {
 }
