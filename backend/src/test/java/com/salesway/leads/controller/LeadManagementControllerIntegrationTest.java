@@ -6,6 +6,7 @@ import com.salesway.leads.dto.LeadAiInsightFactorResponse;
 import com.salesway.leads.dto.LeadAiInsightFeedbackRequest;
 import com.salesway.leads.dto.LeadAiExplainabilityResponse;
 import com.salesway.leads.dto.LeadAiInsightsResponse;
+import com.salesway.leads.dto.LeadAiInsightsRegenerateResponse;
 import com.salesway.leads.dto.LeadAiNextBestActionResponse;
 import com.salesway.leads.dto.LeadAiWhatChangedResponse;
 import com.salesway.leads.dto.LeadScoringEnqueueResponse;
@@ -15,6 +16,7 @@ import com.salesway.leads.dto.LeadFormResponse;
 import com.salesway.leads.dto.LeadQuestionResponse;
 import com.salesway.leads.enums.LeadInsightFeedbackStatus;
 import com.salesway.leads.service.LeadAsyncScoringService;
+import com.salesway.leads.service.LeadAiInsightsAsyncService;
 import com.salesway.leads.service.LeadDetailsService;
 import com.salesway.leads.service.LeadManagementService;
 import org.junit.jupiter.api.BeforeEach;
@@ -48,10 +50,12 @@ class LeadManagementControllerIntegrationTest {
         LeadManagementService leadManagementService = mock(LeadManagementService.class);
         leadDetailsService = mock(LeadDetailsService.class);
         LeadAsyncScoringService leadAsyncScoringService = mock(LeadAsyncScoringService.class);
+        LeadAiInsightsAsyncService leadAiInsightsAsyncService = mock(LeadAiInsightsAsyncService.class);
         LeadManagementController controller = new LeadManagementController(
                 leadManagementService,
                 leadDetailsService,
-                leadAsyncScoringService
+                leadAsyncScoringService,
+                leadAiInsightsAsyncService
         );
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new ApiExceptionHandler())
@@ -129,11 +133,13 @@ class LeadManagementControllerIntegrationTest {
     void postScore_enqueuesLeadScoring() throws Exception {
         UUID leadId = UUID.randomUUID();
         LeadAsyncScoringService leadAsyncScoringService = mock(LeadAsyncScoringService.class);
+        LeadAiInsightsAsyncService leadAiInsightsAsyncService = mock(LeadAiInsightsAsyncService.class);
         LeadManagementService leadManagementService = mock(LeadManagementService.class);
         LeadManagementController controller = new LeadManagementController(
                 leadManagementService,
                 leadDetailsService,
-                leadAsyncScoringService
+                leadAsyncScoringService,
+                leadAiInsightsAsyncService
         );
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new ApiExceptionHandler())
@@ -216,7 +222,9 @@ class LeadManagementControllerIntegrationTest {
                 "Schedule a qualification call today.",
                 "Anchor discussion on ROI and implementation speed.",
                 List.of(new LeadAiInsightFactorResponse("ICP Profile Match", 25, "positive", "Growing tech company.")),
-                Instant.now()
+                Instant.now(),
+                "COMPLETED",
+                null
         ));
 
         mockMvc.perform(get("/manager/leads/{leadId}/ai-insights", leadId))
@@ -229,6 +237,7 @@ class LeadManagementControllerIntegrationTest {
                 .andExpect(jsonPath("$.relationshipRiskLevel").value("low"))
                 .andExpect(jsonPath("$.confidenceLevel").value("high"))
                 .andExpect(jsonPath("$.guidanceSource").value("ai"))
+                .andExpect(jsonPath("$.regenerationStatus").value("COMPLETED"))
                 .andExpect(jsonPath("$.nextBestAction.actionType").value("schedule_call"))
                 .andExpect(jsonPath("$.nextBestAction.priority").value("urgent"))
                 .andExpect(jsonPath("$.whatChanged.changes[0]").exists())
@@ -236,6 +245,30 @@ class LeadManagementControllerIntegrationTest {
                 .andExpect(jsonPath("$.explainability.basedOnSignals[0]").exists())
                 .andExpect(jsonPath("$.recommendedAction").exists())
                 .andExpect(jsonPath("$.scoreFactors[0].label").value("ICP Profile Match"));
+    }
+
+    @Test
+    void postRegenerateAiInsights_enqueuesJob() throws Exception {
+        UUID leadId = UUID.randomUUID();
+        LeadAsyncScoringService leadAsyncScoringService = mock(LeadAsyncScoringService.class);
+        LeadAiInsightsAsyncService leadAiInsightsAsyncService = mock(LeadAiInsightsAsyncService.class);
+        LeadManagementService leadManagementService = mock(LeadManagementService.class);
+        LeadManagementController controller = new LeadManagementController(
+                leadManagementService,
+                leadDetailsService,
+                leadAsyncScoringService,
+                leadAiInsightsAsyncService
+        );
+        mockMvc = MockMvcBuilders.standaloneSetup(controller)
+                .setControllerAdvice(new ApiExceptionHandler())
+                .build();
+        when(leadAiInsightsAsyncService.requestRegeneration(leadId))
+                .thenReturn(new LeadAiInsightsRegenerateResponse("pending", leadId));
+
+        mockMvc.perform(post("/manager/leads/{leadId}/ai-insights/regenerate", leadId))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status").value("pending"))
+                .andExpect(jsonPath("$.leadId").value(leadId.toString()));
     }
 
     @Test

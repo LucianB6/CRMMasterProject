@@ -97,6 +97,12 @@ public class Lead extends AuditedEntity {
     @Column(name = "ai_error")
     private String aiError;
 
+    @Column(name = "ai_insights_status")
+    private String aiInsightsStatus;
+
+    @Column(name = "ai_insights_error")
+    private String aiInsightsError;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "stage_id")
     private PipelineStage stage;
@@ -294,6 +300,22 @@ public class Lead extends AuditedEntity {
 
     public void setAiError(String aiError) {
         this.aiError = aiError;
+    }
+
+    public String getAiInsightsStatus() {
+        return aiInsightsStatus;
+    }
+
+    public void setAiInsightsStatus(String aiInsightsStatus) {
+        this.aiInsightsStatus = aiInsightsStatus;
+    }
+
+    public String getAiInsightsError() {
+        return aiInsightsError;
+    }
+
+    public void setAiInsightsError(String aiInsightsError) {
+        this.aiInsightsError = aiInsightsError;
     }
 
     public PipelineStage getStage() {

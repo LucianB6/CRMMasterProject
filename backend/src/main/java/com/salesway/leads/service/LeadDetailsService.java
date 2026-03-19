@@ -396,10 +396,20 @@ public class LeadDetailsService {
         KbDocument activeKbDocument = kbDocumentRepository.findFirstByCompanyIdAndIsActiveTrueOrderByCreatedAtDesc(companyId).orElse(null);
         Instant latestFeedbackAt = leadAiInsightMemoryRepository.findLatestUpdatedAtByLeadIdAndCompanyId(leadId, companyId);
         Instant latestAnswerAt = leadAnswerRepository.findLatestCreatedAtByLeadId(leadId);
-        return leadAiInsightSnapshotRepository.findByLeadIdAndCompanyId(leadId, companyId)
-                .filter(snapshot -> !isSnapshotStale(snapshot, lead, activeKbDocument, latestFeedbackAt, latestAnswerAt))
-                .map(this::toResponse)
-                .orElseGet(() -> regenerateAiInsights(leadId));
+        LeadAiInsightSnapshot snapshot = leadAiInsightSnapshotRepository.findByLeadIdAndCompanyId(leadId, companyId).orElse(null);
+        if (snapshot != null && isAiInsightsRegenerationInFlight(lead)) {
+            return toResponse(snapshot, lead);
+        }
+        if (snapshot != null && !isSnapshotStale(snapshot, lead, activeKbDocument, latestFeedbackAt, latestAnswerAt)) {
+            return toResponse(snapshot, lead);
+        }
+        if (snapshot != null && isAiInsightsTerminalFailure(lead)) {
+            return toResponse(snapshot, lead);
+        }
+        if (snapshot == null && (isAiInsightsRegenerationInFlight(lead) || isAiInsightsTerminalFailure(lead))) {
+            return buildPendingInsightsResponse(lead);
+        }
+        return regenerateAiInsights(leadId);
     }
 
     @Transactional
@@ -408,6 +418,19 @@ public class LeadDetailsService {
         UUID companyId = membership.getCompany().getId();
         UUID currentUserId = membership.getUser().getId();
         Lead lead = getLeadOrThrow(leadId, membership);
+        return regenerateAiInsightsInternal(lead, companyId, currentUserId);
+    }
+
+    @Transactional
+    public LeadAiInsightsResponse regenerateAiInsightsInBackground(UUID leadId) {
+        Lead lead = leadRepository.findById(leadId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead not found"));
+        UUID currentUserId = lead.getAssignedToUserId() == null ? new UUID(0L, 0L) : lead.getAssignedToUserId();
+        return regenerateAiInsightsInternal(lead, lead.getCompany().getId(), currentUserId);
+    }
+
+    private LeadAiInsightsResponse regenerateAiInsightsInternal(Lead lead, UUID companyId, UUID currentUserId) {
+        UUID leadId = lead.getId();
         KbDocument activeKbDocument = kbDocumentRepository.findFirstByCompanyIdAndIsActiveTrueOrderByCreatedAtDesc(companyId).orElse(null);
         Instant latestFeedbackAt = leadAiInsightMemoryRepository.findLatestUpdatedAtByLeadIdAndCompanyId(leadId, companyId);
         List<LeadAiInsightMemory> recentMemories = leadAiInsightMemoryRepository
@@ -728,7 +751,9 @@ public class LeadDetailsService {
                 recommendedAction,
                 suggestedApproach,
                 factors,
-                Instant.now()
+                Instant.now(),
+                lead.getAiInsightsStatus(),
+                lead.getAiInsightsError()
         );
         saveInsightSnapshot(lead, response);
         return response;
@@ -1278,7 +1303,7 @@ public class LeadDetailsService {
         leadAiInsightSnapshotRepository.save(snapshot);
     }
 
-    private LeadAiInsightsResponse toResponse(LeadAiInsightSnapshot snapshot) {
+    private LeadAiInsightsResponse toResponse(LeadAiInsightSnapshot snapshot, Lead lead) {
         return new LeadAiInsightsResponse(
                 snapshot.getLatestInsightMemoryId(),
                 snapshot.getScore(),
@@ -1297,8 +1322,45 @@ public class LeadDetailsService {
                 snapshot.getRecommendedAction(),
                 snapshot.getSuggestedApproach(),
                 readJsonList(snapshot.getScoreFactorsJson(), LeadAiInsightFactorResponse.class),
-                snapshot.getGeneratedAt()
+                snapshot.getGeneratedAt(),
+                lead.getAiInsightsStatus(),
+                lead.getAiInsightsError()
         );
+    }
+
+    private LeadAiInsightsResponse buildPendingInsightsResponse(Lead lead) {
+        return new LeadAiInsightsResponse(
+                null,
+                0,
+                0,
+                0,
+                "",
+                "",
+                "",
+                "",
+                0.0,
+                "",
+                "async",
+                null,
+                null,
+                null,
+                "",
+                "",
+                List.of(),
+                Instant.now(),
+                lead.getAiInsightsStatus(),
+                lead.getAiInsightsError()
+        );
+    }
+
+    private boolean isAiInsightsRegenerationInFlight(Lead lead) {
+        return lead.getAiInsightsStatus() != null
+                && ("PENDING".equalsIgnoreCase(lead.getAiInsightsStatus())
+                || "PROCESSING".equalsIgnoreCase(lead.getAiInsightsStatus()));
+    }
+
+    private boolean isAiInsightsTerminalFailure(Lead lead) {
+        return "FAILED".equalsIgnoreCase(lead.getAiInsightsStatus());
     }
 
     private String writeJson(Object value) {
