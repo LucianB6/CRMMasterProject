@@ -2,7 +2,9 @@ package com.salesway.leads.service;
 
 import com.salesway.leads.dto.LeadAiInsightsRegenerateResponse;
 import com.salesway.leads.entity.Lead;
+import com.salesway.leads.entity.LeadAiInsightSnapshot;
 import com.salesway.leads.enums.LeadAiInsightsStatus;
+import com.salesway.leads.repository.LeadAiInsightSnapshotRepository;
 import com.salesway.leads.repository.LeadRepository;
 import com.salesway.manager.service.ManagerAccessService;
 import com.salesway.memberships.entity.CompanyMembership;
@@ -14,6 +16,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Service
@@ -21,17 +24,20 @@ public class LeadAiInsightsAsyncService {
     private static final Logger LOG = LoggerFactory.getLogger(LeadAiInsightsAsyncService.class);
 
     private final LeadRepository leadRepository;
+    private final LeadAiInsightSnapshotRepository leadAiInsightSnapshotRepository;
     private final ManagerAccessService managerAccessService;
     private final LeadAiInsightsQueueService leadAiInsightsQueueService;
     private final LeadDetailsService leadDetailsService;
 
     public LeadAiInsightsAsyncService(
             LeadRepository leadRepository,
+            LeadAiInsightSnapshotRepository leadAiInsightSnapshotRepository,
             ManagerAccessService managerAccessService,
             LeadAiInsightsQueueService leadAiInsightsQueueService,
             LeadDetailsService leadDetailsService
     ) {
         this.leadRepository = leadRepository;
+        this.leadAiInsightSnapshotRepository = leadAiInsightSnapshotRepository;
         this.managerAccessService = managerAccessService;
         this.leadAiInsightsQueueService = leadAiInsightsQueueService;
         this.leadDetailsService = leadDetailsService;
@@ -52,7 +58,20 @@ public class LeadAiInsightsAsyncService {
     public void processQueuedRegeneration(UUID leadId) {
         try {
             markProcessing(leadId);
+            Lead lead = leadRepository.findById(leadId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead not found"));
+            Instant previousSnapshotTimestamp = leadAiInsightSnapshotRepository
+                    .findByLeadIdAndCompanyId(leadId, lead.getCompany().getId())
+                    .map(this::snapshotTimestamp)
+                    .orElse(null);
             leadDetailsService.regenerateAiInsightsInBackground(leadId);
+            Instant currentSnapshotTimestamp = leadAiInsightSnapshotRepository
+                    .findByLeadIdAndCompanyId(leadId, lead.getCompany().getId())
+                    .map(this::snapshotTimestamp)
+                    .orElse(null);
+            if (!snapshotAdvanced(previousSnapshotTimestamp, currentSnapshotTimestamp)) {
+                throw new IllegalStateException("AI insights regeneration completed without updating snapshot");
+            }
             markCompleted(leadId);
         } catch (Exception exception) {
             LOG.error("AI insights worker failed for leadId={}", leadId, exception);
@@ -85,5 +104,22 @@ public class LeadAiInsightsAsyncService {
             lead.setAiInsightsError(exception.getMessage() == null ? "AI insights regeneration failed" : exception.getMessage());
             leadRepository.save(lead);
         });
+    }
+
+    private Instant snapshotTimestamp(LeadAiInsightSnapshot snapshot) {
+        if (snapshot.getLastRegeneratedAt() != null) {
+            return snapshot.getLastRegeneratedAt();
+        }
+        return snapshot.getGeneratedAt();
+    }
+
+    private boolean snapshotAdvanced(Instant previous, Instant current) {
+        if (current == null) {
+            return false;
+        }
+        if (previous == null) {
+            return true;
+        }
+        return current.isAfter(previous);
     }
 }
