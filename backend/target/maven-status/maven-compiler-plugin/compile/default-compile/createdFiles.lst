@@ -13,8 +13,10 @@ com/salesway/leads/service/LeadDetailsService$CategorizedNotes.class
 com/salesway/leads/service/LeadDetailsService$AntiRepetitionRules.class
 com/salesway/manager/controller/ManagerInvitationController.class
 com/salesway/leads/entity/LeadStandardFields.class
+com/salesway/leads/dto/LeadScoringEnqueueResponse.class
 com/salesway/leads/controller/LeadManagementController.class
 com/salesway/leads/enums/LeadNoteCategory.class
+com/salesway/leads/service/LeadAsyncScoringService$ScoringResult.class
 com/salesway/auth/dto/GoogleSignupIntent.class
 com/salesway/auth/dto/GoogleLoginRequest.class
 com/salesway/leads/dto/LeadAiWhatChangedResponse.class
@@ -31,6 +33,7 @@ com/salesway/leads/service/LeadManagementService.class
 com/salesway/tasks/repository/TaskBoardItemSpecifications.class
 com/salesway/leads/entity/Lead.class
 com/salesway/leads/dto/LeadAiInsightFeedbackRequest.class
+com/salesway/leads/enums/LeadAiStatus.class
 com/salesway/ml/dto/MlPredictionResponse.class
 com/salesway/auth/service/GoogleIdTokenVerifier$GoogleTokenClaims.class
 com/salesway/security/AuthenticatedUserService.class
@@ -59,6 +62,7 @@ com/salesway/common/error/ApiExceptionHandler.class
 com/salesway/leads/dto/LeadTaskCreateRequest.class
 com/salesway/config/PredictionClientConfig.class
 com/salesway/invitations/repository/InvitationRepository.class
+com/salesway/leads/service/LeadScoringQueueService$LeadScoringJob.class
 com/salesway/invitations/service/InvitationPreviewService.class
 com/salesway/auth/service/AuthService$PasswordResetRateLimitEntry.class
 com/salesway/ml/client/MlFastApiClient.class
@@ -78,6 +82,7 @@ com/salesway/leads/dto/LeadFormUpdateRequest.class
 com/salesway/leads/entity/LeadAiInsightMemory.class
 com/salesway/ml/service/MlService.class
 com/salesway/auth/service/GoogleIdTokenVerifier.class
+com/salesway/leads/service/LeadAsyncScoringService.class
 com/salesway/leads/entity/LeadAiInsightSnapshot.class
 com/salesway/manager/dto/ManagerInviteCreateRequest.class
 com/salesway/leads/entity/LeadAnswer.class
@@ -122,11 +127,14 @@ com/salesway/leads/repository/LeadFormCampaignRepository.class
 com/salesway/leads/entity/PipelineStage.class
 com/salesway/leads/dto/LeadAnswersUpdateRequest$Answer.class
 com/salesway/ml/dto/ForecastResponse.class
+com/salesway/leads/service/LeadScoringWorker.class
 com/salesway/leads/dto/PublicLeadSubmitRequest$Standard.class
 com/salesway/leads/service/LeadDetailsService$RelationshipSignal.class
 com/salesway/invitations/entity/Invitation.class
 com/salesway/invitations/enums/InvitationStatus.class
 com/salesway/leads/repository/LeadEventRepository.class
+com/salesway/leads/service/LeadScoringQueueService.class
+com/salesway/leads/service/LeadAsyncScoringService$CriterionScore.class
 com/salesway/ml/dto/MlModelResponse.class
 com/salesway/leads/dto/LeadAssigneeUpdateRequest.class
 com/salesway/ml/dto/PredictResponse.class
