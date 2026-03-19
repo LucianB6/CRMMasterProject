@@ -61,6 +61,7 @@
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/config/AppProperties.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/config/JpaAuditingConfig.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/config/PredictionClientConfig.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/config/RedisConfig.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/config/SchedulingConfig.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/email/dto/InvitationEmailPayload.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/main/java/com/salesway/email/dto/PasswordResetEmailPayload.java
