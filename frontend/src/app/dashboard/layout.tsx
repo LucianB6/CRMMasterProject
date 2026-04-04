@@ -13,6 +13,7 @@ import {
   Layers,
   ClipboardList,
   Target,
+  CreditCard,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import Image from 'next/image';
@@ -22,6 +23,7 @@ import * as React from 'react';
 import logoFullFundalTransparent from '../../assets/selfCRMLogo.svg';
 import { DashboardHeader } from '../../components/dashboard/header';
 import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar';
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from '../../components/ui/sheet';
 import { PlaceHolderImages } from '../../lib/placeholder-images';
 import { Skeleton } from '../../components/ui/skeleton';
 import { apiFetch } from '../../lib/api';
@@ -59,10 +61,26 @@ const managerMenuItemsTop = [
     label: 'Daily Report',
     icon: FileText,
   },
+  {
+    href: '/dashboard/tasks',
+    label: 'Tasks',
+    icon: ClipboardList,
+  },
+  {
+    href: '/dashboard/goals',
+    label: 'Goals',
+    icon: Target,
+  },
+  {
+    href: '/dashboard/calendar',
+    label: 'Calendar',
+    icon: Calendar,
+  },
 ];
 
 const toolsMenuItems = [
   { href: '/dashboard/ai-assistant', label: 'AI Assistant', icon: Bot },
+  { href: '/dashboard/billing', label: 'Billing', icon: CreditCard },
 ];
 
 type NavItemProps = {
@@ -124,6 +142,7 @@ export default function DashboardLayout({
   const [userRole, setUserRole] = React.useState<string | null>(null);
   const [displayName, setDisplayName] = React.useState('Account');
   const [initials, setInitials] = React.useState('?');
+  const [isMobileNavOpen, setIsMobileNavOpen] = React.useState(false);
 
   React.useEffect(() => {
     const token = localStorage.getItem('salesway_token');
@@ -189,6 +208,138 @@ export default function DashboardLayout({
         isDailyReportPage ? 'h-screen overflow-hidden' : 'min-h-screen'
       }`}
     >
+      <Sheet open={isMobileNavOpen} onOpenChange={setIsMobileNavOpen}>
+        <SheetContent
+          side="left"
+          className="w-[290px] border-r-0 bg-[#38bdf8] p-0 text-white md:hidden [&>button]:text-[#38bdf8] [&>button:hover]:text-[#0ea5e9]"
+        >
+          <SheetTitle className="sr-only">Dashboard navigation</SheetTitle>
+          <SheetDescription className="sr-only">
+            Open dashboard sections on mobile.
+          </SheetDescription>
+
+          <div className="flex h-full flex-col">
+            <Link
+              href={isManager ? '/dashboard/manager/overview' : '/dashboard'}
+              className="flex shrink-0 items-center justify-center bg-background px-4 py-3 transition-opacity hover:opacity-90"
+              onClick={() => setIsMobileNavOpen(false)}
+            >
+              <div className="flex w-full items-center justify-center">
+                <Image
+                  src={logoFullFundalTransparent}
+                  alt="selfCRM"
+                  className="h-[110px] w-auto"
+                  priority
+                />
+              </div>
+            </Link>
+
+            <nav className="flex-1 space-y-1 overflow-y-auto px-4 py-4">
+              <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-blue-100 opacity-70">
+                {isManager ? 'Manager' : 'Personal'}
+              </p>
+
+              {isManager ? (
+                <>
+                  {managerMenuItemsTop.map((item) => (
+                    <div key={item.href} onClick={() => setIsMobileNavOpen(false)}>
+                      <NavItem
+                        href={item.href}
+                        icon={item.icon}
+                        label={item.label}
+                        active={pathname.startsWith(item.href)}
+                      />
+                    </div>
+                  ))}
+
+                  <div onClick={() => setIsMobileNavOpen(false)}>
+                    <NavItem
+                      href="/dashboard/manager/leads"
+                      icon={Users}
+                      label="Leads"
+                      active={leadsSectionActive}
+                    />
+                  </div>
+                  <div className="ml-9 space-y-1 border-l border-white/20 py-1">
+                    <Link
+                      href="/dashboard/manager/leads"
+                      onClick={() => setIsMobileNavOpen(false)}
+                      className={`ml-2 block rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                        pathname.startsWith('/dashboard/manager/leads')
+                          ? 'bg-white/20'
+                          : 'hover:bg-white/10'
+                      }`}
+                    >
+                      Active Leads
+                    </Link>
+                    <Link
+                      href="/dashboard/manager/lead-form"
+                      onClick={() => setIsMobileNavOpen(false)}
+                      className={`ml-2 block rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                        pathname.startsWith('/dashboard/manager/lead-form')
+                          ? 'bg-white/20'
+                          : 'hover:bg-white/10'
+                      }`}
+                    >
+                      Form Editor
+                    </Link>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {agentMenuItems.map((item) => (
+                    <div key={item.href} onClick={() => setIsMobileNavOpen(false)}>
+                      <NavItem
+                        href={item.href}
+                        icon={item.icon}
+                        label={item.label}
+                        active={pathname === item.href}
+                      />
+                    </div>
+                  ))}
+                </>
+              )}
+
+              <div className="pt-6">
+                <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-blue-100 opacity-70">
+                  Tools
+                </p>
+                {toolsMenuItems.map((item) => (
+                  <div key={item.href} onClick={() => setIsMobileNavOpen(false)}>
+                    <NavItem
+                      href={item.href}
+                      icon={item.icon}
+                      label={item.label}
+                      active={pathname.startsWith(item.href)}
+                    />
+                  </div>
+                ))}
+                {isManager && (
+                  <>
+                    <div onClick={() => setIsMobileNavOpen(false)}>
+                      <NavItem
+                        href="/dashboard/notifications"
+                        icon={Bell}
+                        label="Notifications"
+                        active={pathname.startsWith('/dashboard/notifications')}
+                      />
+                    </div>
+                    <div onClick={() => setIsMobileNavOpen(false)}>
+                      <NavItem
+                        href="/dashboard/manager/create-agent"
+                        icon={UserPlus}
+                        label="Create account"
+                        active={pathname.startsWith('/dashboard/manager/create-agent')}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+            </nav>
+          </div>
+        </SheetContent>
+      </Sheet>
+
       <aside
         className={`hidden w-64 shrink-0 bg-[#38bdf8] text-white shadow-xl dark:bg-slate-950 dark:text-slate-50 md:sticky md:top-0 md:flex md:h-screen md:flex-col ${
           isDailyReportPage ? 'h-screen' : ''
@@ -196,14 +347,13 @@ export default function DashboardLayout({
       >
         <Link
           href={isManager ? '/dashboard/manager/overview' : '/dashboard'}
-          className="shrink-0 p-4 transition-opacity hover:opacity-90"
+          className="flex shrink-0 items-center justify-center bg-background px-4 py-3 transition-opacity hover:opacity-90"
         >
-          <div className="relative inline-flex items-center justify-center px-3 py-2">
-            <div className="absolute inset-x-3 top-1/2 h-[82px] -translate-y-1/2 rounded-2xl bg-white/95 shadow-sm ring-1 ring-slate-200/60" />
+          <div className="flex w-full items-center justify-center">
             <Image
               src={logoFullFundalTransparent}
-              alt="SalesWay"
-              className="relative z-10 h-[130px] w-auto"
+              alt="selfCRM"
+              className="h-[110px] w-auto"
               priority
             />
           </div>
@@ -333,7 +483,7 @@ export default function DashboardLayout({
           isDailyReportPage ? 'h-screen overflow-hidden' : ''
         }`}
       >
-        <DashboardHeader showNotifications={isManager} />
+        <DashboardHeader showNotifications={isManager} onOpenMobileNav={() => setIsMobileNavOpen(true)} />
         <main
           className={`static min-w-0 flex-1 overflow-x-hidden p-4 md:p-6 ${
             isDailyReportPage ? 'h-[calc(100svh-4rem)] min-h-0 overflow-hidden p-0 md:p-0' : ''

@@ -8,6 +8,8 @@ import com.fasterxml.jackson.databind.node.DecimalNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import com.salesway.auth.entity.User;
 import com.salesway.auth.repository.UserRepository;
+import com.salesway.billing.entity.UsageType;
+import com.salesway.billing.service.BillingUsageService;
 import com.salesway.chatbot.client.OpenAiClient;
 import com.salesway.chatbot.entity.KbChunk;
 import com.salesway.chatbot.entity.KbDocument;
@@ -110,6 +112,7 @@ public class LeadDetailsService {
     private final KbChunkRepository kbChunkRepository;
     private final OpenAiClient openAiClient;
     private final ObjectMapper objectMapper;
+    private final BillingUsageService billingUsageService;
 
     public LeadDetailsService(
             LeadRepository leadRepository,
@@ -129,7 +132,8 @@ public class LeadDetailsService {
             KbDocumentRepository kbDocumentRepository,
             KbChunkRepository kbChunkRepository,
             OpenAiClient openAiClient,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            BillingUsageService billingUsageService
     ) {
         this.leadRepository = leadRepository;
         this.leadAnswerRepository = leadAnswerRepository;
@@ -149,6 +153,7 @@ public class LeadDetailsService {
         this.kbChunkRepository = kbChunkRepository;
         this.openAiClient = openAiClient;
         this.objectMapper = objectMapper;
+        this.billingUsageService = billingUsageService;
     }
 
     @Transactional(readOnly = true)
@@ -418,6 +423,7 @@ public class LeadDetailsService {
         UUID companyId = membership.getCompany().getId();
         UUID currentUserId = membership.getUser().getId();
         Lead lead = getLeadOrThrow(leadId, membership);
+        billingUsageService.assertUsageAvailable(lead.getCompany(), UsageType.AI_INSIGHTS, 1);
         return regenerateAiInsightsInternal(lead, companyId, currentUserId);
     }
 
@@ -426,6 +432,7 @@ public class LeadDetailsService {
         Lead lead = leadRepository.findById(leadId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead not found"));
         UUID currentUserId = lead.getAssignedToUserId() == null ? new UUID(0L, 0L) : lead.getAssignedToUserId();
+        billingUsageService.assertUsageAvailable(lead.getCompany(), UsageType.AI_INSIGHTS, 1);
         return regenerateAiInsightsInternal(lead, lead.getCompany().getId(), currentUserId);
     }
 
@@ -756,6 +763,7 @@ public class LeadDetailsService {
                 lead.getAiInsightsError()
         );
         saveInsightSnapshot(lead, response);
+        billingUsageService.consumeUsage(lead.getCompany(), UsageType.AI_INSIGHTS, 1);
         return response;
     }
 

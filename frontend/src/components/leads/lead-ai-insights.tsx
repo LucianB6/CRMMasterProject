@@ -17,6 +17,13 @@ import { Button } from '../ui/button';
 
 type LeadAIInsightsProps = {
   insights: LeadAiInsightsResponse | null;
+  aiStatus?: string | null;
+  aiScore?: number | null;
+  aiSummary?: string | null;
+  aiError?: string | null;
+  isQueueingScore: boolean;
+  queueStatusMessage?: string | null;
+  queueErrorMessage?: string | null;
   isRefreshing: boolean;
   isSubmittingFeedback: boolean;
   canRefresh: boolean;
@@ -52,6 +59,20 @@ const sentenceCase = (value: string | null | undefined) => {
 const formatPercent = (value: number | null | undefined) => {
   const safeValue = clampScore(value);
   return safeValue === null ? '—' : `${safeValue}%`;
+};
+
+const normalizeAiStatus = (value: string | null | undefined) => {
+  if (!value) return null;
+  const normalized = value.toUpperCase();
+  if (
+    normalized === 'PENDING' ||
+    normalized === 'PROCESSING' ||
+    normalized === 'COMPLETED' ||
+    normalized === 'FAILED'
+  ) {
+    return normalized;
+  }
+  return null;
 };
 
 const parseStructuredText = (text: string) => {
@@ -92,6 +113,13 @@ const parseStructuredText = (text: string) => {
 
 export function LeadAIInsights({
   insights,
+  aiStatus,
+  aiScore,
+  aiSummary,
+  aiError,
+  isQueueingScore,
+  queueStatusMessage,
+  queueErrorMessage,
   isRefreshing,
   isSubmittingFeedback,
   canRefresh,
@@ -101,9 +129,34 @@ export function LeadAIInsights({
   onRefresh,
   onSubmitFeedback,
 }: LeadAIInsightsProps) {
-  if (!insights) {
+  const normalizedAiStatus = normalizeAiStatus(aiStatus);
+  const scoringScore = clampScore(aiScore ?? insights?.score ?? insights?.clientScore ?? insights?.scores?.client_score);
+  const scoringSummary = aiSummary?.trim() || null;
+  const scoringError =
+    queueErrorMessage ||
+    (normalizedAiStatus === 'FAILED'
+      ? aiError?.trim() || 'Lead scoring failed during worker execution.'
+      : null);
+  const scoringStatusText =
+    queueStatusMessage ||
+    (normalizedAiStatus === 'PENDING'
+      ? 'Lead scoring queued.'
+      : normalizedAiStatus === 'PROCESSING'
+        ? 'Lead scoring in progress.'
+        : normalizedAiStatus === 'COMPLETED'
+          ? 'Lead scoring completed.'
+          : null);
+  const hasCompletedScoring =
+    normalizedAiStatus === 'COMPLETED' && (scoringScore !== null || !!scoringSummary);
+
+  if (!insights && !hasCompletedScoring) {
     return (
       <EmptyState
+        aiStatus={normalizedAiStatus}
+        aiError={scoringError}
+        isQueueingScore={isQueueingScore}
+        queueStatusMessage={scoringStatusText}
+        queueErrorMessage={scoringError}
         isRefreshing={isRefreshing}
         canRefresh={canRefresh}
         refreshStatusMessage={refreshStatusMessage}
@@ -148,6 +201,15 @@ export function LeadAIInsights({
             </Badge>
           ) : null}
         </div>
+
+        {hasCompletedScoring || scoringError || scoringStatusText ? (
+          <ScoringSection
+            score={scoringScore}
+            summary={scoringSummary}
+            errorMessage={scoringError}
+            statusMessage={scoringStatusText}
+          />
+        ) : null}
 
         <div className="w-full grid gap-3 border-y border-slate-200/80 py-4">
           <ScoreCard label="Score" value={score} badgeLabel="Lead Score" />
@@ -430,49 +492,122 @@ export function LeadAIInsights({
 }
 
 function EmptyState({
+  aiStatus,
+  aiError,
+  isQueueingScore,
+  queueStatusMessage,
+  queueErrorMessage,
   isRefreshing,
   canRefresh,
   refreshStatusMessage,
   refreshErrorMessage,
   onRefresh,
 }: {
+  aiStatus?: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | null;
+  aiError?: string | null;
+  isQueueingScore: boolean;
+  queueStatusMessage?: string | null;
+  queueErrorMessage?: string | null;
   isRefreshing: boolean;
   canRefresh: boolean;
   refreshStatusMessage?: string | null;
   refreshErrorMessage?: string | null;
   onRefresh: () => void;
 }) {
+  const statusMessage =
+    queueStatusMessage ||
+    (aiStatus === 'PENDING'
+      ? 'Lead scoring queued.'
+      : aiStatus === 'PROCESSING'
+        ? 'Lead scoring in progress.'
+        : null);
+  const errorMessage = queueErrorMessage || aiError || refreshErrorMessage;
+
   return (
     <div className="border border-dashed border-slate-200 bg-white/80 p-5">
-      <button
-        type="button"
-        onClick={onRefresh}
-        disabled={isRefreshing || !canRefresh}
-        className="flex min-h-[220px] w-full flex-col items-center justify-center px-6 text-center transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-      >
+      <div className="flex min-h-[220px] w-full flex-col items-center justify-center px-6 text-center">
         <div className="rounded-full bg-[#38bdf8] p-3">
-          {isRefreshing ? (
+          {isQueueingScore || isRefreshing ? (
             <RefreshCw className="h-6 w-6 animate-spin text-white" />
           ) : (
             <Sparkles className="h-6 w-6 text-white" />
           )}
         </div>
         <span className="mt-4 text-base font-semibold text-slate-900">
-          See the best approaches for your client
+          AI insights indisponibile momentan
         </span>
         <span className="mt-2 max-w-[240px] text-sm leading-relaxed text-slate-500">
-          Generate AI insights when you are ready to review the current client context.
+          Reincarca detaliile dupa ce backend-ul termina procesarea sau dupa ce apar date noi pentru lead.
         </span>
-        {refreshStatusMessage ? (
-          <span className="mt-3 text-xs text-slate-500">{refreshStatusMessage}</span>
+        {statusMessage ? (
+          <span className="mt-3 text-xs text-slate-500">{statusMessage}</span>
         ) : null}
-        {refreshErrorMessage ? (
+        {errorMessage ? (
           <span className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-            {refreshErrorMessage}
+            {errorMessage}
           </span>
         ) : null}
-      </button>
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onRefresh}
+            disabled={isRefreshing || !canRefresh}
+            className="border-slate-200 text-slate-700 hover:bg-slate-50"
+          >
+            Refresh details
+          </Button>
+        </div>
+      </div>
     </div>
+  );
+}
+
+function ScoringSection({
+  score,
+  summary,
+  errorMessage,
+  statusMessage,
+}: {
+  score: number | null;
+  summary: string | null;
+  errorMessage: string | null;
+  statusMessage: string | null;
+}) {
+  const scoreBadgeLabel = '10 criteria · max 100';
+  const showCompletedState = score !== null || !!summary;
+
+  return (
+    <section className="space-y-4">
+      {statusMessage ? (
+        <div className="rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2 text-xs text-slate-600">
+          {statusMessage}
+        </div>
+      ) : null}
+
+      {errorMessage ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+          {errorMessage}
+        </div>
+      ) : null}
+
+      {showCompletedState ? (
+        <>
+          <ScoreCard label="Lead score" value={score} badgeLabel={scoreBadgeLabel} />
+          {summary ? (
+            <section className="overflow-hidden rounded-xl border border-[#38bdf8]/20 bg-white/80">
+              <div className="border-b border-[#38bdf8]/15 px-4 py-3">
+                <h4 className="text-sm font-bold text-slate-800">Scoring breakdown</h4>
+                <p className="mt-1 text-xs text-slate-500">
+                  Scorul este suma a 10 criterii, fiecare notat intre 0 si 10. Maximum 100.
+                </p>
+              </div>
+              <StructuredTextSection label="Summary" text={summary} />
+            </section>
+          ) : null}
+        </>
+      ) : null}
+    </section>
   );
 }
 

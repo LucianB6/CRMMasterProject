@@ -73,6 +73,9 @@
     --sidebar-border: 220 25% 20%;
     --sidebar-ring: 37 100% 50%;
   }
+  .theme {
+    --animate-ripple: ripple var(--duration,2s) ease calc(var(--i, 0)*.2s) infinite;
+  }
 }
 
 @layer base {
@@ -84,6 +87,20 @@
   }
   html {
     scroll-behavior: smooth;
+  }
+}
+
+@keyframes hero-ripple {
+  0% {
+    opacity: 0.75;
+    transform: translate(-50%, -50%) scale(0.65);
+  }
+  65% {
+    opacity: 0.28;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.55);
   }
 }
 
@@ -125,5 +142,19 @@
   .dark .dashboard-shell [class*='shadow-slate-200'],
   .dark .dashboard-shell [class*='shadow-slate-300'] {
     --tw-shadow-color: rgb(2 6 23 / 0.55) !important;
+  }
+}
+
+@keyframes ripplePulse {
+  0% {
+    transform: translate(-50%, -50%) scale(0.72);
+    opacity: 0.85;
+  }
+  65% {
+    opacity: 0.32;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.45);
+    opacity: 0;
   }
 }

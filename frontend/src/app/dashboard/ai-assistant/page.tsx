@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { ApiError, apiFetch } from '../../../lib/api';
+import { getBillingEntitlements, type BillingEntitlementsResponse } from '../../../lib/billing';
 
 type ChatMessage = {
   id: string;
@@ -51,6 +52,8 @@ export default function AiAssistantPage() {
   const [isSending, setIsSending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [entitlements, setEntitlements] = useState<BillingEntitlementsResponse | null>(null);
+  const [isLoadingEntitlements, setIsLoadingEntitlements] = useState(true);
   const endRef = useRef<HTMLDivElement | null>(null);
 
   const hasMessages = messages.length > 0;
@@ -58,6 +61,38 @@ export default function AiAssistantPage() {
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages, isSending]);
+
+  useEffect(() => {
+    const loadEntitlements = async () => {
+      const token =
+        typeof window !== 'undefined'
+          ? window.localStorage.getItem('salesway_token')
+          : null;
+      if (!token) {
+        setIsLoadingEntitlements(false);
+        return;
+      }
+
+      try {
+        const data = await getBillingEntitlements(token);
+        setEntitlements(data);
+      } catch {
+        setEntitlements(null);
+      } finally {
+        setIsLoadingEntitlements(false);
+      }
+    };
+
+    void loadEntitlements();
+  }, []);
+
+  const aiAssistantRemaining =
+    typeof entitlements?.aiAssistantRemaining === 'number'
+      ? entitlements.aiAssistantRemaining
+      : null;
+  const isAssistantBlocked =
+    entitlements?.aiAssistantEnabled === false ||
+    (aiAssistantRemaining !== null && aiAssistantRemaining <= 0);
 
   const placeholder = useMemo(
     () =>
@@ -69,7 +104,7 @@ export default function AiAssistantPage() {
 
   const handleSend = async () => {
     const trimmed = inputValue.trim();
-    if (!trimmed || isSending) {
+    if (!trimmed || isSending || isAssistantBlocked || isLoadingEntitlements) {
       return;
     }
     setErrorMessage(null);
@@ -118,7 +153,16 @@ export default function AiAssistantPage() {
       if (error instanceof ApiError) {
         const message =
           error.body || error.message || 'An error occurred while sending.';
-        setErrorMessage(message);
+        if (error.status === 403 || message.toLowerCase().includes('plan limit reached')) {
+          setErrorMessage('Plan limit reached for ai_assistant. Upgrade plan or wait for next cycle.');
+          setEntitlements((current) => ({
+            ...(current ?? {}),
+            aiAssistantEnabled: false,
+            aiAssistantRemaining: 0,
+          }));
+        } else {
+          setErrorMessage(message);
+        }
       } else if (error instanceof Error) {
         setErrorMessage(error.message);
       } else {
@@ -143,6 +187,11 @@ export default function AiAssistantPage() {
         <p className="mt-1 font-medium text-slate-500">
           Get quick answers and ideas for your workflows.
         </p>
+        {isAssistantBlocked ? (
+          <p className="mt-2 text-sm font-medium text-amber-700">
+            AI Assistant este blocat de entitlement-uri sau limita lunară a planului.
+          </p>
+        ) : null}
       </header>
 
       <div className="flex h-[70vh] flex-col">
@@ -154,7 +203,7 @@ export default function AiAssistantPage() {
                   <Bot className="h-12 w-12 text-[#38bdf8]" />
                 </div>
                 <p className="max-w-md">
-                  I am your AI sales assistant, SalesWay AI. Select or create a
+                  I am your AI sales assistant, selfCRM AI. Select or create a
                   conversation to get started.
                 </p>
               </div>
@@ -201,7 +250,7 @@ export default function AiAssistantPage() {
                 onChange={(event) => setInputValue(event.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={placeholder}
-                disabled={isSending}
+                disabled={isSending || isAssistantBlocked || isLoadingEntitlements}
                 autoComplete="off"
                 className="border-slate-200 bg-slate-50 focus:border-[#38bdf8] focus:ring-[#38bdf8]/20"
               />
@@ -209,7 +258,7 @@ export default function AiAssistantPage() {
                 type="button"
                 onClick={handleSend}
                 size="icon"
-                disabled={isSending || !inputValue.trim()}
+                disabled={isSending || !inputValue.trim() || isAssistantBlocked || isLoadingEntitlements}
                 className="bg-[#38bdf8] text-white hover:bg-[#0ea5e9]"
               >
                 <Send className="h-4 w-4" />

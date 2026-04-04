@@ -1,7 +1,7 @@
 {
+  "/signup/choose-plan/page": "app/signup/choose-plan/page.js",
+  "/signup/create-account/page": "app/signup/create-account/page.js",
   "/page": "app/page.js",
   "/login/page": "app/login/page.js",
-  "/dashboard/page": "app/dashboard/page.js",
-  "/dashboard/ai-assistant/page": "app/dashboard/ai-assistant/page.js",
-  "/dashboard/manager/leads/page": "app/dashboard/manager/leads/page.js"
+  "/dashboard/profile/page": "app/dashboard/profile/page.js"
 }

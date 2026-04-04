@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronRight,
   LogOut,
+  Menu,
   Settings,
   User
 } from "lucide-react";
@@ -26,6 +27,7 @@ const breadcrumbLabelByPath: Record<string, string> = {
   "/dashboard/profile": "Profile",
   "/dashboard/settings": "Settings",
   "/dashboard/notifications": "Notifications",
+  "/dashboard/billing": "Billing",
   "/dashboard/manager/overview": "Overview",
   "/dashboard/manager/history": "Team History",
   "/dashboard/manager/forecast": "Sales Forecast",
@@ -42,7 +44,13 @@ const toTitleCase = (value: string) =>
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
 
-export function DashboardHeader({ showNotifications = true }: { showNotifications?: boolean }) {
+export function DashboardHeader({
+  showNotifications = true,
+  onOpenMobileNav
+}: {
+  showNotifications?: boolean;
+  onOpenMobileNav?: () => void;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const normalizedPathname = React.useMemo(
@@ -119,8 +127,20 @@ export function DashboardHeader({ showNotifications = true }: { showNotification
   }, []);
 
   return (
-    <header className="sticky top-0 z-10 flex h-16 items-center justify-between gap-4 border-b bg-background px-4 md:px-6 dark:border-slate-800 dark:bg-slate-950">
+    <header className="sticky top-0 z-50 flex h-16 items-center justify-between gap-4 border-b bg-background px-4 md:px-6 dark:border-slate-800 dark:bg-slate-950">
       <div className="flex items-center gap-2">
+        {onOpenMobileNav ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="md:hidden"
+            onClick={onOpenMobileNav}
+          >
+            <Menu className="h-5 w-5" />
+            <span className="sr-only">Open navigation</span>
+          </Button>
+        ) : null}
         {normalizedPathname === dashboardHref ? (
           <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span className="font-medium text-slate-900 dark:text-slate-100">Overview</span>
@@ -172,7 +192,7 @@ export function DashboardHeader({ showNotifications = true }: { showNotification
           </button>
 
           {isProfileOpen && (
-            <div className="animate-in fade-in zoom-in absolute right-0 mt-2 w-56 origin-top-right rounded-xl border border-slate-200 bg-white py-2 shadow-2xl duration-100 dark:border-slate-800 dark:bg-slate-900">
+            <div className="animate-in fade-in zoom-in absolute right-0 z-50 mt-2 w-56 origin-top-right rounded-xl border border-slate-200 bg-white py-2 shadow-2xl duration-100 dark:border-slate-800 dark:bg-slate-900">
               <div className="mb-1 px-4 py-2">
                 <p className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">My Account</p>
               </div>

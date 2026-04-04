@@ -86,6 +86,14 @@ public class ApiExceptionHandler {
         ));
     }
 
+    @ExceptionHandler(FieldValidationException.class)
+    public ResponseEntity<Map<String, Object>> handleFieldValidation(FieldValidationException exception) {
+        return ResponseEntity.status(exception.getStatus()).body(Map.of(
+                "message", exception.getMessage() == null ? "Validation failed" : exception.getMessage(),
+                "fieldErrors", exception.getFieldErrors()
+        ));
+    }
+
     private Map<String, String> toFieldError(FieldError error) {
         Map<String, String> fieldError = new LinkedHashMap<>();
         fieldError.put("field", error.getField());

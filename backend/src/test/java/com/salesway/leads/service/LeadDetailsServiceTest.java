@@ -3,6 +3,7 @@ package com.salesway.leads.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.salesway.auth.entity.User;
 import com.salesway.auth.repository.UserRepository;
+import com.salesway.billing.service.BillingUsageService;
 import com.salesway.chatbot.client.OpenAiClient;
 import com.salesway.chatbot.entity.KbChunk;
 import com.salesway.chatbot.entity.KbDocument;
@@ -100,6 +101,7 @@ class LeadDetailsServiceTest {
         kbDocumentRepository = mock(KbDocumentRepository.class);
         kbChunkRepository = mock(KbChunkRepository.class);
         openAiClient = mock(OpenAiClient.class);
+        BillingUsageService billingUsageService = mock(BillingUsageService.class);
         CompanyAccessService companyAccessService = mock(CompanyAccessService.class);
         ManagerAccessService managerAccessService = mock(ManagerAccessService.class);
 
@@ -164,7 +166,8 @@ class LeadDetailsServiceTest {
                 kbDocumentRepository,
                 kbChunkRepository,
                 openAiClient,
-                new ObjectMapper()
+                new ObjectMapper(),
+                billingUsageService
         );
     }
 

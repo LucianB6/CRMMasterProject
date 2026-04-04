@@ -5,6 +5,7 @@ import com.salesway.auth.dto.GoogleLoginRequest;
 import com.salesway.auth.entity.User;
 import com.salesway.auth.repository.PasswordResetTokenRepository;
 import com.salesway.auth.repository.UserRepository;
+import com.salesway.billing.service.SubscriptionAccessService;
 import com.salesway.common.enums.MembershipRole;
 import com.salesway.common.enums.MembershipStatus;
 import com.salesway.companies.entity.Company;
@@ -71,6 +72,7 @@ class AuthServiceGoogleInviteTest {
         };
         PasswordResetTokenRepository passwordResetTokenRepository = org.mockito.Mockito.mock(PasswordResetTokenRepository.class);
         EmailService emailService = org.mockito.Mockito.mock(EmailService.class);
+        SubscriptionAccessService subscriptionAccessService = org.mockito.Mockito.mock(SubscriptionAccessService.class);
 
         GoogleIdTokenVerifier verifier = new GoogleIdTokenVerifier("960603321072-6g9an4d97grelbps1dtr03e1de9bi0ae.apps.googleusercontent.com") {
             @Override
@@ -100,6 +102,7 @@ class AuthServiceGoogleInviteTest {
                 invitationRepository,
                 passwordResetTokenRepository,
                 emailService,
+                subscriptionAccessService,
                 "http://localhost:3000/reset-password"
         );
 
@@ -198,6 +201,7 @@ class AuthServiceGoogleInviteTest {
                 invitationRepository,
                 org.mockito.Mockito.mock(PasswordResetTokenRepository.class),
                 org.mockito.Mockito.mock(EmailService.class),
+                org.mockito.Mockito.mock(SubscriptionAccessService.class),
                 "http://localhost:3000/reset-password"
         );
 

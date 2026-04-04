@@ -11,6 +11,12 @@ import com.salesway.auth.dto.SignupRequest;
 import com.salesway.auth.dto.SignupResponse;
 import com.salesway.auth.dto.UpdateProfileRequest;
 import com.salesway.auth.service.AuthService;
+import com.salesway.billing.dto.CheckoutValidationRequest;
+import com.salesway.billing.dto.CheckoutValidationResponse;
+import com.salesway.billing.dto.FinalizeCheckoutSignupRequest;
+import com.salesway.billing.service.CheckoutValidationService;
+import com.salesway.billing.service.StripeBillingService;
+import com.salesway.manager.service.CompanyAccessService;
 import com.salesway.security.CustomUserDetails;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -21,6 +27,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -30,9 +37,20 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/auth")
 public class AuthController {
     private final AuthService authService;
+    private final StripeBillingService stripeBillingService;
+    private final CheckoutValidationService checkoutValidationService;
+    private final CompanyAccessService companyAccessService;
 
-    public AuthController(AuthService authService) {
+    public AuthController(
+            AuthService authService,
+            StripeBillingService stripeBillingService,
+            CheckoutValidationService checkoutValidationService,
+            CompanyAccessService companyAccessService
+    ) {
         this.authService = authService;
+        this.stripeBillingService = stripeBillingService;
+        this.checkoutValidationService = checkoutValidationService;
+        this.companyAccessService = companyAccessService;
     }
 
     @PostMapping("/login")
@@ -48,6 +66,34 @@ public class AuthController {
     @PostMapping("/signup")
     public ResponseEntity<SignupResponse> signup(@Valid @RequestBody SignupRequest request) {
         return ResponseEntity.ok(authService.signup(request));
+    }
+
+    @GetMapping({"/checkout/validate", "/checkout/validate/"})
+    public ResponseEntity<CheckoutValidationResponse> validateCheckout(
+            @RequestParam(name = "lookup_key", required = false) String lookupKey,
+            @RequestParam(name = "email", required = false) String email,
+            @RequestParam(name = "password", required = false) String password,
+            @RequestParam(name = "retype_password", required = false) String retypePassword,
+            @RequestParam(name = "first_name", required = false) String firstName,
+            @RequestParam(name = "last_name", required = false) String lastName,
+            @RequestParam(name = "company_name", required = false) String companyName
+    ) {
+        CheckoutValidationRequest request = new CheckoutValidationRequest();
+        request.setLookupKey(lookupKey);
+        request.setEmail(email);
+        request.setPassword(password);
+        request.setRetypePassword(retypePassword);
+        request.setFirstName(firstName);
+        request.setLastName(lastName);
+        request.setCompanyName(companyName);
+        return ResponseEntity.ok(checkoutValidationService.validate(request));
+    }
+
+    @PostMapping({"/checkout/finalize", "/checkout/finalize/"})
+    public ResponseEntity<LoginResponse> finalizeCheckoutSignup(
+            @Valid @RequestBody FinalizeCheckoutSignupRequest request
+    ) {
+        return ResponseEntity.ok(stripeBillingService.finalizeCheckoutSignup(request.getSessionId()));
     }
 
     @PostMapping("/forgot-password")
@@ -86,12 +132,18 @@ public class AuthController {
         if (authentication == null || !(authentication.getPrincipal() instanceof CustomUserDetails userDetails)) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unauthorized");
         }
+        var activeMembership = companyAccessService.getActiveMembership();
+        var company = activeMembership.getCompany();
 
         return ResponseEntity.ok(new CurrentUserResponse(
                 userDetails.getUser().getId(),
                 userDetails.getUser().getEmail(),
                 userDetails.getUser().getFirstName(),
-                userDetails.getUser().getLastName()
+                userDetails.getUser().getLastName(),
+                company.getName(),
+                company.getPlanCode(),
+                company.getSubscriptionStatus(),
+                company.getSubscriptionCurrentPeriodEnd()
         ));
     }
 
@@ -105,11 +157,17 @@ public class AuthController {
         }
 
         var updatedUser = authService.updateProfile(userDetails, request);
+        var activeMembership = companyAccessService.getActiveMembership();
+        var company = activeMembership.getCompany();
         return ResponseEntity.ok(new CurrentUserResponse(
                 updatedUser.getId(),
                 updatedUser.getEmail(),
                 updatedUser.getFirstName(),
-                updatedUser.getLastName()
+                updatedUser.getLastName(),
+                company.getName(),
+                company.getPlanCode(),
+                company.getSubscriptionStatus(),
+                company.getSubscriptionCurrentPeriodEnd()
         ));
     }
 }

@@ -1,7 +1,10 @@
 .env
 .env.local
+.env.example
+
 application-local-secrets.properties
 application-prod-secrets.properties
+application.properties
 
 target/
 

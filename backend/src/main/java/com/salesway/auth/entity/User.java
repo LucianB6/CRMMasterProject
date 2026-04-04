@@ -1,8 +1,11 @@
 package com.salesway.auth.entity;
 
 import com.salesway.common.auditing.AuditedEntity;
+import com.salesway.auth.enums.PlatformRole;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import jakarta.validation.constraints.Email;
@@ -55,6 +58,11 @@ public class User extends AuditedEntity {
 
     @Column(name = "last_name")
     private String lastName;
+
+    @NotNull
+    @Enumerated(EnumType.STRING)
+    @Column(name = "platform_role", nullable = false)
+    private PlatformRole platformRole = PlatformRole.USER;
 
     public String getEmail() {
         return email;
@@ -142,5 +150,13 @@ public class User extends AuditedEntity {
 
     public void setLastName(String lastName) {
         this.lastName = lastName;
+    }
+
+    public PlatformRole getPlatformRole() {
+        return platformRole;
+    }
+
+    public void setPlatformRole(PlatformRole platformRole) {
+        this.platformRole = platformRole;
     }
 }

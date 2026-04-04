@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   BarChart3,
   ChevronLeft,
@@ -23,7 +24,11 @@ import {
 } from "lucide-react";
 
 import { Button } from "../components/ui/button";
-import { Sheet, SheetContent, SheetTrigger } from "../components/ui/sheet";
+import { ProgressiveBlur } from "../components/ui/progressive-blur";
+import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "../components/ui/sheet";
+import { useToast } from "../hooks/use-toast";
+import { ApiError, apiFetch } from "../lib/api";
+import { startStripePortalSession } from "../lib/stripe-checkout";
 import logoFullFundalTransparent from "../assets/selfCRMLogo.svg";
 
 const assets = {
@@ -62,7 +67,7 @@ const pricingPlans = [
   {
     name: "Starter",
     planCode: "STARTER",
-    price: "€20",
+    price: "€19",
     description: "Pentru echipe mici care vor să organizeze vânzările și marketingul într-un singur workspace.",
     features: [
       "Până la 3 conturi de tip agent create",
@@ -75,14 +80,45 @@ const pricingPlans = [
       "Tracking KPI",
     ],
     cta: "Alege Starter",
+    popular: false,
+  },
+  {
+    name: "Growth",
+    planCode: "PRO",
+    price: "€49",
+    description: "Pentru echipe în creștere care au nevoie de automatizări avansate și control operațional mai bun.",
+    features: [
+      "Tot ce include Starter",
+      "Mai multe conturi de agent disponibile",
+      "Fluxuri extinse pentru managementul echipei",
+      "Raportare avansată pentru performanță",
+      "Capacitate extinsă pentru AI Assistant",
+      "Capacitate extinsă pentru AI Insights",
+    ],
+    cta: "Alege Growth",
     popular: true,
+  },
+  {
+    name: "Enterprise",
+    planCode: "ENTERPRISE",
+    price: "Custom",
+    description: "Pentru organizații mari care au nevoie de limite dedicate, control extins și suport prioritar.",
+    features: [
+      "Tot ce include Growth",
+      "Pachet personalizat pe număr de utilizatori",
+      "Entitlements și limite configurabile",
+      "Suport prioritar și onboarding dedicat",
+      "Guvernanță avansată pentru echipe complexe",
+    ],
+    cta: "Contactează-ne",
+    popular: false,
   },
 ];
 
 const reviews = [
   {
     quote:
-      "SalesWay a schimbat complet modul în care gestionăm pipeline-ul de vânzări. Transparența a devenit un avantaj real pentru performanța echipei.",
+      "selfCRM a schimbat complet modul în care gestionăm pipeline-ul de vânzări. Transparența a devenit un avantaj real pentru performanța echipei.",
     author: "Andrei Popescu",
     title: "Director de vânzări, TechCorp",
   },
@@ -365,7 +401,19 @@ function ProcessSection() {
 }
 
 export default function LandingPage() {
+  const { toast } = useToast();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [activeReview, setActiveReview] = useState(0);
+  const checkoutSuccess = searchParams.has("success");
+  const checkoutSessionId = searchParams.get("session_id") ?? "";
+  const checkoutMessage = searchParams.has("canceled")
+    ? "Order canceled -- continue to shop around and checkout when you're ready."
+    : "";
+  const finalizedCheckoutSessionRef = useRef<string | null>(null);
+  const [finalizeState, setFinalizeState] = useState<"idle" | "processing" | "error">("idle");
+  const [finalizeErrorMessage, setFinalizeErrorMessage] = useState<string | null>(null);
+  const [finalizeRetryToken, setFinalizeRetryToken] = useState(0);
 
   const showPreviousReview = () => {
     setActiveReview((current) => (current === 0 ? reviews.length - 1 : current - 1));
@@ -375,8 +423,175 @@ export default function LandingPage() {
     setActiveReview((current) => (current === reviews.length - 1 ? 0 : current + 1));
   };
 
+  const handleManageBilling = () => {
+    const portalResult = startStripePortalSession(checkoutSessionId);
+    if (!portalResult.ok) {
+      toast({
+        title: "Stripe portal is not configured",
+        description: portalResult.message,
+        variant: "destructive"
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (!checkoutSuccess || !checkoutSessionId) return;
+    if (finalizedCheckoutSessionRef.current === `${checkoutSessionId}:${finalizeRetryToken}`) return;
+
+    finalizedCheckoutSessionRef.current = `${checkoutSessionId}:${finalizeRetryToken}`;
+    setFinalizeState("processing");
+    setFinalizeErrorMessage(null);
+
+    const resolveLandingRoute = async (token: string) => {
+      try {
+        await apiFetch("/manager/overview/agents", {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`
+          },
+          cache: "no-store"
+        });
+        return { route: "/dashboard/manager/overview", role: "manager" as const };
+      } catch (error) {
+        if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+          return { route: "/dashboard", role: "agent" as const };
+        }
+      }
+      return { route: "/dashboard", role: "agent" as const };
+    };
+
+    (async () => {
+      const wait = (ms: number) =>
+        new Promise<void>((resolve) => {
+          window.setTimeout(resolve, ms);
+        });
+
+      const shouldRetryFinalize = (error: unknown) => {
+        if (!(error instanceof ApiError)) return false;
+        return [404, 409, 425, 429, 500, 502, 503, 504].includes(error.status);
+      };
+
+      const finalizeCheckout = async () => {
+        const retryDelays = [1000, 2000, 3000, 5000];
+        const maxAttempts = retryDelays.length + 1;
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+          try {
+            const payload = await apiFetch<{ token?: string }>("/auth/checkout/finalize", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({
+                session_id: checkoutSessionId
+              })
+            });
+
+            if (payload?.token) {
+              return payload.token;
+            }
+
+            if (attempt < maxAttempts) {
+              await wait(retryDelays[attempt - 1] ?? 1500);
+              continue;
+            }
+
+            throw new Error("No authentication token returned after payment.");
+          } catch (error) {
+            if (attempt < maxAttempts && shouldRetryFinalize(error)) {
+              await wait(retryDelays[attempt - 1] ?? 1500);
+              continue;
+            }
+            throw error;
+          }
+        }
+
+        throw new Error("Could not finalize checkout after multiple attempts.");
+      };
+
+      try {
+        const token = await finalizeCheckout();
+
+        localStorage.setItem("salesway_token", token);
+        const { route, role } = await resolveLandingRoute(token);
+        localStorage.setItem("userRole", role);
+        router.push(route);
+      } catch (error) {
+        const message =
+          error instanceof ApiError
+            ? error.body || error.message
+            : "Could not finalize checkout. Please sign in manually.";
+        setFinalizeState("error");
+        setFinalizeErrorMessage(message);
+      }
+    })();
+  }, [checkoutSessionId, checkoutSuccess, finalizeRetryToken, router, toast]);
+
+  if (checkoutSuccess || checkoutMessage) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#f0f9ff] via-[#e0f2fe] to-[#bae6fd] px-4 py-6">
+        <div className="w-full max-w-md rounded-2xl border border-sky-100 bg-white p-8 shadow-lg">
+          <div className="mb-5 flex justify-center">
+            <Image src={logoFullFundalTransparent} alt="selfCRM" className="h-16 w-auto" />
+          </div>
+          {checkoutSuccess && checkoutSessionId ? (
+            <div className="space-y-4 text-center">
+              <h3 className="text-xl font-bold text-slate-900">
+                Subscription to selfCRM successful!
+              </h3>
+              {finalizeState === "processing" ? (
+                <p className="text-sm text-slate-500">
+                  Finalizăm contul tău după confirmarea plății. Te autentificăm automat în câteva secunde...
+                </p>
+              ) : finalizeState === "error" ? (
+                <p className="text-sm text-red-600">
+                  {finalizeErrorMessage || "Nu am putut finaliza contul automat. Încearcă din nou."}
+                </p>
+              ) : (
+                <p className="text-sm text-slate-500">
+                  You can manage your billing information in the Stripe customer portal.
+                </p>
+              )}
+              {finalizeState === "processing" ? (
+                <Button type="button" variant="outline" disabled className="w-full">
+                  Processing...
+                </Button>
+              ) : null}
+              {finalizeState === "error" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setFinalizeRetryToken((current) => current + 1)}
+                >
+                  Retry finalize
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                className="w-full bg-[#67C6EE] text-white hover:bg-[#67C6EE]/90"
+                onClick={handleManageBilling}
+                disabled={finalizeState === "processing"}
+              >
+                Manage your billing information
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4 text-center">
+              <h3 className="text-xl font-bold text-slate-900">Checkout status</h3>
+              <p className="text-sm text-slate-500">{checkoutMessage}</p>
+            </div>
+          )}
+          <Button asChild variant="outline" className="mt-4 w-full">
+            <Link href="/">Back to home</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="bg-gradient-to-br from-[#f0f9ff] via-[#e0f2fe] to-[#bae6fd] font-body">
+    <div className="overflow-x-hidden bg-gradient-to-br from-[#f0f9ff] via-[#e0f2fe] to-[#bae6fd] font-body">
       <header className="sticky top-0 z-50 border-b border-slate-200/70 bg-white/55 shadow-sm backdrop-blur-sm">
         <nav className="container mx-auto grid h-20 grid-cols-[40px_1fr_40px] items-center px-4 md:flex md:justify-between md:px-6">
           <div className="md:hidden" />
@@ -390,7 +605,7 @@ export default function LandingPage() {
             >
               <Image
                 src={logoFullFundalTransparent}
-                alt="SalesWay"
+                alt="selfCRM"
                 className="h-20 w-auto md:h-[150px]"
                 priority
               />
@@ -448,6 +663,10 @@ export default function LandingPage() {
                 side="right"
                 className="flex w-[280px] flex-col border-l-slate-200 bg-white p-6 text-slate-900"
               >
+                <SheetTitle className="sr-only">Meniu principal</SheetTitle>
+                <SheetDescription className="sr-only">
+                  Navigheaza catre sectiunile principale ale paginii si actiunile de autentificare.
+                </SheetDescription>
                 <div className="mb-8">
                   <div className="flex items-center p-2">
                     <button
@@ -458,7 +677,7 @@ export default function LandingPage() {
                     >
                       <Image
                         src={logoFullFundalTransparent}
-                        alt="SalesWay"
+                        alt="selfCRM"
                         className="h-20 w-auto px-12"
                       />
                     </button>
@@ -505,16 +724,16 @@ export default function LandingPage() {
         </nav>
       </header>
 
-      <main className="min-h-screen -mt-20 bg-transparent">
-        <section className="bg-transparent py-12 sm:py-24">
+      <main className="min-h-screen -mt-20 overflow-x-hidden bg-transparent">
+        <section className="relative overflow-x-clip bg-transparent py-12 sm:py-24">
           <div className="container mx-auto max-w-[1200px] px-6 pb-6 pt-40">
-            <div className="text-center">
+            <div className="relative z-10 text-center">
               <h1 className="text-4xl font-extrabold !leading-tight text-slate-900 drop-shadow-[0_16px_38px_rgba(15,23,42,0.45)] [text-shadow:0_3px_10px_rgba(15,23,42,0.35)] md:text-6xl lg:text-7xl">
-                Crește performanța <br />
-                echipei tale de <span className="text-[#38bdf8] italic">vânzări</span>.
+                Gestionează-ți eficient clienții <br />
+                pentru maxim de <span className="text-[#38bdf8] italic">rezultat</span>.
               </h1>
               <p className="mx-auto mt-6 max-w-3xl text-lg text-slate-600 md:text-xl">
-                SalesWay este workspace-ul complet pentru companiile de servicii
+                selfCRM este workspace-ul complet pentru companiile de servicii
                 care vor să urmărească activitatea, să gestioneze performanța și
                 să crească prin transparență reală.
               </p>
@@ -528,21 +747,21 @@ export default function LandingPage() {
             </div>
           </div>
 
-          <div className="relative mx-auto -mt-20 h-[700px] max-w-7xl lg:h-[800px]">
+          <div className="relative z-10 mx-auto -mt-20 h-[760px] max-w-7xl overflow-x-clip lg:h-[800px]">
             <Image
               src={assets.iphone1}
-              alt="Captură din aplicația SalesWay"
+              alt="Captură din aplicația selfCRM"
               width={800}
               height={1600}
-              className="absolute left-1/2 top-0 w-[400px] -translate-x-[60%] -rotate-12 rounded-2xl md:w-[450px]"
+              className="absolute left-1/2 top-16 w-[400px] -translate-x-[58%] -rotate-12 rounded-2xl sm:w-[340px] sm:-translate-x-[60%] md:w-[450px]"
               priority
             />
             <Image
               src={assets.iphone2}
-              alt="Captură din aplicația SalesWay"
+              alt="Captură din aplicația selfCRM"
               width={1000}
               height={2000}
-              className="absolute left-1/2 top-0 z-10 w-[590px] -translate-x-[40%] rotate-12 rounded-2xl md:w-[770px]"
+              className="absolute left-1/2 top-16 z-20 w-[660px] max-w-none -translate-x-[44%] rotate-12 rounded-2xl sm:w-[860px] sm:-translate-x-[38%] md:w-[770px] md:-translate-x-[40%]"
               priority
             />
           </div>
@@ -563,7 +782,7 @@ export default function LandingPage() {
                 <div className="mb-6 mt-4 h-2 w-16 rounded-full bg-[#67C6EE]" />
 
                 <p className="text-lg leading-relaxed text-slate-600">
-                  De la raportare zilnică la coaching susținut de AI, SalesWay îți oferă
+                  De la raportare zilnică la coaching susținut de AI, selfCRM îți oferă
                   instrumentele necesare pentru a construi o echipă performantă și pentru
                   a închide mai multe vânzări mai ușor.
                 </p>
@@ -612,52 +831,41 @@ export default function LandingPage() {
 
         <section id="pricing" className="bg-white py-24 sm:py-32">
           <div className="mx-auto max-w-7xl px-6 lg:px-8">
-            <div className="grid grid-cols-1 items-start gap-16 lg:grid-cols-12">
-              <div className="order-1 lg:order-1 lg:col-span-5">
-                <div className="mb-6 inline-block rounded-full bg-sky-50 px-4 py-1 text-sm font-bold uppercase tracking-wide text-[#38bdf8]">
-                  Pricing
-                </div>
-
-                <h2 className="mb-6 text-4xl font-black leading-tight tracking-tight text-slate-900 md:text-5xl">
-                  Preț simplu <br /> pentru echipe care vor <span className="text-[#38bdf8] italic">claritate</span>
-                </h2>
-
-                <div className="mb-6 h-2 w-16 rounded-full bg-[#67C6EE]" />
-
-                <p className="max-w-2xl text-lg leading-relaxed text-slate-600">
-                  Alege planul care se potrivește acum echipei tale și începe să
-                  organizezi vânzările și marketingul într-un singur loc.
-                </p>
+            <div className="mx-auto max-w-3xl text-center">
+              <div className="mb-6 inline-block rounded-full bg-sky-50 px-4 py-1 text-sm font-bold uppercase tracking-wide text-[#38bdf8]">
+                Pricing
               </div>
+              <h2 className="text-4xl font-black leading-tight tracking-tight text-slate-900 md:text-5xl">
+                Preț simplu pentru echipe care vor <span className="text-[#38bdf8] italic">claritate</span>
+              </h2>
+              <div className="mx-auto mt-6 h-2 w-16 rounded-full bg-[#67C6EE]" />
+              <p className="mt-6 text-lg leading-relaxed text-slate-600">
+                Alege planul care se potrivește echipei tale și începe să organizezi vânzările și
+                marketingul într-un singur loc.
+              </p>
+            </div>
 
-              <div className="order-2 lg:order-2 lg:col-span-7">
-                <div className="mx-auto grid max-w-xl grid-cols-1 items-center gap-8 lg:mr-0 lg:ml-auto">
+            <div className="mt-14 grid grid-cols-1 items-end gap-8 lg:grid-cols-3">
               {pricingPlans.map((plan) => (
                 <div
                   key={plan.name}
-                  className={`relative rounded-xl border bg-card p-8 shadow-lg transition-transform ${
+                  className={`relative flex flex-col rounded-xl border bg-card p-8 shadow-lg transition-transform ${
                     plan.popular
-                      ? 'border-2 border-black scale-105'
-                      : 'border-border'
+                      ? 'border-2 border-black lg:min-h-[780px] lg:-translate-y-6'
+                      : 'border-border lg:min-h-[700px]'
                   }`}
                 >
                   {plan.popular && (
-                    <div className="absolute top-0 -translate-y-1/2 rounded-full bg-[#38bdf8] px-4 py-1 text-sm font-semibold text-white">
+                    <div className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#38bdf8] px-4 py-1 text-sm font-semibold text-white">
                       Cel mai ales
                     </div>
                   )}
-                  <h3 className="text-2xl font-bold text-sky-800">
-                    {plan.name}
-                  </h3>
+                  <h3 className="text-2xl font-bold text-sky-800">{plan.name}</h3>
                   <p className="mt-2 text-sky-700">{plan.description}</p>
                   <p className="mt-8">
-                    <span className="text-4xl font-extrabold text-[#67C6EE]">
-                      {plan.price}
-                    </span>
+                    <span className="text-4xl font-extrabold text-[#67C6EE]">{plan.price}</span>
                     {plan.price !== 'Custom' && (
-                      <span className="text-base font-medium text-sky-700">
-                        /mo
-                      </span>
+                      <span className="text-base font-medium text-sky-700">/mo</span>
                     )}
                   </p>
                   <ul className="mt-8 space-y-4">
@@ -669,8 +877,14 @@ export default function LandingPage() {
                     ))}
                   </ul>
                   <Link
-                    href={`/signup/create-account?plan=${plan.planCode}`}
-                    className={`mt-10 block w-full rounded-md px-6 py-3 text-center font-semibold transition-colors ${
+                    href={
+                      plan.planCode === "STARTER"
+                        ? `/signup/create-account?plan=${plan.planCode}&from=checkout`
+                        : plan.planCode === "PRO"
+                          ? `/signup/create-account?plan=${plan.planCode}&from=checkout`
+                          : `/signup/create-account?plan=${plan.planCode}`
+                    }
+                    className={`mt-auto inline-flex h-12 w-full items-center justify-center rounded-md px-6 text-center font-semibold transition-colors ${
                       plan.popular
                         ? 'bg-[#67C6EE] text-white hover:bg-opacity-90'
                         : 'border border-[#67C6EE] bg-white text-[#67C6EE] hover:bg-[#67C6EE] hover:text-white'
@@ -680,8 +894,6 @@ export default function LandingPage() {
                   </Link>
                 </div>
               ))}
-                </div>
-              </div>
             </div>
           </div>
         </section>
@@ -772,7 +984,7 @@ export default function LandingPage() {
                 <div className="mb-6 h-2 w-16 rounded-full bg-[#67C6EE]" />
 
                 <p className="max-w-2xl text-lg leading-relaxed text-slate-600">
-                  Vezi direct opiniile echipelor care folosesc SalesWay pentru a performa
+                  Vezi direct opiniile echipelor care folosesc selfCRM pentru a performa
                   mai bine și pentru a aduce mai multă claritate în procesele lor zilnice.
                 </p>
               </div>
@@ -786,6 +998,9 @@ export default function LandingPage() {
           </div>
         </footer>
       </main>
+
+      <ProgressiveBlur position="top" height="14vh" className="hidden md:block" />
+      <ProgressiveBlur position="bottom" height="20vh" />
     </div>
   );
 }

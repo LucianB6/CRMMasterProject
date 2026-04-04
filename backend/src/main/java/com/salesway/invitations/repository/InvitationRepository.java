@@ -20,6 +20,8 @@ public interface InvitationRepository extends JpaRepository<Invitation, UUID> {
             InvitationStatus status
     );
 
+    long countByCompanyIdAndStatus(UUID companyId, InvitationStatus status);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select i from Invitation i join fetch i.company where i.token = :token")
     Optional<Invitation> findByTokenForUpdate(@Param("token") String token);

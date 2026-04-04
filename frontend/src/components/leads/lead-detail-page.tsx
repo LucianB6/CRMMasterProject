@@ -5,6 +5,7 @@ import { ClipboardList, Sparkles } from 'lucide-react';
 
 import { ApiError } from '../../lib/api';
 import { apiFetch } from '../../lib/api';
+import { getBillingEntitlements, type BillingEntitlementsResponse } from '../../lib/billing';
 import {
   fetchManagerAgents,
   fetchManagerLeadAiInsights,
@@ -118,6 +119,7 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
   );
   const [aiRefreshError, setAiRefreshError] = useState<string | null>(null);
   const [lastAiRefreshAt, setLastAiRefreshAt] = useState<string | null>(null);
+  const [billingEntitlements, setBillingEntitlements] = useState<BillingEntitlementsResponse | null>(null);
   const {
     insights,
     isRefreshing,
@@ -128,6 +130,8 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
   } = useLeadAiInsights();
   const inFlightAnswerSaveRef = useRef<Promise<LeadAnswerResponse[]> | null>(null);
   const serverDraftAnswersRef = useRef<Record<string, string>>({});
+    const aiInsightsRegenerationTriggeredRef = useRef(false);
+
 
   const currentStage = useMemo(
     () => stages.find((stage) => stage.stageId === lead?.stageId) ?? null,
@@ -186,7 +190,40 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
       ),
     [draftAnswers, savableAnswerItems]
   );
-  const canRefreshAiInsights = true;
+  const normalizedAiStatus = useMemo(() => {
+    const value = lead?.aiStatus?.toUpperCase();
+    if (
+      value === 'PENDING' ||
+      value === 'PROCESSING' ||
+      value === 'COMPLETED' ||
+      value === 'FAILED'
+    ) {
+      return value;
+    }
+    return null;
+  }, [lead?.aiStatus]);
+  const normalizedAiInsightsStatus = useMemo(() => {
+    const value = insights?.status?.toUpperCase();
+    if (
+      value === 'PENDING' ||
+      value === 'PROCESSING' ||
+      value === 'COMPLETED' ||
+      value === 'FAILED'
+    ) {
+      return value;
+    }
+    return null;
+  }, [insights?.status]);
+  const isLeadScoringActive =
+    normalizedAiStatus === 'PENDING' || normalizedAiStatus === 'PROCESSING';
+  const isAiInsightsRegenerationActive =
+    normalizedAiInsightsStatus === 'PENDING' || normalizedAiInsightsStatus === 'PROCESSING';
+  const canRefreshAiInsights =
+    aiRefreshState !== 'refreshing' &&
+    !isAiInsightsRegenerationActive &&
+    billingEntitlements?.aiInsightsEnabled !== false &&
+    (typeof billingEntitlements?.aiInsightsRemaining !== 'number' ||
+      billingEntitlements.aiInsightsRemaining > 0);
   const answerSaveStateMessage =
     answerSaveState === 'saving'
       ? 'Saving latest form answers...'
@@ -205,6 +242,12 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
         : hasUnsavedAnswerChanges
           ? 'Salveaza modificarile inainte de regenerate ca insight-ul sa foloseasca datele noi.'
           : null;
+  const aiInsightsEntitlementMessage =
+    billingEntitlements?.aiInsightsEnabled === false ||
+    (typeof billingEntitlements?.aiInsightsRemaining === 'number' &&
+      billingEntitlements.aiInsightsRemaining <= 0)
+      ? 'AI Insights este blocat de planul curent sau de limita lunară.'
+      : null;
 
   const buildLeadAnswersPayload = useCallback((): LeadAnswerUpdatePayload => {
     return {
@@ -342,6 +385,22 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
     if (typeof window === 'undefined') return;
     const role = window.localStorage.getItem('userRole');
     setUserRole(role === 'manager' ? 'manager' : 'agent');
+  }, []);
+
+  useEffect(() => {
+    const loadEntitlements = async () => {
+      const token = getAuthToken();
+      if (!token) return;
+
+      try {
+        const data = await getBillingEntitlements(token);
+        setBillingEntitlements(data);
+      } catch {
+        setBillingEntitlements(null);
+      }
+    };
+
+    void loadEntitlements();
   }, []);
 
   useEffect(() => {
@@ -534,6 +593,14 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
 
   const handleRegenerateAiInsights = useCallback(async () => {
     if (!lead) return;
+    if (!canRefreshAiInsights) {
+      setAiRefreshState('error');
+      setAiRefreshError(
+        aiInsightsEntitlementMessage ??
+          'AI Insights este indisponibil momentan pe baza entitlement-urilor active.'
+      );
+      return;
+    }
 
     try {
       setIsRefreshing(true);
@@ -563,6 +630,16 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
       });
     } catch (error) {
       const message = parseApiError(error);
+      if (
+        (error instanceof ApiError && error.status === 403) ||
+        message.toLowerCase().includes('plan limit reached')
+      ) {
+        setBillingEntitlements((current) => ({
+          ...(current ?? {}),
+          aiInsightsEnabled: false,
+          aiInsightsRemaining: 0,
+        }));
+      }
       setAiRefreshState('error');
       setAiRefreshError(message);
       toast({
@@ -573,7 +650,7 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
     } finally {
       setIsRefreshing(false);
     }
-  }, [flushPendingAnswerSave, lead, setInsightsFromResponse, setIsRefreshing, toast]);
+  }, [aiInsightsEntitlementMessage, canRefreshAiInsights, flushPendingAnswerSave, lead, setInsightsFromResponse, setIsRefreshing, toast]);
 
   if (isLoading) {
     return (
@@ -624,7 +701,7 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
       />
 
       <div className="flex-1">
-        <div className="mr-0 ml-0 flex min-h-[calc(100vh-88px)] w-full max-w-none flex-col pr-4 pb-8 pt-4 pl-0 sm:pr-6 sm:pl-0 lg:pr-8 lg:pl-0">
+        <div className="mr-auto ml-0 flex min-h-[calc(100vh-88px)] w-full max-w-none flex-col pr-0 pb-8 pt-4 pl-0 sm:pr-0 sm:pl-0 lg:pr-0 lg:pl-0">
           <div className="xl:hidden">
             <Tabs
               value={activeCompactSection}
@@ -703,12 +780,17 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
                 <div className="flex min-h-full w-full flex-col">
                   <LeadAIInsights
                     insights={insights}
+                    aiStatus={lead.aiStatus}
+                    aiScore={lead.aiScore}
+                    aiSummary={lead.aiSummary}
+                    aiError={lead.aiError}
+                    isQueueingScore={isLeadScoringActive}
                     isRefreshing={isRefreshing || aiRefreshState === 'refreshing'}
                     isSubmittingFeedback={isSubmittingFeedback}
                     canRefresh={canRefreshAiInsights}
                     refreshLabel="Regenerate AI Insights"
                     refreshStatusMessage={aiRefreshStatusMessage}
-                    refreshErrorMessage={aiRefreshError}
+                    refreshErrorMessage={aiInsightsEntitlementMessage ?? aiRefreshError}
                     onRefresh={() => void handleRegenerateAiInsights()}
                     onSubmitFeedback={(status) => void handleInsightFeedback(status)}
                   />
@@ -768,12 +850,17 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
               <div className="overflow-hidden rounded-2xl bg-transparent p-5 sm:p-6">
                 <LeadAIInsights
                   insights={insights}
+                  aiStatus={lead.aiStatus}
+                  aiScore={lead.aiScore}
+                  aiSummary={lead.aiSummary}
+                  aiError={lead.aiError}
+                  isQueueingScore={isLeadScoringActive}
                   isRefreshing={isRefreshing || aiRefreshState === 'refreshing'}
                   isSubmittingFeedback={isSubmittingFeedback}
                   canRefresh={canRefreshAiInsights}
                   refreshLabel="Regenerate AI Insights"
                   refreshStatusMessage={aiRefreshStatusMessage}
-                  refreshErrorMessage={aiRefreshError}
+                  refreshErrorMessage={aiInsightsEntitlementMessage ?? aiRefreshError}
                   onRefresh={() => void handleRegenerateAiInsights()}
                   onSubmitFeedback={(status) => void handleInsightFeedback(status)}
                 />

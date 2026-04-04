@@ -1,4 +1,8 @@
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/test/java/com/salesway/admin/controller/SuperAdminControllerIntegrationTest.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/test/java/com/salesway/auth/controller/AuthCheckoutValidationControllerTest.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/test/java/com/salesway/auth/service/AuthServiceGoogleInviteTest.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/test/java/com/salesway/billing/controller/StripeBillingControllerTest.java
+/Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/test/java/com/salesway/billing/service/CheckoutValidationServiceTest.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/test/java/com/salesway/common/error/ApiExceptionHandlerTest.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/test/java/com/salesway/invitations/service/InvitationPreviewServiceTest.java
 /Users/lucianbaciu/Documents/GitHub/CRMMasterProject/backend/src/test/java/com/salesway/leads/controller/LeadManagementControllerIntegrationTest.java

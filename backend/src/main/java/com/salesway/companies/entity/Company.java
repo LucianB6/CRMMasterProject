@@ -8,6 +8,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
+import java.time.Instant;
+
 @Entity
 @Table(name = "companies")
 public class Company extends AuditedEntity {
@@ -28,6 +30,25 @@ public class Company extends AuditedEntity {
     @NotNull
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
+
+    @Size(max = 255)
+    @Column(name = "stripe_customer_id")
+    private String stripeCustomerId;
+
+    @Size(max = 255)
+    @Column(name = "stripe_subscription_id")
+    private String stripeSubscriptionId;
+
+    @Size(max = 255)
+    @Column(name = "stripe_price_id")
+    private String stripePriceId;
+
+    @Size(max = 64)
+    @Column(name = "subscription_status")
+    private String subscriptionStatus;
+
+    @Column(name = "subscription_current_period_end")
+    private Instant subscriptionCurrentPeriodEnd;
 
     public String getName() {
         return name;
@@ -59,5 +80,45 @@ public class Company extends AuditedEntity {
 
     public void setPlanCode(String planCode) {
         this.planCode = planCode;
+    }
+
+    public String getStripeCustomerId() {
+        return stripeCustomerId;
+    }
+
+    public void setStripeCustomerId(String stripeCustomerId) {
+        this.stripeCustomerId = stripeCustomerId;
+    }
+
+    public String getStripeSubscriptionId() {
+        return stripeSubscriptionId;
+    }
+
+    public void setStripeSubscriptionId(String stripeSubscriptionId) {
+        this.stripeSubscriptionId = stripeSubscriptionId;
+    }
+
+    public String getStripePriceId() {
+        return stripePriceId;
+    }
+
+    public void setStripePriceId(String stripePriceId) {
+        this.stripePriceId = stripePriceId;
+    }
+
+    public String getSubscriptionStatus() {
+        return subscriptionStatus;
+    }
+
+    public void setSubscriptionStatus(String subscriptionStatus) {
+        this.subscriptionStatus = subscriptionStatus;
+    }
+
+    public Instant getSubscriptionCurrentPeriodEnd() {
+        return subscriptionCurrentPeriodEnd;
+    }
+
+    public void setSubscriptionCurrentPeriodEnd(Instant subscriptionCurrentPeriodEnd) {
+        this.subscriptionCurrentPeriodEnd = subscriptionCurrentPeriodEnd;
     }
 }

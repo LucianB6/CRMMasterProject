@@ -13,6 +13,7 @@ import com.salesway.auth.entity.PasswordResetToken;
 import com.salesway.auth.entity.User;
 import com.salesway.auth.repository.PasswordResetTokenRepository;
 import com.salesway.auth.repository.UserRepository;
+import com.salesway.billing.service.SubscriptionAccessService;
 import com.salesway.common.enums.MembershipRole;
 import com.salesway.common.enums.MembershipStatus;
 import com.salesway.companies.entity.Company;
@@ -75,6 +76,7 @@ public class AuthService {
     private final InvitationRepository invitationRepository;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final EmailService emailService;
+    private final SubscriptionAccessService subscriptionAccessService;
     private final String resetPasswordBaseUrl;
     private final SecureRandom secureRandom = new SecureRandom();
     private final Map<String, PasswordResetRateLimitEntry> passwordResetRateLimitEntries = new ConcurrentHashMap<>();
@@ -92,6 +94,7 @@ public class AuthService {
             InvitationRepository invitationRepository,
             PasswordResetTokenRepository passwordResetTokenRepository,
             EmailService emailService,
+            SubscriptionAccessService subscriptionAccessService,
             @Value("${app.auth.reset-password-base-url:http://localhost:3000/reset-password}") String resetPasswordBaseUrl
     ) {
         this.authenticationManager = authenticationManager;
@@ -106,6 +109,7 @@ public class AuthService {
         this.invitationRepository = invitationRepository;
         this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.emailService = emailService;
+        this.subscriptionAccessService = subscriptionAccessService;
         this.resetPasswordBaseUrl = resetPasswordBaseUrl;
     }
 
@@ -429,6 +433,8 @@ public class AuthService {
         if (!invitation.getInvitedEmail().equalsIgnoreCase(googleEmail.trim())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "google email mismatch");
         }
+
+        subscriptionAccessService.assertSeatAvailableForAcceptance(invitation.getCompany());
 
         CompanyMembership membership = companyMembershipRepository
                 .findByCompanyIdAndUserId(invitation.getCompany().getId(), user.getId())

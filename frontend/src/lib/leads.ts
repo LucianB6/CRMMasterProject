@@ -31,6 +31,8 @@ export type LeadInsightFeedbackStatus =
   | 'NOT_USEFUL'
   | 'COMPLETED';
 
+export type LeadAiStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+
 export type LeadActivityType =
   | 'note'
   | 'call'
@@ -51,6 +53,10 @@ export type ManagerLead = {
   source: LeadSource | string | null;
   isDuplicate: boolean;
   duplicateGroupId: string | null;
+  aiStatus?: LeadAiStatus | string | null;
+  aiScore?: number | null;
+  aiSummary?: string | null;
+  aiError?: string | null;
 };
 
 export type LeadAnswerResponse = {
@@ -118,6 +124,15 @@ export type ManagerLeadDetails = {
   stageId: string | null;
   relatedLeadIds: string[];
   answers: LeadAnswerResponse[];
+  aiStatus?: LeadAiStatus | string | null;
+  aiScore?: number | null;
+  aiSummary?: string | null;
+  aiError?: string | null;
+};
+
+export type LeadScoreEnqueueResponse = {
+  status: string;
+  leadId: string;
 };
 
 export type LeadEventResponse = {
@@ -210,6 +225,9 @@ export type LeadAiExplainability = {
 };
 
 export type LeadAiInsightsResponse = {
+  leadId?: string;
+  status?: LeadAiStatus | string | null;
+  error?: string | null;
   insightId?: string;
   generatedAt?: string | null;
   score?: number | null;
@@ -237,6 +255,11 @@ export type LeadAiInsightsResponse = {
   what_to_avoid?: string[];
   missing_information?: string[];
   scores?: LeadAiScores | null;
+};
+
+export type LeadAiInsightsEnqueueResponse = {
+  status: string;
+  leadId: string;
 };
 
 export type ManagerAgent = {
@@ -571,11 +594,24 @@ export const fetchManagerLeadAiInsights = async (
   );
 };
 
+export const enqueueManagerLeadScore = async (
+  leadId: string,
+  token: string | null
+): Promise<LeadScoreEnqueueResponse> => {
+  return apiFetch<LeadScoreEnqueueResponse>(
+    `/manager/leads/${encodeURIComponent(leadId)}/score`,
+    {
+      method: 'POST',
+      headers: withAuthHeaders(token),
+    }
+  );
+};
+
 export const regenerateManagerLeadAiInsights = async (
   leadId: string,
   token: string | null
-): Promise<LeadAiInsightsResponse> => {
-  return apiFetch<LeadAiInsightsResponse>(
+): Promise<LeadAiInsightsEnqueueResponse> => {
+  return apiFetch<LeadAiInsightsEnqueueResponse>(
     `/manager/leads/${encodeURIComponent(leadId)}/ai-insights/regenerate`,
     {
       method: 'POST',

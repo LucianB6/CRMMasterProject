@@ -2,6 +2,7 @@ package com.salesway.manager.service;
 
 import com.salesway.auth.entity.User;
 import com.salesway.auth.repository.UserRepository;
+import com.salesway.billing.service.SubscriptionAccessService;
 import com.salesway.common.enums.MembershipRole;
 import com.salesway.common.enums.MembershipStatus;
 import com.salesway.manager.dto.ManagerAgentCreateRequest;
@@ -51,6 +52,7 @@ public class ManagerTeamService {
     private final TaskRepository taskRepository;
     private final TeamRepository teamRepository;
     private final PasswordEncoder passwordEncoder;
+    private final SubscriptionAccessService subscriptionAccessService;
 
     public ManagerTeamService(
             ManagerAccessService managerAccessService,
@@ -68,7 +70,8 @@ public class ManagerTeamService {
             TaskProgressRepository taskProgressRepository,
             TaskRepository taskRepository,
             TeamRepository teamRepository,
-            PasswordEncoder passwordEncoder
+            PasswordEncoder passwordEncoder,
+            SubscriptionAccessService subscriptionAccessService
     ) {
         this.managerAccessService = managerAccessService;
         this.userRepository = userRepository;
@@ -86,11 +89,13 @@ public class ManagerTeamService {
         this.taskRepository = taskRepository;
         this.teamRepository = teamRepository;
         this.passwordEncoder = passwordEncoder;
+        this.subscriptionAccessService = subscriptionAccessService;
     }
 
     @Transactional
     public ManagerAgentCreateResponse createAgent(ManagerAgentCreateRequest request) {
         CompanyMembership manager = managerAccessService.getManagerMembership();
+        subscriptionAccessService.assertSeatAvailableForDirectAssignment(manager.getCompany());
         String normalizedEmail = request.getEmail().trim().toLowerCase();
         validatePassword(request.getPassword(), normalizedEmail);
 
