@@ -39,8 +39,16 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/login", "/auth/login/").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/google", "/auth/google/").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/auth/checkout/finalize", "/auth/checkout/finalize/").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/auth/checkout/validate", "/auth/checkout/validate/").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/forgot-password", "/auth/forgot-password/").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/reset-password", "/auth/reset-password/").permitAll()
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/create-checkout-session", "/create-checkout-session/",
+                                "/create-portal-session", "/create-portal-session/",
+                                "/webhook", "/webhook/"
+                        ).permitAll()
                         .requestMatchers(HttpMethod.GET, "/invitations/preview", "/invitations/preview/").permitAll()
                         .requestMatchers("/health").permitAll()
                         .requestMatchers(HttpMethod.GET, "/public/lead-form/**").permitAll()
@@ -83,6 +91,10 @@ public class SecurityConfig {
         configuration.setAllowCredentials(false);
         configuration.setMaxAge(3600L);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        CorsConfiguration billingConfiguration = new CorsConfiguration(configuration);
+        billingConfiguration.setAllowedMethods(List.of("POST", "OPTIONS"));
+        source.registerCorsConfiguration("/create-checkout-session", billingConfiguration);
+        source.registerCorsConfiguration("/create-portal-session", billingConfiguration);
         source.registerCorsConfiguration("/**", configuration);
         return source;
     }

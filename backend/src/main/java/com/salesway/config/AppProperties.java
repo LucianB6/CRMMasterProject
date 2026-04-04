@@ -14,6 +14,8 @@ public class AppProperties {
     private final Prediction prediction = new Prediction();
     private final Cors cors = new Cors();
     private final OpenAi openAi = new OpenAi();
+    @NotBlank
+    private String baseUrl;
 
     public Prediction getPrediction() {
         return prediction;
@@ -25,6 +27,14 @@ public class AppProperties {
 
     public OpenAi getOpenAi() {
         return openAi;
+    }
+
+    public String getBaseUrl() {
+        return baseUrl;
+    }
+
+    public void setBaseUrl(String baseUrl) {
+        this.baseUrl = baseUrl;
     }
 
     public static class Prediction {

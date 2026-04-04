@@ -1,5 +1,6 @@
 package com.salesway.manager.service;
 
+import com.salesway.billing.service.SubscriptionAccessService;
 import com.salesway.common.enums.MembershipRole;
 import com.salesway.companies.entity.Company;
 import com.salesway.email.service.EmailService;
@@ -17,9 +18,11 @@ import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -28,6 +31,7 @@ class ManagerInvitationServiceTest {
 
     private InvitationRepository invitationRepository;
     private EmailService emailService;
+    private SubscriptionAccessService subscriptionAccessService;
     private ManagerInvitationService service;
 
     private Company company;
@@ -36,6 +40,7 @@ class ManagerInvitationServiceTest {
     void setUp() {
         invitationRepository = org.mockito.Mockito.mock(InvitationRepository.class);
         emailService = org.mockito.Mockito.mock(EmailService.class);
+        subscriptionAccessService = org.mockito.Mockito.mock(SubscriptionAccessService.class);
 
         company = new Company();
         company.setId(UUID.randomUUID());
@@ -59,6 +64,7 @@ class ManagerInvitationServiceTest {
 
         service = new ManagerInvitationService(
                 managerAccessService,
+                subscriptionAccessService,
                 invitationRepository,
                 emailService,
                 "http://localhost:3000/invite/accept"
@@ -111,5 +117,17 @@ class ManagerInvitationServiceTest {
         verify(invitationRepository).save(invitationCaptor.capture());
         assertThat(invitationCaptor.getValue().getStatus()).isEqualTo(InvitationStatus.PENDING);
         verify(emailService, times(1)).sendInvitationEmail(any());
+    }
+
+    @Test
+    void createInvite_whenSeatLimitReached_returnsForbidden() {
+        doThrow(new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.FORBIDDEN,
+                "Plan seat limit reached"
+        )).when(subscriptionAccessService).assertSeatAvailableForInvite(company);
+
+        assertThatThrownBy(() -> service.createInvite("full@example.com"))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .hasMessageContaining("Plan seat limit reached");
     }
 }

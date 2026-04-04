@@ -42,4 +42,12 @@ public interface LeadRepository extends JpaRepository<Lead, UUID>, JpaSpecificat
             @Param("userId") UUID userId,
             @Param("since") Instant since
     );
+
+    long countByCompanyId(UUID companyId);
+
+    @Query("""
+            select max(l.lastActivityAt) from Lead l
+            where l.company.id = :companyId
+            """)
+    Instant findMaxLastActivityAtByCompanyId(@Param("companyId") UUID companyId);
 }

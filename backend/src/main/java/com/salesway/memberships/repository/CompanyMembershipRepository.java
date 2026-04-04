@@ -29,6 +29,8 @@ public interface CompanyMembershipRepository extends JpaRepository<CompanyMember
 
     Optional<CompanyMembership> findFirstByUserId(UUID userId);
 
+    List<CompanyMembership> findByUserId(UUID userId);
+
     List<CompanyMembership> findByUserIdAndStatusInOrderByUpdatedAtDescCreatedAtDescIdDesc(
             UUID userId,
             Collection<MembershipStatus> statuses
@@ -73,6 +75,17 @@ public interface CompanyMembershipRepository extends JpaRepository<CompanyMember
     Optional<CompanyMembership> findFirstByRoleAndStatus(MembershipRole role, MembershipStatus status);
 
     boolean existsByCompanyIdAndRoleInAndStatusIn(
+            UUID companyId,
+            Collection<MembershipRole> roles,
+            Collection<MembershipStatus> statuses
+    );
+
+    long countByCompanyIdAndStatusIn(
+            UUID companyId,
+            Collection<MembershipStatus> statuses
+    );
+
+    long countByCompanyIdAndRoleInAndStatusIn(
             UUID companyId,
             Collection<MembershipRole> roles,
             Collection<MembershipStatus> statuses

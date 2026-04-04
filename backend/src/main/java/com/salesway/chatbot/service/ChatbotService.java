@@ -2,6 +2,8 @@ package com.salesway.chatbot.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.salesway.billing.entity.UsageType;
+import com.salesway.billing.service.BillingUsageService;
 import com.salesway.chatbot.client.OpenAiClient;
 import com.salesway.chatbot.dto.ChatRequest;
 import com.salesway.chatbot.dto.ChatResponse;
@@ -51,6 +53,7 @@ public class ChatbotService {
     private final ChatMessageRepository chatMessageRepository;
     private final CompanyMembershipRepository companyMembershipRepository;
     private final ObjectMapper objectMapper;
+    private final BillingUsageService billingUsageService;
 
     public ChatbotService(
             OpenAiClient openAiClient,
@@ -59,7 +62,8 @@ public class ChatbotService {
             ChatConversationRepository chatConversationRepository,
             ChatMessageRepository chatMessageRepository,
             CompanyMembershipRepository companyMembershipRepository,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            BillingUsageService billingUsageService
     ) {
         this.openAiClient = openAiClient;
         this.kbDocumentRepository = kbDocumentRepository;
@@ -68,6 +72,7 @@ public class ChatbotService {
         this.chatMessageRepository = chatMessageRepository;
         this.companyMembershipRepository = companyMembershipRepository;
         this.objectMapper = objectMapper;
+        this.billingUsageService = billingUsageService;
     }
 
     @Transactional
@@ -117,6 +122,7 @@ public class ChatbotService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "message is required");
         }
         CompanyMembership membership = getMembership();
+        billingUsageService.assertUsageAvailable(membership.getCompany(), UsageType.AI_ASSISTANT, 1);
         String context = "";
         boolean useContext = false;
         if (openAiClient.hasHostedVectorStore()) {
@@ -185,6 +191,7 @@ public class ChatbotService {
 
         saveMessage(conversation, ChatRole.USER, request.getMessage(), null);
         saveMessage(conversation, ChatRole.ASSISTANT, answer, null);
+        billingUsageService.consumeUsage(membership.getCompany(), UsageType.AI_ASSISTANT, 1);
 
         return new ChatResponse(answer, conversation.getId());
     }

@@ -1,6 +1,7 @@
 package com.salesway.manager.service;
 
 import com.salesway.common.enums.MembershipRole;
+import com.salesway.billing.service.SubscriptionAccessService;
 import com.salesway.email.dto.InvitationEmailPayload;
 import com.salesway.email.service.EmailService;
 import com.salesway.invitations.entity.Invitation;
@@ -28,6 +29,7 @@ public class ManagerInvitationService {
     private static final long INVITE_TTL_DAYS = 7;
 
     private final ManagerAccessService managerAccessService;
+    private final SubscriptionAccessService subscriptionAccessService;
     private final InvitationRepository invitationRepository;
     private final EmailService emailService;
     private final SecureRandom secureRandom = new SecureRandom();
@@ -35,11 +37,13 @@ public class ManagerInvitationService {
 
     public ManagerInvitationService(
             ManagerAccessService managerAccessService,
+            SubscriptionAccessService subscriptionAccessService,
             InvitationRepository invitationRepository,
             EmailService emailService,
             @Value("${app.auth.invite-base-url:http://localhost:3000/invite/accept}") String inviteBaseUrl
     ) {
         this.managerAccessService = managerAccessService;
+        this.subscriptionAccessService = subscriptionAccessService;
         this.invitationRepository = invitationRepository;
         this.emailService = emailService;
         this.inviteBaseUrl = inviteBaseUrl;
@@ -48,6 +52,7 @@ public class ManagerInvitationService {
     @Transactional
     public ManagerInviteCreateResponse createInvite(String emailRaw) {
         CompanyMembership managerMembership = managerAccessService.getManagerMembership();
+        subscriptionAccessService.assertSeatAvailableForInvite(managerMembership.getCompany());
         String senderEmail = managerMembership.getUser().getEmail();
         String invitedEmail = normalizeEmail(emailRaw);
 
