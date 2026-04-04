@@ -6,6 +6,7 @@ import {
   AlertCircle,
   ArrowRight,
   CheckCircle2,
+  ChevronLeft,
   Loader2,
   Lock,
   Mail
@@ -51,6 +52,7 @@ function LoginPageContent() {
   const router = useRouter();
   const { toast } = useToast();
   const googleButtonRef = React.useRef<HTMLDivElement>(null);
+  const googleButtonWrapperRef = React.useRef<HTMLDivElement>(null);
 
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isGooglePending, setIsGooglePending] = React.useState(false);
@@ -75,6 +77,21 @@ function LoginPageContent() {
 
   const resolveLandingRoute = async (token: string) => {
     try {
+      await apiFetch("/admin/overview", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
+        cache: "no-store"
+      });
+      return { route: "/super-admin", role: "super_admin" };
+    } catch (error) {
+      if (!(error instanceof ApiError) || (error.status !== 401 && error.status !== 403)) {
+        throw error;
+      }
+    }
+
+    try {
       await apiFetch("/manager/overview/agents", {
         method: "GET",
         headers: {
@@ -93,6 +110,20 @@ function LoginPageContent() {
 
   const finishAuth = React.useCallback(async (token: string) => {
     localStorage.setItem("salesway_token", token);
+    try {
+      const me = await apiFetch<{ email?: string | null }>("/auth/me", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
+        cache: "no-store"
+      });
+      if (me.email) {
+        localStorage.setItem("userEmail", me.email);
+      }
+    } catch {
+      localStorage.removeItem("userEmail");
+    }
     const { route, role } = await resolveLandingRoute(token);
     localStorage.setItem("userRole", role);
     router.push(route);
@@ -167,6 +198,8 @@ function LoginPageContent() {
         return;
       }
 
+      const buttonWidth = googleButtonWrapperRef.current?.offsetWidth ?? 320;
+
       window.google.accounts.id.initialize({
         client_id: clientId,
         callback: onGoogleCredential
@@ -178,7 +211,7 @@ function LoginPageContent() {
         shape: "pill",
         size: "large",
         text: "continue_with",
-        width: 320
+        width: buttonWidth
       });
       setIsGoogleReady(true);
     };
@@ -235,7 +268,7 @@ function LoginPageContent() {
   };
 
   const onGoogleClick = () => {
-    if (!isGoogleReady || !googleButtonRef.current) {
+    if (!isGoogleReady) {
       toast({
         title: "Autentificarea cu Google nu este disponibilă",
         description: "Setează NEXT_PUBLIC_GOOGLE_CLIENT_ID și încearcă din nou.",
@@ -243,21 +276,6 @@ function LoginPageContent() {
       });
       return;
     }
-
-    const googleButton = googleButtonRef.current.querySelector(
-      'div[role="button"], iframe[title*="Google"], div[aria-labelledby]'
-    ) as HTMLElement | null;
-
-    if (!googleButton) {
-      toast({
-        title: "Autentificarea cu Google nu este disponibilă",
-        description: "Butonul Google nu a fost inițializat corect. Încearcă din nou.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    googleButton.click();
   };
 
   const inputClass =
@@ -277,12 +295,21 @@ function LoginPageContent() {
     <div className="min-h-dvh w-full bg-gradient-to-br from-[#f0f9ff] via-[#e0f2fe] to-[#bae6fd] p-4 font-sans">
       <div className="mx-auto flex min-h-[calc(100dvh-2rem)] w-full max-w-[480px] items-center justify-center">
         <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-700">
+          <div className="mb-4">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-white/90 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-white"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Back to landing
+            </Link>
+          </div>
           <div className="mb-8 text-center">
             <div className="mb-5 inline-flex items-center rounded-2xl border border-blue-100 bg-white px-0 py-2 shadow-sm">
               <div className="rounded-xl bg-white p-0 shadow-inner">
                 <Image
                   src={iconita}
-                  alt="Iconița SalesWay"
+                  alt="Iconița selfCRM"
                   className="h-12 w-auto"
                   priority
                 />
@@ -295,20 +322,26 @@ function LoginPageContent() {
           <div className="rounded-[32px] border border-white bg-white p-8 shadow-2xl shadow-blue-200/50 md:p-10">
             <div className="space-y-4">
               <div className="flex flex-col items-center justify-center">
-                <div ref={googleButtonRef} className="sr-only" aria-hidden="true" />
-                <button
-                  type="button"
-                  onClick={isGoogleReady ? onGoogleClick : onGoogleUnavailable}
-                  className="flex w-full items-center justify-center gap-3 rounded-xl border border-slate-200 px-4 py-3 font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-50"
-                >
-                  <svg viewBox="0 0 48 48" className="h-5 w-5" aria-hidden="true">
-                    <path fill="#EA4335" d="M24 9.5c3.2 0 6 1.1 8.3 3.2l6.2-6.2C34.7 2.9 29.8 1 24 1 14.8 1 6.9 6.3 3 14l7.6 5.9C12.4 13.6 17.7 9.5 24 9.5z" />
-                    <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-2.8-.4-4.1H24v8h12.7c-.3 2-1.7 5.1-4.9 7.1l7.4 5.7c4.5-4.2 7.3-10.3 7.3-16.7z" />
-                    <path fill="#FBBC05" d="M10.6 28.1c-.5-1.5-.8-3.1-.8-4.8s.3-3.3.8-4.8L3 12.6C1.7 15.1 1 17.9 1 20.8s.7 5.7 2 8.2l7.6-5.9z" />
-                    <path fill="#34A853" d="M24 46c6.5 0 12-2.1 16-5.8l-7.4-5.7c-2 1.4-4.8 2.4-8.6 2.4-6.3 0-11.6-4.1-13.4-9.7L3 33.1C6.9 40.8 14.8 46 24 46z" />
-                  </svg>
-                  Continuă cu Google
-                </button>
+                <div ref={googleButtonWrapperRef} className="relative w-full">
+                  <button
+                    type="button"
+                    onClick={isGoogleReady ? onGoogleClick : onGoogleUnavailable}
+                    className="flex w-full items-center justify-center gap-3 rounded-xl border border-slate-200 px-4 py-3 font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-50"
+                  >
+                    <svg viewBox="0 0 48 48" className="h-5 w-5" aria-hidden="true">
+                      <path fill="#EA4335" d="M24 9.5c3.2 0 6 1.1 8.3 3.2l6.2-6.2C34.7 2.9 29.8 1 24 1 14.8 1 6.9 6.3 3 14l7.6 5.9C12.4 13.6 17.7 9.5 24 9.5z" />
+                      <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-2.8-.4-4.1H24v8h12.7c-.3 2-1.7 5.1-4.9 7.1l7.4 5.7c4.5-4.2 7.3-10.3 7.3-16.7z" />
+                      <path fill="#FBBC05" d="M10.6 28.1c-.5-1.5-.8-3.1-.8-4.8s.3-3.3.8-4.8L3 12.6C1.7 15.1 1 17.9 1 20.8s.7 5.7 2 8.2l7.6-5.9z" />
+                      <path fill="#34A853" d="M24 46c6.5 0 12-2.1 16-5.8l-7.4-5.7c-2 1.4-4.8 2.4-8.6 2.4-6.3 0-11.6-4.1-13.4-9.7L3 33.1C6.9 40.8 14.8 46 24 46z" />
+                    </svg>
+                    Continuă cu Google
+                  </button>
+                  <div
+                    ref={googleButtonRef}
+                    className="absolute inset-0 z-10 overflow-hidden opacity-0"
+                    aria-hidden="true"
+                  />
+                </div>
                 {!isGoogleReady && (
                   <p className="mt-2 text-center text-[10px] font-medium italic text-slate-400">
                     Setează `NEXT_PUBLIC_GOOGLE_CLIENT_ID` pentru a activa autentificarea cu Google.

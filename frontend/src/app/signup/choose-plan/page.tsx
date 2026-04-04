@@ -109,14 +109,25 @@ export default function ChoosePlanPage() {
           </div>
 
           <div className="mt-6 flex flex-col gap-2 sm:flex-row">
-            <Button
-              type="button"
-              className="w-full bg-[#67C6EE] text-white hover:bg-[#67C6EE]/90"
-              onClick={continueToCreateAccount}
-              disabled={!selectedPlanCode}
-            >
-              Continue
-            </Button>
+            {selectedPlanCode === "STARTER" || selectedPlanCode === "PRO" ? (
+              <Button
+                type="button"
+                className="w-full bg-[#67C6EE] text-white hover:bg-[#67C6EE]/90"
+                onClick={() => router.push(`/signup/create-account?plan=${selectedPlanCode}&from=checkout`)}
+                disabled={!selectedPlanCode}
+              >
+                {selectedPlanCode === "STARTER" ? "Alege Starter" : "Alege Growth"}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                className="w-full bg-[#67C6EE] text-white hover:bg-[#67C6EE]/90"
+                onClick={continueToCreateAccount}
+                disabled={!selectedPlanCode}
+              >
+                Continue
+              </Button>
+            )}
             <Button asChild variant="outline" className="w-full">
               <Link href="/login">Back to Login</Link>
             </Button>

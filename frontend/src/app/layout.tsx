@@ -1,11 +1,12 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { GlobalPageViewTracker } from '../components/analytics/global-page-view-tracker';
 import { Toaster } from '../components/ui/toaster';
 import { cn } from '../lib/utils';
 import { AppThemeProvider } from '../components/theme-provider';
 
 export const metadata: Metadata = {
-  title: 'SalesWay',
+  title: 'selfCRM',
   description: 'The workspace for high-performance sales teams.',
 };
 
@@ -35,6 +36,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
+          <GlobalPageViewTracker />
           {children}
           <Toaster />
         </AppThemeProvider>

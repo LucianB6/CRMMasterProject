@@ -2,7 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Copy, Link2, Mail, ShieldCheck, Sparkles, UserPlus } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 
@@ -18,6 +18,7 @@ import {
 import { Input } from '../../../../components/ui/input';
 import { useToast } from '../../../../hooks/use-toast';
 import { apiFetch } from '../../../../lib/api';
+import { getBillingEntitlements, type BillingEntitlementsResponse } from '../../../../lib/billing';
 
 const createInviteSchema = z.object({
   email: z
@@ -52,6 +53,8 @@ export default function CreateAgentPage() {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createdInvite, setCreatedInvite] = useState<ManagerInvitationResponse | null>(null);
+  const [entitlements, setEntitlements] = useState<BillingEntitlementsResponse | null>(null);
+  const [isLoadingEntitlements, setIsLoadingEntitlements] = useState(true);
 
   const form = useForm<CreateInviteValues>({
     resolver: zodResolver(createInviteSchema),
@@ -66,6 +69,37 @@ export default function CreateAgentPage() {
     }
     return window.localStorage.getItem('salesway_token');
   }, []);
+
+  const refreshEntitlements = useCallback(async () => {
+    const token = getAuthToken();
+    if (!token) {
+      setIsLoadingEntitlements(false);
+      return;
+    }
+    try {
+      const data = await getBillingEntitlements(token);
+      setEntitlements(data);
+    } catch {
+      setEntitlements(null);
+    } finally {
+      setIsLoadingEntitlements(false);
+    }
+  }, [getAuthToken]);
+
+  const canInviteUsers = entitlements?.canInviteUsers !== false;
+  const canCreateAgents = entitlements?.canCreateAgents !== false;
+  const seatsLimitReached = !canInviteUsers || !canCreateAgents;
+
+  const seatInfo = {
+    included: entitlements?.includedSeats ?? 0,
+    active: entitlements?.activeSeats ?? 0,
+    pending: entitlements?.pendingInvites ?? 0,
+    available: entitlements?.availableSeats ?? 0,
+  };
+
+  useEffect(() => {
+    void refreshEntitlements();
+  }, [refreshEntitlements]);
 
   const copyToClipboard = useCallback(async (value: string, label: string) => {
     try {
@@ -85,6 +119,15 @@ export default function CreateAgentPage() {
 
   const onSubmit = useCallback(
     async (values: CreateInviteValues) => {
+      if (seatsLimitReached) {
+        toast({
+          title: 'Plan seat limit reached',
+          description: 'Nu poți crea invitații noi până nu eliberezi locuri sau faci upgrade.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
       try {
         setIsSubmitting(true);
         const token = getAuthToken();
@@ -100,25 +143,33 @@ export default function CreateAgentPage() {
         });
 
         setCreatedInvite(data);
+        await refreshEntitlements();
         toast({
           title: 'Invitation created',
           description: `Invite prepared for ${values.email}.`,
         });
         form.reset({ email: values.email });
       } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Unable to create invitation.';
         toast({
           title: 'Error',
-          description:
-            error instanceof Error
-              ? error.message
-              : 'Unable to create invitation.',
+          description: message,
           variant: 'destructive',
         });
+        if (message.toLowerCase().includes('plan seat limit reached')) {
+          setEntitlements((current) => ({
+            ...(current ?? {}),
+            canInviteUsers: false,
+            canCreateAgents: false,
+            availableSeats: 0,
+          }));
+        }
       } finally {
         setIsSubmitting(false);
       }
     },
-    [form, getAuthToken, toast]
+    [form, getAuthToken, refreshEntitlements, seatsLimitReached, toast]
   );
 
   return (
@@ -168,6 +219,16 @@ export default function CreateAgentPage() {
           </div>
 
           <div className="p-6">
+            <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              Seats: {seatInfo.active} active + {seatInfo.pending} pending / {seatInfo.included}{' '}
+              incluse. Disponibile: {seatInfo.available}
+            </div>
+            {seatsLimitReached ? (
+              <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-700">
+                Plan seat limit reached. Nu poți crea invitații noi până nu eliberezi locuri sau
+                faci upgrade.
+              </div>
+            ) : null}
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                 <FormField
@@ -181,6 +242,7 @@ export default function CreateAgentPage() {
                           placeholder="agent@example.com"
                           {...field}
                           type="email"
+                          disabled={isLoadingEntitlements || seatsLimitReached}
                           className="border-slate-200"
                         />
                       </FormControl>
@@ -195,7 +257,7 @@ export default function CreateAgentPage() {
                 <div className="flex justify-end">
                   <Button
                     type="submit"
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || isLoadingEntitlements || seatsLimitReached}
                     className="bg-blue-600 text-white hover:bg-blue-700"
                   >
                     {isSubmitting ? 'Generating...' : 'Generate Invitation'}

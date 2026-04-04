@@ -40,6 +40,8 @@ const passwordSchema = z
 export default function ProfilePage() {
   const { toast } = useToast();
   const [initials, setInitials] = React.useState('??');
+  const [companyName, setCompanyName] = React.useState('Nedisponibil');
+  const [planType, setPlanType] = React.useState('Nedisponibil');
 
   const profileForm = useForm<z.infer<typeof profileSchema>>({
     resolver: zodResolver(profileSchema),
@@ -78,6 +80,10 @@ export default function ProfilePage() {
           firstName?: string | null;
           lastName?: string | null;
           email?: string | null;
+          planCode?: string | null;
+          companyName?: string | null;
+          company_name?: string | null;
+          company?: string | { name?: string | null } | null;
         }>('/auth/me', {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -87,6 +93,13 @@ export default function ProfilePage() {
         const lastName = data.lastName ?? '';
         const email = data.email ?? '';
         profileForm.reset({ firstName, lastName, email });
+        const resolvedCompanyName =
+          data.companyName ??
+          data.company_name ??
+          (typeof data.company === 'string' ? data.company : data.company?.name) ??
+          '';
+        setCompanyName(resolvedCompanyName || 'Nedisponibil');
+        setPlanType(data.planCode?.trim() ? data.planCode : 'Nedisponibil');
 
         const fallbackName = email ? email.split('@')[0] : '';
         const resolvedName = `${firstName} ${lastName}`.trim() || fallbackName;
@@ -120,7 +133,7 @@ export default function ProfilePage() {
     'Profil utilizator';
 
   return (
-    <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-auto bg-slate-50 p-8">
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-x-hidden overflow-y-auto bg-slate-50 p-4 md:p-8">
       <div className="mx-auto flex w-full max-w-[1700px] min-w-0 flex-1 flex-col gap-6">
         <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
           <div>
@@ -131,7 +144,7 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <SummaryCard
             label="Cont activ"
             value={displayName}
@@ -143,9 +156,14 @@ export default function ProfilePage() {
             icon={<Mail className="h-5 w-5 text-emerald-600" />}
           />
           <SummaryCard
-            label="Securitate"
-            value="Parolă protejată"
+            label="Companie"
+            value={companyName}
             icon={<ShieldCheck className="h-5 w-5 text-amber-500" />}
+          />
+          <SummaryCard
+            label="Abonament"
+            value={planType}
+            icon={<ShieldCheck className="h-5 w-5 text-sky-600" />}
           />
         </div>
 
@@ -158,7 +176,7 @@ export default function ProfilePage() {
               </p>
             </div>
 
-            <div className="p-6">
+            <div className="p-4 sm:p-6">
               <Form {...profileForm}>
                 <form
                   onSubmit={profileForm.handleSubmit(onProfileSubmit)}
@@ -216,6 +234,12 @@ export default function ProfilePage() {
                       </FormItem>
                     )}
                   />
+                  <FormItem>
+                    <FormLabel>Companie</FormLabel>
+                    <FormControl>
+                      <Input value={companyName} readOnly disabled className="border-slate-200 bg-slate-50 text-slate-500" />
+                    </FormControl>
+                  </FormItem>
 
                   <div className="flex justify-end">
                     <Button type="submit" className="bg-blue-600 text-white hover:bg-blue-700">
@@ -242,7 +266,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <div className="p-6">
+            <div className="p-4 sm:p-6">
               <Form {...passwordForm}>
                 <form
                   onSubmit={passwordForm.handleSubmit(onPasswordSubmit)}
@@ -313,10 +337,12 @@ function SummaryCard({
 }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-center justify-between gap-3">
-        <div>
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">{label}</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{value}</p>
+          <p className="mt-2 break-words text-base font-bold leading-tight text-slate-900 sm:text-lg md:text-xl">
+            {value}
+          </p>
         </div>
         <div className="rounded-full bg-slate-50 p-3">{icon}</div>
       </div>

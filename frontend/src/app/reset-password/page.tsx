@@ -110,7 +110,7 @@ function ResetPasswordPageContent() {
               Set a new password
             </h1>
             <p className="mt-2 font-medium text-slate-500">
-              Choose a secure password for your SalesWay account.
+              Choose a secure password for your selfCRM account.
             </p>
           </div>
 
