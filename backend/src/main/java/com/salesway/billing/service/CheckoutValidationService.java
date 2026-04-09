@@ -20,10 +20,16 @@ public class CheckoutValidationService {
 
     private final UserRepository userRepository;
     private final StripeCatalogService stripeCatalogService;
+    private final PlanCatalogService planCatalogService;
 
-    public CheckoutValidationService(UserRepository userRepository, StripeCatalogService stripeCatalogService) {
+    public CheckoutValidationService(
+            UserRepository userRepository,
+            StripeCatalogService stripeCatalogService,
+            PlanCatalogService planCatalogService
+    ) {
         this.userRepository = userRepository;
         this.stripeCatalogService = stripeCatalogService;
+        this.planCatalogService = planCatalogService;
     }
 
     public CheckoutValidationResponse validate(CheckoutValidationRequest request) {
@@ -43,6 +49,7 @@ public class CheckoutValidationService {
             fieldErrors.add(fieldError("lookup_key", "lookup_key contains invalid characters"));
         } else {
             try {
+                planCatalogService.resolvePlanCodeForLookupKey(lookupKey);
                 stripeCatalogService.findRecurringPriceByLookupKey(lookupKey);
             } catch (StripeException exception) {
                 log.error("Stripe lookup_key validation failed for {}", lookupKey, exception);
@@ -93,6 +100,7 @@ public class CheckoutValidationService {
         }
 
         if (!fieldErrors.isEmpty()) {
+            log.info("event=validation_failed fields={}", fieldErrors.stream().map(error -> error.get("field")).toList());
             throw new FieldValidationException(HttpStatus.BAD_REQUEST, "Validation failed", fieldErrors);
         }
 

@@ -20,18 +20,21 @@ import static org.mockito.Mockito.when;
 class CheckoutValidationServiceTest {
     private UserRepository userRepository;
     private StripeCatalogService stripeCatalogService;
+    private PlanCatalogService planCatalogService;
     private CheckoutValidationService checkoutValidationService;
 
     @BeforeEach
     void setUp() {
         userRepository = mock(UserRepository.class);
         stripeCatalogService = mock(StripeCatalogService.class);
-        checkoutValidationService = new CheckoutValidationService(userRepository, stripeCatalogService);
+        planCatalogService = mock(PlanCatalogService.class);
+        checkoutValidationService = new CheckoutValidationService(userRepository, stripeCatalogService, planCatalogService);
     }
 
     @Test
     void returnsSuccessForValidData() throws Exception {
         when(userRepository.findByEmailIgnoreCase("test@example.com")).thenReturn(Optional.empty());
+        when(planCatalogService.resolvePlanCodeForLookupKey("starter")).thenReturn("STARTER");
         when(stripeCatalogService.findRecurringPriceByLookupKey("starter")).thenReturn(new Price());
 
         var response = checkoutValidationService.validate(request());
@@ -44,6 +47,7 @@ class CheckoutValidationServiceTest {
     void returnsConflictForExistingEmail() throws Exception {
         User existingUser = new User();
         when(userRepository.findByEmailIgnoreCase("test@example.com")).thenReturn(Optional.of(existingUser));
+        when(planCatalogService.resolvePlanCodeForLookupKey("starter")).thenReturn("STARTER");
         when(stripeCatalogService.findRecurringPriceByLookupKey("starter")).thenReturn(new Price());
 
         assertThatThrownBy(() -> checkoutValidationService.validate(request()))
@@ -59,6 +63,7 @@ class CheckoutValidationServiceTest {
     @Test
     void returnsBadRequestForPasswordMismatch() throws Exception {
         when(userRepository.findByEmailIgnoreCase("test@example.com")).thenReturn(Optional.empty());
+        when(planCatalogService.resolvePlanCodeForLookupKey("starter")).thenReturn("STARTER");
         when(stripeCatalogService.findRecurringPriceByLookupKey("starter")).thenReturn(new Price());
 
         CheckoutValidationRequest request = request();
@@ -90,6 +95,7 @@ class CheckoutValidationServiceTest {
     @Test
     void returnsBadRequestForInvalidLookupKey() throws Exception {
         when(userRepository.findByEmailIgnoreCase("test@example.com")).thenReturn(Optional.empty());
+        when(planCatalogService.resolvePlanCodeForLookupKey("starter")).thenReturn("STARTER");
         when(stripeCatalogService.findRecurringPriceByLookupKey("starter"))
                 .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "No Stripe price found for lookup_key"));
 

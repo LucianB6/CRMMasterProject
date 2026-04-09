@@ -10,11 +10,14 @@ import com.salesway.billing.entity.PendingSignupStatus;
 import com.salesway.billing.entity.ProcessedStripeEvent;
 import com.salesway.billing.repository.PendingSignupRepository;
 import com.salesway.billing.repository.ProcessedStripeEventRepository;
+import com.salesway.common.error.FieldValidationException;
 import com.salesway.common.enums.MembershipRole;
 import com.salesway.common.enums.MembershipStatus;
 import com.salesway.companies.entity.Company;
 import com.salesway.companies.repository.CompanyRepository;
 import com.salesway.config.AppProperties;
+import com.salesway.email.dto.PaymentLinkEmailPayload;
+import com.salesway.email.service.EmailService;
 import com.salesway.manager.service.CompanyAccessService;
 import com.salesway.memberships.entity.CompanyMembership;
 import com.salesway.memberships.repository.CompanyMembershipRepository;
@@ -41,12 +44,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class StripeBillingService {
@@ -55,6 +61,9 @@ public class StripeBillingService {
     private static final String SUBSCRIPTION_CREATED = "customer.subscription.created";
     private static final String SUBSCRIPTION_UPDATED = "customer.subscription.updated";
     private static final String SUBSCRIPTION_DELETED = "customer.subscription.deleted";
+    private static final Duration PAYMENT_LINK_RATE_LIMIT_WINDOW = Duration.ofMinutes(2);
+    private static final EnumSet<PendingSignupStatus> ACTIVE_PENDING_SIGNUP_STATUSES =
+            EnumSet.of(PendingSignupStatus.PENDING, PendingSignupStatus.CHECKOUT_CREATED);
 
     private final CompanyAccessService companyAccessService;
     private final CompanyRepository companyRepository;
@@ -67,6 +76,9 @@ public class StripeBillingService {
     private final JwtService jwtService;
     private final PendingSignupRepository pendingSignupRepository;
     private final ProcessedStripeEventRepository processedStripeEventRepository;
+    private final PlanCatalogService planCatalogService;
+    private final EmailService emailService;
+    private final Map<String, Instant> recentPaymentLinkRequests = new ConcurrentHashMap<>();
 
     public StripeBillingService(
             CompanyAccessService companyAccessService,
@@ -79,7 +91,9 @@ public class StripeBillingService {
             PasswordEncoder passwordEncoder,
             JwtService jwtService,
             PendingSignupRepository pendingSignupRepository,
-            ProcessedStripeEventRepository processedStripeEventRepository
+            ProcessedStripeEventRepository processedStripeEventRepository,
+            PlanCatalogService planCatalogService,
+            EmailService emailService
     ) {
         this.companyAccessService = companyAccessService;
         this.companyRepository = companyRepository;
@@ -92,41 +106,22 @@ public class StripeBillingService {
         this.jwtService = jwtService;
         this.pendingSignupRepository = pendingSignupRepository;
         this.processedStripeEventRepository = processedStripeEventRepository;
+        this.planCatalogService = planCatalogService;
+        this.emailService = emailService;
     }
 
     public URI createCheckoutSession(CreateCheckoutSessionRequest request) {
         String lookupKey = sanitizeLookupKey(request.getLookupKey());
         Optional<CheckoutContext> checkoutContext = resolveCheckoutContext();
         Optional<PendingSignup> pendingSignup = checkoutContext.isEmpty()
-                ? Optional.of(createOrUpdatePendingSignup(request, lookupKey))
+                ? Optional.of(createPendingSignup(request, lookupKey, null))
                 : Optional.empty();
 
         try {
             Price price = stripeCatalogService.findRecurringPriceByLookupKey(lookupKey);
-            com.stripe.param.checkout.SessionCreateParams.Builder sessionParamsBuilder =
-                    com.stripe.param.checkout.SessionCreateParams.builder()
-                            .setMode(com.stripe.param.checkout.SessionCreateParams.Mode.SUBSCRIPTION)
-                            .setBillingAddressCollection(
-                                    com.stripe.param.checkout.SessionCreateParams.BillingAddressCollection.AUTO
-                            )
-                            .setSuccessUrl(successUrl())
-                            .setCancelUrl(cancelUrl())
-                            .putMetadata("lookup_key", lookupKey)
-                            .putMetadata("plan_code", resolvePlanCode(lookupKey))
-                            .addLineItem(
-                                    com.stripe.param.checkout.SessionCreateParams.LineItem.builder()
-                                            .setPrice(price.getId())
-                                            .setQuantity(1L)
-                                            .build()
-                            )
-                            .setSubscriptionData(
-                                    com.stripe.param.checkout.SessionCreateParams.SubscriptionData.builder()
-                                            .putMetadata("lookup_key", lookupKey)
-                                            .putMetadata("plan_code", resolvePlanCode(lookupKey))
-                                            .build()
-                            );
-
-            pendingSignup.map(PendingSignup::getEmail).ifPresent(sessionParamsBuilder::setCustomerEmail);
+            com.stripe.param.checkout.SessionCreateParams.Builder sessionParamsBuilder = pendingSignup
+                    .map(signup -> buildSignupCheckoutSessionParams(lookupKey, signup, price))
+                    .orElseGet(() -> buildBaseCheckoutSessionParams(lookupKey, price));
 
             if (checkoutContext.isPresent()) {
                 CheckoutContext context = checkoutContext.get();
@@ -149,6 +144,7 @@ public class StripeBillingService {
                 PendingSignup signup = pendingSignup.get();
                 sessionParamsBuilder
                         .putMetadata("pending_signup_id", signup.getId().toString())
+                        .putMetadata("email", signup.getEmail())
                         .putMetadata("signup_email", signup.getEmail());
             }
 
@@ -178,6 +174,50 @@ public class StripeBillingService {
             return URI.create(session.getUrl());
         } catch (StripeException exception) {
             log.error("Failed to create Stripe checkout session for lookup_key {}", lookupKey, exception);
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Failed to create Stripe checkout session");
+        }
+    }
+
+    public void sendPaymentLink(CreateCheckoutSessionRequest request, String clientIp) {
+        String lookupKey = sanitizeLookupKey(request.getLookupKey());
+        PendingSignup pendingSignup = createPendingSignup(request, lookupKey, clientIp);
+
+        try {
+            Price price = stripeCatalogService.findRecurringPriceByLookupKey(lookupKey);
+            com.stripe.param.checkout.SessionCreateParams sessionParams =
+                    buildSignupCheckoutSessionParams(lookupKey, pendingSignup, price).build();
+            Session session = Session.create(sessionParams);
+            if (session.getUrl() == null || session.getUrl().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Stripe checkout session did not return a redirect URL");
+            }
+
+            pendingSignup.setStripeCheckoutSessionId(session.getId());
+            pendingSignup.setStatus(PendingSignupStatus.CHECKOUT_CREATED);
+            pendingSignupRepository.save(pendingSignup);
+
+            emailService.sendPaymentLinkEmail(new PaymentLinkEmailPayload(
+                    pendingSignup.getEmail(),
+                    pendingSignup.getFirstName(),
+                    pendingSignup.getCompanyName(),
+                    session.getUrl()
+            ));
+            log.info(
+                    "event=payment_link_sent pending_signup_id={} lookup_key={} email={}",
+                    pendingSignup.getId(),
+                    lookupKey,
+                    pendingSignup.getEmail()
+            );
+        } catch (StripeException exception) {
+            pendingSignup.setStatus(PendingSignupStatus.FAILED);
+            pendingSignup.setFailureReason("Failed to create Stripe checkout session");
+            pendingSignupRepository.save(pendingSignup);
+            log.error(
+                    "event=payment_link_failed pending_signup_id={} lookup_key={} email={}",
+                    pendingSignup.getId(),
+                    lookupKey,
+                    pendingSignup.getEmail(),
+                    exception
+            );
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Failed to create Stripe checkout session");
         }
     }
@@ -219,8 +259,9 @@ public class StripeBillingService {
     @Transactional
     public void handleWebhook(String payload, String stripeSignature) {
         Event event = constructVerifiedEvent(payload, stripeSignature);
+        log.info("event=webhook_received stripe_event_id={} stripe_event_type={}", event.getId(), event.getType());
         if (processedStripeEventRepository.existsByStripeEventId(event.getId())) {
-            log.info("Ignoring already processed Stripe event {}", event.getId());
+            log.info("event=webhook_duplicate stripe_event_id={} stripe_event_type={}", event.getId(), event.getType());
             return;
         }
 
@@ -394,6 +435,53 @@ public class StripeBillingService {
         return customer.getId();
     }
 
+    private com.stripe.param.checkout.SessionCreateParams.Builder buildBaseCheckoutSessionParams(
+            String lookupKey,
+            Price price
+    ) {
+        return com.stripe.param.checkout.SessionCreateParams.builder()
+                .setMode(com.stripe.param.checkout.SessionCreateParams.Mode.SUBSCRIPTION)
+                .setBillingAddressCollection(
+                        com.stripe.param.checkout.SessionCreateParams.BillingAddressCollection.AUTO
+                )
+                .setSuccessUrl(successUrl())
+                .setCancelUrl(cancelUrl())
+                .putMetadata("lookup_key", lookupKey)
+                .putMetadata("plan_code", resolvePlanCode(lookupKey))
+                .addLineItem(
+                        com.stripe.param.checkout.SessionCreateParams.LineItem.builder()
+                                .setPrice(price.getId())
+                                .setQuantity(1L)
+                                .build()
+                )
+                .setSubscriptionData(
+                        com.stripe.param.checkout.SessionCreateParams.SubscriptionData.builder()
+                                .putMetadata("lookup_key", lookupKey)
+                                .putMetadata("plan_code", resolvePlanCode(lookupKey))
+                                .build()
+                );
+    }
+
+    private com.stripe.param.checkout.SessionCreateParams.Builder buildSignupCheckoutSessionParams(
+            String lookupKey,
+            PendingSignup signup,
+            Price price
+    ) {
+        return buildBaseCheckoutSessionParams(lookupKey, price)
+                .setCustomerEmail(signup.getEmail())
+                .putMetadata("pending_signup_id", signup.getId().toString())
+                .putMetadata("email", signup.getEmail())
+                .putMetadata("signup_email", signup.getEmail())
+                .setSubscriptionData(
+                        com.stripe.param.checkout.SessionCreateParams.SubscriptionData.builder()
+                                .putMetadata("pending_signup_id", signup.getId().toString())
+                                .putMetadata("lookup_key", lookupKey)
+                                .putMetadata("plan_code", resolvePlanCode(lookupKey))
+                                .putMetadata("email", signup.getEmail())
+                                .build()
+                );
+    }
+
     private Optional<CheckoutContext> resolveCheckoutContext() {
         try {
             CompanyMembership membership = companyAccessService.getActiveMembership();
@@ -413,8 +501,9 @@ public class StripeBillingService {
         }
     }
 
-    private PendingSignup createOrUpdatePendingSignup(CreateCheckoutSessionRequest request, String lookupKey) {
+    private PendingSignup createPendingSignup(CreateCheckoutSessionRequest request, String lookupKey, String clientIp) {
         String email = normalizeEmail(request.getEmail());
+        enforcePaymentLinkRateLimit(email, clientIp);
         String password = requireText(request.getPassword(), "password is required");
         String retypePassword = requireText(request.getRetypePassword(), "retype_password is required");
         String firstName = requireText(request.getFirstName(), "first_name is required");
@@ -424,7 +513,20 @@ public class StripeBillingService {
         validatePasswordRules(password, retypePassword, email);
 
         if (userRepository.findByEmailIgnoreCase(email).isPresent()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Email already in use");
+            throw new FieldValidationException(
+                    HttpStatus.CONFLICT,
+                    "Validation failed",
+                    List.of(fieldError("email", "Email already in use"))
+            );
+        }
+
+        if (pendingSignupRepository.existsByEmailIgnoreCaseAndStatusIn(email, ACTIVE_PENDING_SIGNUP_STATUSES)) {
+            log.info("event=validation_failed reason=active_pending_signup email={}", email);
+            throw new FieldValidationException(
+                    HttpStatus.CONFLICT,
+                    "Validation failed",
+                    List.of(fieldError("email", "A payment link was already sent for this email"))
+            );
         }
 
         PendingSignup pendingSignup = new PendingSignup();
@@ -436,7 +538,20 @@ public class StripeBillingService {
         pendingSignup.setPlanCode(resolvePlanCode(lookupKey));
         pendingSignup.setLookupKey(lookupKey);
         pendingSignup.setStatus(PendingSignupStatus.PENDING);
+        log.info("event=pending_signup_created lookup_key={} email={}", lookupKey, email);
         return pendingSignupRepository.save(pendingSignup);
+    }
+
+    private void enforcePaymentLinkRateLimit(String email, String clientIp) {
+        String key = email + "|" + (clientIp == null || clientIp.isBlank() ? "unknown" : clientIp.trim());
+        Instant now = Instant.now();
+        Instant previous = recentPaymentLinkRequests.get(key);
+        if (previous != null && previous.plus(PAYMENT_LINK_RATE_LIMIT_WINDOW).isAfter(now)) {
+            log.info("event=validation_failed reason=payment_link_rate_limited email={} ip={}", email, clientIp);
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Please wait before requesting another payment link");
+        }
+        recentPaymentLinkRequests.put(key, now);
+        recentPaymentLinkRequests.entrySet().removeIf(entry -> entry.getValue().plus(PAYMENT_LINK_RATE_LIMIT_WINDOW).isBefore(now));
     }
 
     private void synchronizePendingSignupFromCheckoutSession(Session session) {
@@ -452,6 +567,10 @@ public class StripeBillingService {
 
             if (userRepository.findByEmailIgnoreCase(pendingSignup.getEmail()).isPresent()) {
                 markPendingSignupFailed(pendingSignup, "Email already in use");
+                log.warn(
+                        "event=finalize_failed pending_signup_id={} reason=email_already_in_use",
+                        pendingSignup.getId()
+                );
                 return;
             }
 
@@ -486,9 +605,22 @@ public class StripeBillingService {
             pendingSignup.setCompletedAt(Instant.now());
             pendingSignup.setFailureReason(null);
             pendingSignupRepository.save(pendingSignup);
+            log.info(
+                    "event=signup_finalized pending_signup_id={} user_id={} company_id={} stripe_customer_id={} stripe_subscription_id={}",
+                    pendingSignup.getId(),
+                    user.getId(),
+                    company.getId(),
+                    session.getCustomer(),
+                    session.getSubscription()
+            );
         } catch (RuntimeException exception) {
-            markPendingSignupFailed(pendingSignup, "Failed to finalize paid signup");
-            log.error("Failed to finalize pending signup {} from Stripe session {}", pendingSignup.getId(), session.getId(), exception);
+            log.error(
+                    "event=finalize_failed pending_signup_id={} stripe_checkout_session_id={} reason=exception",
+                    pendingSignup.getId(),
+                    session.getId(),
+                    exception
+            );
+            throw exception;
         }
     }
 
@@ -619,7 +751,15 @@ public class StripeBillingService {
         if (lookupKey == null || lookupKey.isBlank()) {
             return "STARTER";
         }
-        return lookupKey.trim().toUpperCase().replace('-', '_');
+        String normalized = lookupKey.trim().toUpperCase();
+        if (normalized.equals("STARTER") || normalized.equals("PRO") || normalized.equals("ENTERPRISE")) {
+            return normalized;
+        }
+        return planCatalogService.resolvePlanCodeForLookupKey(lookupKey);
+    }
+
+    private Map<String, String> fieldError(String field, String message) {
+        return Map.of("field", field, "message", message);
     }
 
     private String successUrl() {

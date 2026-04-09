@@ -13,6 +13,7 @@ import com.salesway.auth.dto.UpdateProfileRequest;
 import com.salesway.auth.service.AuthService;
 import com.salesway.billing.dto.CheckoutValidationRequest;
 import com.salesway.billing.dto.CheckoutValidationResponse;
+import com.salesway.billing.dto.CreateCheckoutSessionRequest;
 import com.salesway.billing.dto.FinalizeCheckoutSignupRequest;
 import com.salesway.billing.service.CheckoutValidationService;
 import com.salesway.billing.service.StripeBillingService;
@@ -94,6 +95,40 @@ public class AuthController {
             @Valid @RequestBody FinalizeCheckoutSignupRequest request
     ) {
         return ResponseEntity.ok(stripeBillingService.finalizeCheckoutSignup(request.getSessionId()));
+    }
+
+    @PostMapping({"/checkout/send-payment-link", "/checkout/send-payment-link/"})
+    public ResponseEntity<CheckoutValidationResponse> sendPaymentLink(
+            @RequestParam(name = "lookup_key", required = false) String lookupKey,
+            @RequestParam(name = "email", required = false) String email,
+            @RequestParam(name = "password", required = false) String password,
+            @RequestParam(name = "retype_password", required = false) String retypePassword,
+            @RequestParam(name = "first_name", required = false) String firstName,
+            @RequestParam(name = "last_name", required = false) String lastName,
+            @RequestParam(name = "company_name", required = false) String companyName,
+            HttpServletRequest httpServletRequest
+    ) {
+        CheckoutValidationRequest validationRequest = new CheckoutValidationRequest();
+        validationRequest.setLookupKey(lookupKey);
+        validationRequest.setEmail(email);
+        validationRequest.setPassword(password);
+        validationRequest.setRetypePassword(retypePassword);
+        validationRequest.setFirstName(firstName);
+        validationRequest.setLastName(lastName);
+        validationRequest.setCompanyName(companyName);
+        checkoutValidationService.validate(validationRequest);
+
+        CreateCheckoutSessionRequest request = new CreateCheckoutSessionRequest();
+        request.setLookupKey(lookupKey);
+        request.setEmail(email);
+        request.setPassword(password);
+        request.setRetypePassword(retypePassword);
+        request.setFirstName(firstName);
+        request.setLastName(lastName);
+        request.setCompanyName(companyName);
+        stripeBillingService.sendPaymentLink(request, resolveClientIp(httpServletRequest));
+
+        return ResponseEntity.accepted().body(new CheckoutValidationResponse("Payment link sent", java.util.List.of()));
     }
 
     @PostMapping("/forgot-password")
