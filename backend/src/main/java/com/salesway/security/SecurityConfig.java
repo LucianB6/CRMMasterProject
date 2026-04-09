@@ -40,6 +40,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/auth/login", "/auth/login/").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/google", "/auth/google/").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/checkout/finalize", "/auth/checkout/finalize/").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/auth/checkout/send-payment-link", "/auth/checkout/send-payment-link/").permitAll()
                         .requestMatchers(HttpMethod.GET, "/auth/checkout/validate", "/auth/checkout/validate/").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/forgot-password", "/auth/forgot-password/").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/reset-password", "/auth/reset-password/").permitAll()

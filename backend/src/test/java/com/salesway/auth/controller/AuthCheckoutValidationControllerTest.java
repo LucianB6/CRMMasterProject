@@ -18,20 +18,24 @@ import java.util.List;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class AuthCheckoutValidationControllerTest {
     private CheckoutValidationService checkoutValidationService;
+    private StripeBillingService stripeBillingService;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         checkoutValidationService = Mockito.mock(CheckoutValidationService.class);
         AuthService authService = Mockito.mock(AuthService.class);
-        StripeBillingService stripeBillingService = Mockito.mock(StripeBillingService.class);
+        stripeBillingService = Mockito.mock(StripeBillingService.class);
         CompanyAccessService companyAccessService = Mockito.mock(CompanyAccessService.class);
 
         mockMvc = MockMvcBuilders.standaloneSetup(
@@ -72,5 +76,26 @@ class AuthCheckoutValidationControllerTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("Validation failed"))
                 .andExpect(jsonPath("$.fieldErrors[0].field").value("email"));
+    }
+
+    @Test
+    void sendPaymentLinkReturnsAcceptedJson() throws Exception {
+        when(checkoutValidationService.validate(any()))
+                .thenReturn(new CheckoutValidationResponse("Validation passed", List.of()));
+
+        mockMvc.perform(post("/auth/checkout/send-payment-link")
+                        .param("lookup_key", "starter_monthly")
+                        .param("email", "test@example.com")
+                        .param("password", "Password123")
+                        .param("retype_password", "Password123")
+                        .param("first_name", "John")
+                        .param("last_name", "Doe")
+                        .param("company_name", "Acme"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.message").value("Payment link sent"))
+                .andExpect(jsonPath("$.fieldErrors").isArray());
+
+        verify(checkoutValidationService).validate(any());
+        verify(stripeBillingService).sendPaymentLink(any(), eq("127.0.0.1"));
     }
 }

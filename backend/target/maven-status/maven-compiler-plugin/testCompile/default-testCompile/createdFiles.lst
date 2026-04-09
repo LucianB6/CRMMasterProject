@@ -4,6 +4,7 @@ com/salesway/auth/service/AuthServiceGoogleInviteTest$4.class
 com/salesway/auth/service/AuthServiceGoogleInviteTest$2.class
 com/salesway/tasks/service/TaskBoardServiceTest.class
 com/salesway/leads/service/LeadDetailsServiceTest.class
+com/salesway/billing/service/StripeBillingServiceTest.class
 com/salesway/auth/service/AuthServiceGoogleInviteTest$5.class
 com/salesway/leads/service/PipelineStageServiceTest.class
 com/salesway/auth/service/AuthServiceGoogleInviteTest$3.class

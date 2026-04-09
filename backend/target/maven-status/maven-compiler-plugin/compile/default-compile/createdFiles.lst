@@ -37,6 +37,7 @@ com/salesway/analytics/dto/PageViewTrackResponse.class
 com/salesway/manager/dto/ManagerInviteCreateResponse.class
 com/salesway/analytics/repository/PageViewEventRepository.class
 com/salesway/leads/service/PipelineStageService.class
+com/salesway/email/dto/PaymentLinkEmailPayload.class
 com/salesway/leads/dto/LeadStatusUpdateRequest.class
 com/salesway/ml/dto/PredictResponse$PredictionItem.class
 com/salesway/billing/dto/CheckoutValidationResponse.class

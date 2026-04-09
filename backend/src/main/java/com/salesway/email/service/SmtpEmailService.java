@@ -1,6 +1,7 @@
 package com.salesway.email.service;
 
 import com.salesway.email.dto.InvitationEmailPayload;
+import com.salesway.email.dto.PaymentLinkEmailPayload;
 import com.salesway.email.dto.PasswordResetEmailPayload;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,19 +22,22 @@ public class SmtpEmailService implements EmailService {
     private final boolean logOnly;
     private final String invitationSubject;
     private final String passwordResetSubject;
+    private final String paymentLinkSubject;
 
     public SmtpEmailService(
             ObjectProvider<JavaMailSender> mailSenderProvider,
             @Value("${app.email.enabled:false}") boolean emailEnabled,
             @Value("${app.email.log-only:true}") boolean logOnly,
             @Value("${app.email.invitation-subject:Invitation to join your company workspace}") String invitationSubject,
-            @Value("${app.email.password-reset-subject:Reset your password}") String passwordResetSubject
+            @Value("${app.email.password-reset-subject:Reset your password}") String passwordResetSubject,
+            @Value("${app.email.payment-link-subject:Complete your selfCRM subscription}") String paymentLinkSubject
     ) {
         this.mailSender = mailSenderProvider.getIfAvailable();
         this.emailEnabled = emailEnabled;
         this.logOnly = logOnly;
         this.invitationSubject = invitationSubject;
         this.passwordResetSubject = passwordResetSubject;
+        this.paymentLinkSubject = paymentLinkSubject;
     }
 
     @Override
@@ -96,6 +100,32 @@ public class SmtpEmailService implements EmailService {
         }
     }
 
+    @Override
+    public void sendPaymentLinkEmail(PaymentLinkEmailPayload payload) {
+        String body = buildPaymentLinkBody(payload);
+
+        if (!emailEnabled || logOnly || mailSender == null) {
+            LOG.info(
+                    "Payment link email fallback(log-only): to={}, company={}, link={}",
+                    payload.toEmail(),
+                    payload.companyName(),
+                    payload.checkoutUrl()
+            );
+            return;
+        }
+
+        try {
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setTo(payload.toEmail());
+            message.setSubject(paymentLinkSubject);
+            message.setText(body);
+            mailSender.send(message);
+            LOG.info("Payment link email sent successfully to {}", payload.toEmail());
+        } catch (MailException ex) {
+            LOG.error("Failed to send payment link email to {}", payload.toEmail(), ex);
+        }
+    }
+
     private String buildBody(InvitationEmailPayload payload) {
         return "You were invited to join " + payload.companyName() + " as AGENT.\n"
                 + "Invitation expires at: " + payload.expiresAt() + "\n"
@@ -107,5 +137,14 @@ public class SmtpEmailService implements EmailService {
                 + "This link expires at: " + payload.expiresAt() + "\n"
                 + "Reset password: " + payload.resetLink() + "\n"
                 + "If you did not request this change, you can ignore this email.\n";
+    }
+
+    private String buildPaymentLinkBody(PaymentLinkEmailPayload payload) {
+        String greetingName = StringUtils.hasText(payload.firstName()) ? payload.firstName().trim() : "there";
+        return "Hi " + greetingName + ",\n"
+                + "Complete your selfCRM subscription for " + payload.companyName() + " using this secure Stripe link:\n"
+                + payload.checkoutUrl() + "\n"
+                + "Your account will be activated automatically after the payment is confirmed.\n"
+                + "If you did not request this, you can ignore this email.\n";
     }
 }
