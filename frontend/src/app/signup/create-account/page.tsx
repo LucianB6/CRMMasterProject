@@ -15,7 +15,7 @@ import {
   writeOnboardingState
 } from "../../../lib/onboarding-state";
 import {
-  startStarterSignupStripeCheckoutLegacyPost,
+  sendStarterSignupCheckoutPaymentLink,
   validateStarterSignupCheckout
 } from "../../../lib/stripe-checkout";
 import { Button } from "../../../components/ui/button";
@@ -40,6 +40,33 @@ import { useToast } from "../../../hooks/use-toast";
 const GOOGLE_SCRIPT_ID = "google-identity-service";
 const INTERNAL_SIGNUP_DRAFT_KEY = "salesway_internal_signup_draft";
 const GOOGLE_ID_TOKEN_KEY = "salesway_google_id_token";
+
+const parseGoogleIdTokenProfile = (idToken: string) => {
+  try {
+    const parts = idToken.split(".");
+    if (parts.length < 2) return null;
+    const payload = parts[1]
+      .replace(/-/g, "+")
+      .replace(/_/g, "/")
+      .padEnd(Math.ceil(parts[1].length / 4) * 4, "=");
+    const json = JSON.parse(atob(payload)) as {
+      given_name?: string;
+      family_name?: string;
+      email?: string;
+      name?: string;
+    };
+    const given = json.given_name?.trim() ?? "";
+    const family = json.family_name?.trim() ?? "";
+    const fullName = json.name?.trim() ?? "";
+    const [firstFromName, ...rest] = fullName ? fullName.split(/\s+/) : [];
+    const firstName = given || firstFromName || "";
+    const lastName = family || rest.join(" ") || "";
+    const email = json.email?.trim() ?? "";
+    return { firstName, lastName, email };
+  } catch {
+    return null;
+  }
+};
 
 const internalSignupSchema = z
   .object({
@@ -75,6 +102,7 @@ function CreateAccountContent() {
   const [isGooglePending, setIsGooglePending] = React.useState(false);
   const [isGoogleReady, setIsGoogleReady] = React.useState(false);
   const [isSubmittingInternal, setIsSubmittingInternal] = React.useState(false);
+  const [paymentEmailSentTo, setPaymentEmailSentTo] = React.useState<string | null>(null);
 
   const form = useForm<InternalSignupValues>({
     resolver: zodResolver(internalSignupSchema),
@@ -87,6 +115,15 @@ function CreateAccountContent() {
       confirmPassword: ""
     }
   });
+
+  const selectedPlanMeta =
+    selectedPlanCode === "STARTER"
+      ? { label: "Starter", accent: "€19/mo" }
+      : selectedPlanCode === "PRO"
+        ? { label: "Growth", accent: "€49/mo" }
+        : selectedPlanCode === "ENTERPRISE"
+          ? { label: "Enterprise", accent: "Custom" }
+          : { label: "-", accent: "" };
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -131,23 +168,16 @@ function CreateAccountContent() {
         }
 
         sessionStorage.setItem(GOOGLE_ID_TOKEN_KEY, idToken);
+
+        const profile = parseGoogleIdTokenProfile(idToken);
         writeOnboardingState({
           selectedPlanCode,
-          signupMethod: "google"
+          signupMethod: "google",
+          firstName: profile?.firstName || undefined,
+          lastName: profile?.lastName || undefined
         });
 
-        const params = new URLSearchParams(window.location.search);
-        const from = params.get("from");
-
-        if (from === "checkout") {
-          toast({
-            title: "Google signup is unavailable for checkout",
-            description: "Use email signup to continue with Stripe checkout.",
-            variant: "destructive"
-          });
-        } else {
-          router.push(`/signup/google-onboarding-company?plan=${selectedPlanCode}`);
-        }
+        router.push(`/signup/google-onboarding-company?plan=${selectedPlanCode}`);
       } catch (error) {
         const mapped = mapInternalAuthError(error, "Google authentication failed.");
         toast({
@@ -255,7 +285,16 @@ function CreateAccountContent() {
           companyName
         };
 
-        const applyCheckoutErrors = (result: Awaited<ReturnType<typeof validateStarterSignupCheckout>>) => {
+        type CheckoutErrorResult = Extract<
+          Awaited<ReturnType<typeof validateStarterSignupCheckout>>,
+          { ok: false }
+        >;
+        type CheckoutActionResult = Awaited<ReturnType<typeof validateStarterSignupCheckout>>;
+        const isCheckoutErrorResult = (
+          result: CheckoutActionResult
+        ): result is CheckoutErrorResult => result.ok === false;
+
+        const applyCheckoutErrors = (result: CheckoutErrorResult) => {
           let mappedFieldErrors = 0;
 
           result.fieldErrors?.forEach((fieldError) => {
@@ -306,20 +345,46 @@ function CreateAccountContent() {
         };
 
         const validateResult = await validateStarterSignupCheckout(payload);
-        if (!validateResult.ok) {
+        if (isCheckoutErrorResult(validateResult)) {
           applyCheckoutErrors(validateResult);
           return;
         }
 
-        const checkoutResult = startStarterSignupStripeCheckoutLegacyPost(payload);
-        if (!checkoutResult.ok) {
-          toast({
-            title: "Checkout unavailable",
-            description: checkoutResult.message,
-            variant: "destructive"
+        const emailLinkResult = await sendStarterSignupCheckoutPaymentLink(payload);
+        if (isCheckoutErrorResult(emailLinkResult)) {
+          let mappedFieldErrors = 0;
+          emailLinkResult.fieldErrors?.forEach((fieldError) => {
+            if (fieldError.field === "email") {
+              form.setError("email", { message: fieldError.message });
+              mappedFieldErrors += 1;
+              return;
+            }
+            if (fieldError.field === "company_name") {
+              form.setError("companyName", { message: fieldError.message });
+              mappedFieldErrors += 1;
+              return;
+            }
+            if (fieldError.field === "password") {
+              form.setError("password", { message: fieldError.message });
+              mappedFieldErrors += 1;
+              return;
+            }
+            if (fieldError.field === "retype_password") {
+              form.setError("confirmPassword", { message: fieldError.message });
+              mappedFieldErrors += 1;
+            }
           });
+
+          if (mappedFieldErrors === 0) {
+            form.setError("root.server", {
+              message: emailLinkResult.message || "Checkout email could not be sent."
+            });
+          }
           return;
         }
+
+        setPaymentEmailSentTo(values.email.trim());
+        return;
       } else {
         router.push(`/signup/google-onboarding-company?plan=${selectedPlanCode}`);
       }
@@ -329,21 +394,27 @@ function CreateAccountContent() {
   };
 
   return (
-    <div className="flex min-h-screen w-full items-center justify-center bg-[#67C6EE] px-4 py-6 font-body">
-      <Card className="w-full max-w-md">
-        <CardHeader className="items-center text-center">
-          <Logo className="mb-4 text-[#67C6EE]" />
-          <CardTitle className="text-2xl text-[#67C6EE]">Create Account</CardTitle>
-          <CardDescription>
+    <div className="flex min-h-screen w-full items-center justify-center bg-[#67C6EE] px-4 py-3 font-body sm:px-6">
+      <Card className="w-full max-w-3xl border-sky-200/70 shadow-2xl shadow-sky-300/50">
+        <CardHeader className="items-center pb-2 text-center sm:pb-3">
+          <Logo className="mb-2 text-[#67C6EE]" />
+          <CardTitle className="text-2xl font-extrabold text-[#67C6EE] sm:text-3xl">
+            Create Account
+          </CardTitle>
+          <CardDescription className="max-w-2xl text-sm sm:text-base">
             Step 2 of 2: create your account using email/password or Google.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <p className="mb-4 text-center text-sm text-muted-foreground">
-            Selected plan: <span className="font-semibold">{selectedPlanCode ?? "-"}</span>
-          </p>
+        <CardContent className="space-y-4 pb-5 sm:px-7">
+          <div className="rounded-xl border border-sky-200 bg-sky-50/70 px-4 py-2 text-center">
+            <p className="text-xs text-slate-600 sm:text-sm">Selected plan</p>
+            <p className="mt-0.5 text-lg font-bold text-sky-800 sm:text-xl">{selectedPlanMeta.label}</p>
+            {selectedPlanMeta.accent ? (
+              <p className="text-xs font-semibold text-[#67C6EE] sm:text-sm">{selectedPlanMeta.accent}</p>
+            ) : null}
+          </div>
 
-          <div className="mb-4 flex flex-col items-center gap-2">
+          <div className="flex flex-col items-center gap-1.5 rounded-xl border border-slate-200 bg-white/80 px-3 py-2.5">
             <div ref={googleButtonRef} className="min-h-10" />
             {!isGoogleReady && (
               <p className="text-center text-xs text-muted-foreground">
@@ -357,145 +428,184 @@ function CreateAccountContent() {
             )}
           </div>
 
-          <div className="my-4 text-center text-xs uppercase tracking-wide text-muted-foreground">
-            or continue with email
-          </div>
-
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmitInternal)} className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="firstName"
-                  render={({ field, fieldState }) => (
-                    <FormItem>
-                      <FormLabel>First Name</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="John"
-                          {...field}
-                          className={fieldState.error ? "border-destructive focus-visible:ring-destructive" : undefined}
-                        />
-                      </FormControl>
-                      <FormMessage aria-live="polite" />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="lastName"
-                  render={({ field, fieldState }) => (
-                    <FormItem>
-                      <FormLabel>Last Name</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="Doe"
-                          {...field}
-                          className={fieldState.error ? "border-destructive focus-visible:ring-destructive" : undefined}
-                        />
-                      </FormControl>
-                      <FormMessage aria-live="polite" />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field, fieldState }) => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="john.doe@example.com"
-                        {...field}
-                        type="email"
-                        className={fieldState.error ? "border-destructive focus-visible:ring-destructive" : undefined}
-                      />
-                    </FormControl>
-                    <FormMessage aria-live="polite" />
-                  </FormItem>
-                )}
-              />
-              {isCheckoutFlow && (
-                <FormField
-                  control={form.control}
-                  name="companyName"
-                  render={({ field, fieldState }) => (
-                    <FormItem>
-                      <FormLabel>Company Name</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="Acme Solutions"
-                          {...field}
-                          className={fieldState.error ? "border-destructive focus-visible:ring-destructive" : undefined}
-                        />
-                      </FormControl>
-                      <FormMessage aria-live="polite" />
-                    </FormItem>
-                  )}
-                />
-              )}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="password"
-                  render={({ field, fieldState }) => (
-                    <FormItem>
-                      <FormLabel>Password</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="••••••••"
-                          {...field}
-                          type="password"
-                          className={fieldState.error ? "border-destructive focus-visible:ring-destructive" : undefined}
-                        />
-                      </FormControl>
-                      <FormMessage aria-live="polite" />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="confirmPassword"
-                  render={({ field, fieldState }) => (
-                    <FormItem>
-                      <FormLabel>Confirm Password</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="••••••••"
-                          {...field}
-                          type="password"
-                          className={fieldState.error ? "border-destructive focus-visible:ring-destructive" : undefined}
-                        />
-                      </FormControl>
-                      <FormMessage aria-live="polite" />
-                    </FormItem>
-                  )}
-                />
+          {paymentEmailSentTo ? (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-center">
+              <p className="text-base font-semibold text-emerald-800">Email trimis cu succes</p>
+              <p className="mt-2 text-sm text-emerald-700">
+                Am trimis linkul de plată către <span className="font-semibold">{paymentEmailSentTo}</span>.
+                Deschide email-ul și finalizează plata pentru activarea contului.
+              </p>
+              <p className="mt-2 text-xs text-emerald-700/90">
+                După plata Stripe, contul va fi validat automat.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="text-center text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                or continue with email
               </div>
 
-              {form.formState.errors.root?.server?.message ? (
-                <p className="text-sm font-medium text-destructive" aria-live="polite">
-                  {form.formState.errors.root.server.message}
-                </p>
-              ) : null}
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmitInternal)} className="space-y-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <FormField
+                      control={form.control}
+                      name="firstName"
+                      render={({ field, fieldState }) => (
+                        <FormItem>
+                          <FormLabel>First Name</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="John"
+                              {...field}
+                              className={
+                                fieldState.error
+                                  ? "border-destructive focus-visible:ring-destructive"
+                                  : "border-slate-300/80"
+                              }
+                            />
+                          </FormControl>
+                          <FormMessage aria-live="polite" />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="lastName"
+                      render={({ field, fieldState }) => (
+                        <FormItem>
+                          <FormLabel>Last Name</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="Doe"
+                              {...field}
+                              className={
+                                fieldState.error
+                                  ? "border-destructive focus-visible:ring-destructive"
+                                  : "border-slate-300/80"
+                              }
+                            />
+                          </FormControl>
+                          <FormMessage aria-live="polite" />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field, fieldState }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="john.doe@example.com"
+                            {...field}
+                            type="email"
+                            className={
+                              fieldState.error
+                                ? "border-destructive focus-visible:ring-destructive"
+                                : "border-slate-300/80"
+                            }
+                          />
+                        </FormControl>
+                        <FormMessage aria-live="polite" />
+                      </FormItem>
+                    )}
+                  />
+                  {isCheckoutFlow && (
+                    <FormField
+                      control={form.control}
+                      name="companyName"
+                      render={({ field, fieldState }) => (
+                        <FormItem>
+                          <FormLabel>Company Name</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="Acme Solutions"
+                              {...field}
+                              className={
+                                fieldState.error
+                                  ? "border-destructive focus-visible:ring-destructive"
+                                  : "border-slate-300/80"
+                              }
+                            />
+                          </FormControl>
+                          <FormMessage aria-live="polite" />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <FormField
+                      control={form.control}
+                      name="password"
+                      render={({ field, fieldState }) => (
+                        <FormItem>
+                          <FormLabel>Password</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="••••••••"
+                              {...field}
+                              type="password"
+                              className={
+                                fieldState.error
+                                  ? "border-destructive focus-visible:ring-destructive"
+                                  : "border-slate-300/80"
+                              }
+                            />
+                          </FormControl>
+                          <FormMessage aria-live="polite" />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="confirmPassword"
+                      render={({ field, fieldState }) => (
+                        <FormItem>
+                          <FormLabel>Confirm Password</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="••••••••"
+                              {...field}
+                              type="password"
+                              className={
+                                fieldState.error
+                                  ? "border-destructive focus-visible:ring-destructive"
+                                  : "border-slate-300/80"
+                              }
+                            />
+                          </FormControl>
+                          <FormMessage aria-live="polite" />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
 
-              <Button
-                type="submit"
-                className="w-full bg-[#67C6EE] text-white hover:bg-[#67C6EE]/90"
-                disabled={isSubmittingInternal}
-              >
-                {isSubmittingInternal
-                  ? "Continuing..."
-                  : isCheckoutFlow
-                    ? "Continue to Payment"
-                    : "Continue"}
-              </Button>
-            </form>
-          </Form>
+                  {form.formState.errors.root?.server?.message ? (
+                    <p className="text-sm font-medium text-destructive" aria-live="polite">
+                      {form.formState.errors.root.server.message}
+                    </p>
+                  ) : null}
 
-          <Button asChild variant="outline" className="mt-4 w-full">
+                  <Button
+                    type="submit"
+                    className="h-11 w-full bg-[#67C6EE] text-base font-semibold text-white hover:bg-[#67C6EE]/90"
+                    disabled={isSubmittingInternal}
+                  >
+                    {isSubmittingInternal
+                      ? "Continuing..."
+                      : isCheckoutFlow
+                        ? "Send payment link by email"
+                        : "Continue"}
+                  </Button>
+                </form>
+              </Form>
+            </>
+          )}
+
+          <Button asChild variant="outline" className="h-11 w-full border-slate-300 text-base">
             <Link href="/#pricing">Back to Plan Selection</Link>
           </Button>
         </CardContent>

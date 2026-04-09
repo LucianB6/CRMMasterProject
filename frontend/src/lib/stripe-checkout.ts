@@ -22,6 +22,9 @@ const STRIPE_PORTAL_ENDPOINT = normalizeEnv(process.env.NEXT_PUBLIC_STRIPE_PORTA
 const STRIPE_SIGNUP_VALIDATE_ENDPOINT = normalizeEnv(
   process.env.NEXT_PUBLIC_STRIPE_SIGNUP_VALIDATE_ENDPOINT
 );
+const STRIPE_CHECKOUT_EMAIL_LINK_ENDPOINT = normalizeEnv(
+  process.env.NEXT_PUBLIC_STRIPE_CHECKOUT_EMAIL_LINK_ENDPOINT
+);
 const STRIPE_STARTER_LOOKUP_KEY = normalizeEnv(
   process.env.NEXT_PUBLIC_STRIPE_STARTER_LOOKUP_KEY
 );
@@ -379,6 +382,91 @@ export const startStarterSignupStripeCheckoutLegacyPost = (
   });
 
   return { ok: true };
+};
+
+export const sendStarterSignupCheckoutPaymentLink = (
+  input: StarterSignupCheckoutInput
+): Promise<StripeActionResult> => {
+  if (!isBrowser()) {
+    return Promise.resolve({
+      ok: false,
+      message: "Checkout email flow is available only in browser context."
+    });
+  }
+
+  if (!STRIPE_CHECKOUT_EMAIL_LINK_ENDPOINT) {
+    return Promise.resolve({
+      ok: false,
+      message: "Set NEXT_PUBLIC_STRIPE_CHECKOUT_EMAIL_LINK_ENDPOINT and try again."
+    });
+  }
+
+  if (!isEndpointLike(STRIPE_CHECKOUT_EMAIL_LINK_ENDPOINT)) {
+    return Promise.resolve({
+      ok: false,
+      message:
+        "NEXT_PUBLIC_STRIPE_CHECKOUT_EMAIL_LINK_ENDPOINT must be a URL or path."
+    });
+  }
+
+  const lookupKey = resolveCheckoutLookupKey(input.planCode);
+  if (!lookupKey) {
+    return Promise.resolve({
+      ok: false,
+      message:
+        "Set NEXT_PUBLIC_STRIPE_STARTER_LOOKUP_KEY (and NEXT_PUBLIC_STRIPE_PRO_LOOKUP_KEY for PRO) and try again."
+    });
+  }
+
+  const payload = new URLSearchParams({
+    lookup_key: lookupKey,
+    email: input.email,
+    password: input.password,
+    retype_password: input.retypePassword,
+    first_name: input.firstName,
+    last_name: input.lastName,
+    company_name: input.companyName
+  });
+
+  return fetch(buildUrl(STRIPE_CHECKOUT_EMAIL_LINK_ENDPOINT), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "application/json, text/plain, */*"
+    },
+    body: payload.toString()
+  })
+    .then(async (response) => {
+      if (response.ok) {
+        return { ok: true } as StripeActionResult;
+      }
+
+      const raw = await response.text();
+      try {
+        const parsed = JSON.parse(raw) as { message?: string };
+        const fieldErrors = collectFieldErrors(parsed);
+        return {
+          ok: false,
+          status: response.status,
+          infrastructure: response.status >= 500,
+          message: parsed.message || `Could not send payment link (${response.status}).`,
+          fieldErrors
+        } as StripeActionResult;
+      } catch {
+        return {
+          ok: false,
+          status: response.status,
+          infrastructure: response.status >= 500,
+          message: raw || `Could not send payment link (${response.status}).`
+        } as StripeActionResult;
+      }
+    })
+    .catch((error) => ({
+      ok: false,
+      status: 0,
+      infrastructure: true,
+      message: error instanceof Error ? error.message : "Could not send payment link."
+    }));
 };
 
 export const startStripePortalSession = (sessionId: string): StripeActionResult => {
