@@ -20,8 +20,8 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import * as React from 'react';
-import logoFullFundalTransparent from '../../assets/selfCRMLogo.svg';
 import { DashboardHeader } from '../../components/dashboard/header';
+import selfCRMLogo from '../../assets/selfCRMLogo.png';
 import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar';
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '../../components/ui/sheet';
 import { PlaceHolderImages } from '../../lib/placeholder-images';
@@ -219,20 +219,15 @@ export default function DashboardLayout({
           </SheetDescription>
 
           <div className="flex h-full flex-col">
-            <Link
-              href={isManager ? '/dashboard/manager/overview' : '/dashboard'}
-              className="flex shrink-0 items-center justify-center bg-background px-4 py-3 transition-opacity hover:opacity-90"
-              onClick={() => setIsMobileNavOpen(false)}
-            >
-              <div className="flex w-full items-center justify-center">
-                <Image
-                  src={logoFullFundalTransparent}
-                  alt="selfCRM"
-                  className="h-[110px] w-auto"
-                  priority
-                />
-              </div>
-            </Link>
+            <div className="shrink-0 h-16 border-b border-black/20 bg-white px-4">
+              <Link
+                href={isManager ? '/dashboard/manager/overview' : '/dashboard'}
+                className="flex h-full items-center justify-center transition-opacity hover:opacity-90"
+                onClick={() => setIsMobileNavOpen(false)}
+              >
+                <Image src={selfCRMLogo} alt="selfCRM" className="h-10 w-auto" priority />
+              </Link>
+            </div>
 
             <nav className="flex-1 space-y-1 overflow-y-auto px-4 py-4">
               <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-blue-100 opacity-70">
@@ -345,19 +340,14 @@ export default function DashboardLayout({
           isDailyReportPage ? 'h-screen' : ''
         }`}
       >
-        <Link
-          href={isManager ? '/dashboard/manager/overview' : '/dashboard'}
-          className="flex shrink-0 items-center justify-center bg-background px-4 py-3 transition-opacity hover:opacity-90"
-        >
-          <div className="flex w-full items-center justify-center">
-            <Image
-              src={logoFullFundalTransparent}
-              alt="selfCRM"
-              className="h-[110px] w-auto"
-              priority
-            />
-          </div>
-        </Link>
+        <div className="shrink-0 h-16 border-b border-black/20 bg-white px-4">
+          <Link
+            href={isManager ? '/dashboard/manager/overview' : '/dashboard'}
+            className="flex h-full items-center justify-center transition-opacity hover:opacity-90"
+          >
+            <Image src={selfCRMLogo} alt="selfCRM" className="h-10 w-auto" priority />
+          </Link>
+        </div>
 
         <nav
           className={`flex-1 space-y-1 px-4 py-4 ${
@@ -456,7 +446,7 @@ export default function DashboardLayout({
           </div>
         </nav>
 
-        <div className="shrink-0 bg-[#0ea5e9] p-4 dark:border-t dark:border-slate-800 dark:bg-slate-900">
+        <div className="shrink-0 border-t border-white/15 bg-[#0ea5e9] p-4 dark:border-t dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center gap-3 px-2">
             <Avatar className="h-10 w-10 border border-white/30 bg-white/20 dark:border-slate-700 dark:bg-slate-800">
               {managerAvatar && (

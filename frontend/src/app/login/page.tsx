@@ -1,6 +1,4 @@
 "use client";
-
-import Image from "next/image";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   AlertCircle,
@@ -17,6 +15,7 @@ import * as React from "react";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 
+import { Logo } from "../../components/logo";
 import { ApiError, apiFetch } from "../../lib/api";
 import { mapInternalAuthError } from "../../lib/auth/google-auth";
 import {
@@ -29,7 +28,6 @@ import {
 } from "../../components/ui/form";
 import { Input } from "../../components/ui/input";
 import { useToast } from "../../hooks/use-toast";
-import iconita from "../../assets/iconita.svg";
 
 const loginSchema = z.object({
   email: z.string().email({ message: "Introdu o adresă de email validă." }),
@@ -295,31 +293,27 @@ function LoginPageContent() {
     <div className="min-h-dvh w-full bg-gradient-to-br from-[#f0f9ff] via-[#e0f2fe] to-[#bae6fd] p-4 font-sans">
       <div className="mx-auto flex min-h-[calc(100dvh-2rem)] w-full max-w-[480px] items-center justify-center">
         <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-700">
-          <div className="mb-4">
-            <Link
-              href="/"
-              className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-white/90 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-white"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              Back to landing
-            </Link>
-          </div>
-          <div className="mb-8 text-center">
-            <div className="mb-5 inline-flex items-center rounded-2xl border border-blue-100 bg-white px-0 py-2 shadow-sm">
-              <div className="rounded-xl bg-white p-0 shadow-inner">
-                <Image
-                  src={iconita}
-                  alt="Iconița selfCRM"
-                  className="h-12 w-auto"
-                  priority
-                />
-              </div>
-            </div>
-            <h1 className="text-3xl font-black tracking-tight text-slate-900">Bine ai revenit!</h1>
-            <p className="mt-2 font-medium text-slate-500">Autentifică-te în workspace-ul tău selfCRM.</p>
-          </div>
-
           <div className="rounded-[32px] border border-white bg-white p-8 shadow-2xl shadow-blue-200/50 md:p-10">
+            <div className="mb-5">
+              <Link
+                href="/"
+                className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-white/90 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-white"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Back to landing
+              </Link>
+            </div>
+
+            <div className="mb-7 text-center">
+              <div className="mb-4 flex justify-center">
+                <Logo href="/" />
+              </div>
+              <h1 className="text-3xl font-black tracking-tight text-slate-900">Bine ai revenit!</h1>
+              <p className="mt-2 font-medium text-slate-500">
+                Autentifică-te în workspace-ul tău selfCRM.
+              </p>
+            </div>
+
             <div className="space-y-4">
               <div className="flex flex-col items-center justify-center">
                 <div ref={googleButtonWrapperRef} className="relative w-full">

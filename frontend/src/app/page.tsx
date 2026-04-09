@@ -400,7 +400,7 @@ function ProcessSection() {
   );
 }
 
-export default function LandingPage() {
+function LandingPageContent() {
   const { toast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -425,13 +425,13 @@ export default function LandingPage() {
 
   const handleManageBilling = () => {
     const portalResult = startStripePortalSession(checkoutSessionId);
-    if (!portalResult.ok) {
-      toast({
-        title: "Stripe portal is not configured",
-        description: portalResult.message,
-        variant: "destructive"
-      });
-    }
+    if (portalResult.ok) return;
+
+    toast({
+      title: "Stripe portal is not configured",
+      description: "message" in portalResult ? portalResult.message : "Stripe portal unavailable.",
+      variant: "destructive"
+    });
   };
 
   useEffect(() => {
@@ -739,7 +739,7 @@ export default function LandingPage() {
               </p>
               <button
                 type="button"
-                onClick={scrollToPricing}
+                onClick={() => router.push("/signup/choose-plan/")}
                 className="relative z-20 mt-10 inline-block rounded-full bg-white px-10 py-3 text-lg font-bold text-[#67C6EE] shadow-lg transition-transform hover:scale-105"
               >
                 Începe acum
@@ -1002,5 +1002,13 @@ export default function LandingPage() {
       <ProgressiveBlur position="top" height="14vh" className="hidden md:block" />
       <ProgressiveBlur position="bottom" height="20vh" />
     </div>
+  );
+}
+
+export default function LandingPage() {
+  return (
+    <React.Suspense fallback={null}>
+      <LandingPageContent />
+    </React.Suspense>
   );
 }

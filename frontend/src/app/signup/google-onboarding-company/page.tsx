@@ -181,18 +181,9 @@ function GoogleOnboardingCompanyContent() {
 
     try {
       if (signupMethod === "google") {
-        const firstName = (values.firstName ?? "").trim();
-        const lastName = (values.lastName ?? "").trim();
-        if (!firstName) {
-          form.setError("firstName", { message: "First name is required." });
-          setIsSubmitting(false);
-          return;
-        }
-        if (!lastName) {
-          form.setError("lastName", { message: "Last name is required." });
-          setIsSubmitting(false);
-          return;
-        }
+        const onboardingState = readOnboardingState();
+        const firstName = (onboardingState.firstName ?? values.firstName ?? "").trim();
+        const lastName = (onboardingState.lastName ?? values.lastName ?? "").trim();
 
         const idToken = sessionStorage.getItem(GOOGLE_ID_TOKEN_KEY);
         if (!idToken) {
@@ -294,34 +285,9 @@ function GoogleOnboardingCompanyContent() {
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               {signupMethod === "google" && (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <FormField
-                    control={form.control}
-                    name="firstName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>First Name</FormLabel>
-                        <FormControl>
-                          <Input placeholder="John" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="lastName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Last Name</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Doe" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                <p className="rounded-md border border-sky-100 bg-sky-50 px-3 py-2 text-xs text-sky-700">
+                  Folosești contul Google selectat. Email-ul și profilul sunt preluate automat.
+                </p>
               )}
               <FormField
                 control={form.control}
