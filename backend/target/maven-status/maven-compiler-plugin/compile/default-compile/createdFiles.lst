@@ -146,6 +146,7 @@ com/salesway/leads/service/LeadDetailsService$CachedInsightEntry.class
 com/salesway/ml/dto/ForecastResponse$DailyPrediction.class
 com/salesway/email/dto/PasswordResetEmailPayload.class
 com/salesway/leads/service/LeadCampaignService.class
+com/salesway/leads/service/LeadDetailsService$AiInsightsRefreshState.class
 com/salesway/email/service/EmailService.class
 com/salesway/leads/controller/PipelineStageController.class
 com/salesway/leads/enums/LeadEventType.class

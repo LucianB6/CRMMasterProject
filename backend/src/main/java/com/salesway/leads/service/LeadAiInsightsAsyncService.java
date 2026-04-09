@@ -10,6 +10,7 @@ import com.salesway.manager.service.ManagerAccessService;
 import com.salesway.memberships.entity.CompanyMembership;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -28,19 +29,22 @@ public class LeadAiInsightsAsyncService {
     private final ManagerAccessService managerAccessService;
     private final LeadAiInsightsQueueService leadAiInsightsQueueService;
     private final LeadDetailsService leadDetailsService;
+    private final long staleStatusTimeoutMs;
 
     public LeadAiInsightsAsyncService(
             LeadRepository leadRepository,
             LeadAiInsightSnapshotRepository leadAiInsightSnapshotRepository,
             ManagerAccessService managerAccessService,
             LeadAiInsightsQueueService leadAiInsightsQueueService,
-            LeadDetailsService leadDetailsService
+            LeadDetailsService leadDetailsService,
+            @Value("${app.leads.ai-insights-stale-timeout-ms:60000}") long staleStatusTimeoutMs
     ) {
         this.leadRepository = leadRepository;
         this.leadAiInsightSnapshotRepository = leadAiInsightSnapshotRepository;
         this.managerAccessService = managerAccessService;
         this.leadAiInsightsQueueService = leadAiInsightsQueueService;
         this.leadDetailsService = leadDetailsService;
+        this.staleStatusTimeoutMs = staleStatusTimeoutMs;
     }
 
     @Transactional
@@ -48,15 +52,29 @@ public class LeadAiInsightsAsyncService {
         CompanyMembership membership = managerAccessService.getManagerMembership();
         Lead lead = leadRepository.findByIdAndCompanyId(leadId, membership.getCompany().getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead not found"));
+        if (!leadDetailsService.isAiInsightsRefreshRequired(lead) && !LeadAiInsightsStatus.FAILED.name().equalsIgnoreCase(lead.getAiInsightsStatus())) {
+            LOG.info("AI insights regenerate skipped because snapshot is already fresh leadId={}", leadId);
+            return new LeadAiInsightsRegenerateResponse("completed", leadId);
+        }
+        if (isInFlight(lead) && !isStatusStale(lead)) {
+            LOG.info("AI insights regenerate ignored because job already in flight leadId={} status={}", leadId, lead.getAiInsightsStatus());
+            return new LeadAiInsightsRegenerateResponse("pending", leadId);
+        }
         lead.setAiInsightsStatus(LeadAiInsightsStatus.PENDING.name());
         lead.setAiInsightsError(null);
         leadRepository.save(lead);
-        leadAiInsightsQueueService.enqueueRegeneration(leadId);
+        LeadAiInsightsQueueService.LeadAiInsightsJob job = leadAiInsightsQueueService.enqueueRegeneration(leadId);
+        LOG.info("AI insights job enqueued leadId={} jobId={} enqueuedAt={} status=PENDING", leadId, job.jobId(), job.enqueuedAt());
         return new LeadAiInsightsRegenerateResponse("pending", leadId);
     }
 
     public void processQueuedRegeneration(UUID leadId) {
+        processQueuedRegeneration(leadId, null);
+    }
+
+    public void processQueuedRegeneration(UUID leadId, UUID jobId) {
         try {
+            LOG.info("AI insights job processing started leadId={} jobId={}", leadId, jobId);
             markProcessing(leadId);
             Lead lead = leadRepository.findById(leadId)
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead not found"));
@@ -73,8 +91,10 @@ public class LeadAiInsightsAsyncService {
                 throw new IllegalStateException("AI insights regeneration completed without updating snapshot");
             }
             markCompleted(leadId);
+            LOG.info("AI insights job processing completed leadId={} jobId={} finalStatus=COMPLETED previousSnapshotAt={} currentSnapshotAt={}",
+                    leadId, jobId, previousSnapshotTimestamp, currentSnapshotTimestamp);
         } catch (Exception exception) {
-            LOG.error("AI insights worker failed for leadId={}", leadId, exception);
+            LOG.error("AI insights worker failed for leadId={} jobId={}", leadId, jobId, exception);
             markFailed(leadId, exception);
         }
     }
@@ -121,5 +141,17 @@ public class LeadAiInsightsAsyncService {
             return true;
         }
         return current.isAfter(previous);
+    }
+
+    private boolean isInFlight(Lead lead) {
+        return LeadAiInsightsStatus.PENDING.name().equalsIgnoreCase(lead.getAiInsightsStatus())
+                || LeadAiInsightsStatus.PROCESSING.name().equalsIgnoreCase(lead.getAiInsightsStatus());
+    }
+
+    private boolean isStatusStale(Lead lead) {
+        if (lead.getUpdatedAt() == null) {
+            return false;
+        }
+        return lead.getUpdatedAt().isBefore(Instant.now().minusMillis(staleStatusTimeoutMs));
     }
 }

@@ -59,6 +59,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -113,6 +114,7 @@ public class LeadDetailsService {
     private final OpenAiClient openAiClient;
     private final ObjectMapper objectMapper;
     private final BillingUsageService billingUsageService;
+    private final long staleInsightsStatusTimeoutMs;
 
     public LeadDetailsService(
             LeadRepository leadRepository,
@@ -133,7 +135,8 @@ public class LeadDetailsService {
             KbChunkRepository kbChunkRepository,
             OpenAiClient openAiClient,
             ObjectMapper objectMapper,
-            BillingUsageService billingUsageService
+            BillingUsageService billingUsageService,
+            @Value("${app.leads.ai-insights-stale-timeout-ms:60000}") long staleInsightsStatusTimeoutMs
     ) {
         this.leadRepository = leadRepository;
         this.leadAnswerRepository = leadAnswerRepository;
@@ -154,6 +157,7 @@ public class LeadDetailsService {
         this.openAiClient = openAiClient;
         this.objectMapper = objectMapper;
         this.billingUsageService = billingUsageService;
+        this.staleInsightsStatusTimeoutMs = staleInsightsStatusTimeoutMs;
     }
 
     @Transactional(readOnly = true)
@@ -398,14 +402,22 @@ public class LeadDetailsService {
         CompanyMembership membership = companyAccessService.getActiveMembership();
         UUID companyId = membership.getCompany().getId();
         Lead lead = getLeadOrThrow(leadId, membership);
-        KbDocument activeKbDocument = kbDocumentRepository.findFirstByCompanyIdAndIsActiveTrueOrderByCreatedAtDesc(companyId).orElse(null);
-        Instant latestFeedbackAt = leadAiInsightMemoryRepository.findLatestUpdatedAtByLeadIdAndCompanyId(leadId, companyId);
-        Instant latestAnswerAt = leadAnswerRepository.findLatestCreatedAtByLeadId(leadId);
-        LeadAiInsightSnapshot snapshot = leadAiInsightSnapshotRepository.findByLeadIdAndCompanyId(leadId, companyId).orElse(null);
+        expireStaleInFlightInsightsStatus(lead);
+        AiInsightsRefreshState refreshState = loadAiInsightsRefreshState(lead, companyId);
+        KbDocument activeKbDocument = refreshState.activeKbDocument();
+        Instant latestTimelineEventAt = refreshState.latestTimelineEventAt();
+        Instant latestFeedbackAt = refreshState.latestFeedbackAt();
+        Instant latestAnswerAt = refreshState.latestAnswerAt();
+        LeadAiInsightSnapshot snapshot = refreshState.snapshot();
+        Instant snapshotTimestamp = snapshot == null ? null : snapshot.getLastRegeneratedAt() != null
+                ? snapshot.getLastRegeneratedAt()
+                : snapshot.getGeneratedAt();
+        LOG.info("AI insights fetch leadId={} regenerationStatus={} snapshotTimestamp={}",
+                leadId, lead.getAiInsightsStatus(), snapshotTimestamp);
         if (snapshot != null && isAiInsightsRegenerationInFlight(lead)) {
             return toResponse(snapshot, lead);
         }
-        if (snapshot != null && !isSnapshotStale(snapshot, lead, activeKbDocument, latestFeedbackAt, latestAnswerAt)) {
+        if (snapshot != null && !isSnapshotStale(snapshot, lead, activeKbDocument, latestTimelineEventAt, latestFeedbackAt, latestAnswerAt)) {
             return toResponse(snapshot, lead);
         }
         if (snapshot != null && isAiInsightsTerminalFailure(lead)) {
@@ -415,6 +427,24 @@ public class LeadDetailsService {
             return buildPendingInsightsResponse(lead);
         }
         return regenerateAiInsights(leadId);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isAiInsightsRefreshRequired(Lead lead) {
+        UUID companyId = lead.getCompany().getId();
+        AiInsightsRefreshState refreshState = loadAiInsightsRefreshState(lead, companyId);
+        LeadAiInsightSnapshot snapshot = refreshState.snapshot();
+        if (snapshot == null) {
+            return true;
+        }
+        return isSnapshotStale(
+                snapshot,
+                lead,
+                refreshState.activeKbDocument(),
+                refreshState.latestTimelineEventAt(),
+                refreshState.latestFeedbackAt(),
+                refreshState.latestAnswerAt()
+        );
     }
 
     @Transactional
@@ -1171,9 +1201,16 @@ public class LeadDetailsService {
                 .collect(java.util.stream.Collectors.joining(" "));
     }
 
-    private String buildInsightsCacheKey(Lead lead, KbDocument activeKbDocument, Instant latestFeedbackAt, Instant latestAnswerAt) {
-        String activityToken = lead.getLastActivityAt() != null
-                ? lead.getLastActivityAt().toString()
+    private String buildInsightsCacheKey(
+            Lead lead,
+            KbDocument activeKbDocument,
+            Instant latestTimelineEventAt,
+            Instant latestFeedbackAt,
+            Instant latestAnswerAt
+    ) {
+        Instant latestActivityAt = maxInstant(latestTimelineEventAt, lead.getLastActivityAt());
+        String activityToken = latestActivityAt != null
+                ? latestActivityAt.toString()
                 : lead.getSubmittedAt() != null ? lead.getSubmittedAt().toString() : "no-activity";
         String kbToken;
         if (openAiClient.hasHostedVectorStore()) {
@@ -1192,6 +1229,7 @@ public class LeadDetailsService {
             LeadAiInsightSnapshot snapshot,
             Lead lead,
             KbDocument activeKbDocument,
+            Instant latestTimelineEventAt,
             Instant latestFeedbackAt,
             Instant latestAnswerAt
     ) {
@@ -1204,10 +1242,11 @@ public class LeadDetailsService {
         if (snapshotReference == null) {
             return true;
         }
-        String currentKey = buildInsightsCacheKey(lead, activeKbDocument, latestFeedbackAt, latestAnswerAt);
+        String currentKey = buildInsightsCacheKey(lead, activeKbDocument, latestTimelineEventAt, latestFeedbackAt, latestAnswerAt);
         String snapshotKey = buildInsightsCacheKey(
                 leadSnapshotView(lead, snapshotReference),
                 activeKbDocumentSnapshotView(activeKbDocument, snapshotReference),
+                minInstant(latestTimelineEventAt, snapshotReference),
                 minInstant(latestFeedbackAt, snapshotReference),
                 minInstant(latestAnswerAt, snapshotReference)
         );
@@ -1245,6 +1284,16 @@ public class LeadDetailsService {
             return null;
         }
         return candidate.isAfter(upperBound) ? upperBound : candidate;
+    }
+
+    private Instant maxInstant(Instant first, Instant second) {
+        if (first == null) {
+            return second;
+        }
+        if (second == null) {
+            return first;
+        }
+        return first.isAfter(second) ? first : second;
     }
 
     private String summarizeRecentInsights(List<LeadAiInsightMemory> recentMemories) {
@@ -1367,8 +1416,34 @@ public class LeadDetailsService {
                 || "PROCESSING".equalsIgnoreCase(lead.getAiInsightsStatus()));
     }
 
+    private void expireStaleInFlightInsightsStatus(Lead lead) {
+        if (!isAiInsightsRegenerationInFlight(lead) || lead.getUpdatedAt() == null) {
+            return;
+        }
+        Instant staleBefore = Instant.now().minusMillis(staleInsightsStatusTimeoutMs);
+        if (!lead.getUpdatedAt().isBefore(staleBefore)) {
+            return;
+        }
+        String previousStatus = lead.getAiInsightsStatus();
+        lead.setAiInsightsStatus("FAILED");
+        lead.setAiInsightsError("AI insights regeneration timed out");
+        leadRepository.save(lead);
+        LOG.warn("AI insights status expired leadId={} previousStatus={} updatedAt={} timeoutMs={}",
+                lead.getId(), previousStatus, lead.getUpdatedAt(), staleInsightsStatusTimeoutMs);
+    }
+
     private boolean isAiInsightsTerminalFailure(Lead lead) {
         return "FAILED".equalsIgnoreCase(lead.getAiInsightsStatus());
+    }
+
+    private AiInsightsRefreshState loadAiInsightsRefreshState(Lead lead, UUID companyId) {
+        UUID leadId = lead.getId();
+        KbDocument activeKbDocument = kbDocumentRepository.findFirstByCompanyIdAndIsActiveTrueOrderByCreatedAtDesc(companyId).orElse(null);
+        Instant latestTimelineEventAt = leadEventRepository.findLatestCreatedAtByCompanyIdAndLeadId(companyId, leadId);
+        Instant latestFeedbackAt = leadAiInsightMemoryRepository.findLatestUpdatedAtByLeadIdAndCompanyId(leadId, companyId);
+        Instant latestAnswerAt = leadAnswerRepository.findLatestCreatedAtByLeadId(leadId);
+        LeadAiInsightSnapshot snapshot = leadAiInsightSnapshotRepository.findByLeadIdAndCompanyId(leadId, companyId).orElse(null);
+        return new AiInsightsRefreshState(activeKbDocument, latestTimelineEventAt, latestFeedbackAt, latestAnswerAt, snapshot);
     }
 
     private String writeJson(Object value) {
@@ -3219,6 +3294,14 @@ public class LeadDetailsService {
     ) {}
 
     private record CachedInsightEntry(String key, LeadAiInsightsResponse response) {}
+
+    private record AiInsightsRefreshState(
+            KbDocument activeKbDocument,
+            Instant latestTimelineEventAt,
+            Instant latestFeedbackAt,
+            Instant latestAnswerAt,
+            LeadAiInsightSnapshot snapshot
+    ) {}
 
     private record ConversationState(
             List<String> confirmedFacts,

@@ -1,5 +1,7 @@
 package com.salesway.leads.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -26,4 +28,13 @@ public record LeadAiInsightsResponse(
         String regenerationStatus,
         String regenerationError
 ) {
+    @JsonProperty("status")
+    public String status() {
+        return regenerationStatus;
+    }
+
+    @JsonProperty("error")
+    public String error() {
+        return regenerationError;
+    }
 }
