@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.UUID;
+import java.time.Instant;
 
 @Service
 public class LeadAiInsightsQueueService {
@@ -21,15 +22,17 @@ public class LeadAiInsightsQueueService {
         this.objectMapper = objectMapper;
     }
 
-    public void enqueueRegeneration(UUID leadId) {
+    public LeadAiInsightsJob enqueueRegeneration(UUID leadId) {
         try {
-            String payload = objectMapper.writeValueAsString(new LeadAiInsightsJob(leadId));
+            LeadAiInsightsJob job = new LeadAiInsightsJob(UUID.randomUUID(), leadId, Instant.now());
+            String payload = objectMapper.writeValueAsString(job);
             redisTemplate.opsForList().leftPush(LEAD_AI_INSIGHTS_QUEUE_KEY, payload);
+            return job;
         } catch (JsonProcessingException exception) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to enqueue AI insights regeneration job", exception);
         }
     }
 
-    public record LeadAiInsightsJob(UUID leadId) {
+    public record LeadAiInsightsJob(UUID jobId, UUID leadId, Instant enqueuedAt) {
     }
 }

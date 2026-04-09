@@ -5,7 +5,9 @@ import com.salesway.leads.enums.LeadEventType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.UUID;
 
@@ -18,4 +20,10 @@ public interface LeadEventRepository extends JpaRepository<LeadEvent, UUID> {
             Collection<LeadEventType> types,
             Pageable pageable
     );
+
+    @Query("""
+            select max(e.createdAt) from LeadEvent e
+            where e.company.id = :companyId and e.lead.id = :leadId
+            """)
+    Instant findLatestCreatedAtByCompanyIdAndLeadId(UUID companyId, UUID leadId);
 }

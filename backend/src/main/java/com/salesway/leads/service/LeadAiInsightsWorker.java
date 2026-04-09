@@ -48,7 +48,8 @@ public class LeadAiInsightsWorker {
                 );
                 UUID leadId = job.leadId();
                 if (leadId != null) {
-                    leadAiInsightsAsyncService.processQueuedRegeneration(leadId);
+                    LOG.info("AI insights worker dequeued leadId={} jobId={} enqueuedAt={}", leadId, job.jobId(), job.enqueuedAt());
+                    leadAiInsightsAsyncService.processQueuedRegeneration(leadId, job.jobId());
                 }
             } catch (Exception exception) {
                 LOG.error("AI insights worker failed to process payload={}", payload, exception);

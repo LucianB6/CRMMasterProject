@@ -2,6 +2,7 @@ com/salesway/leads/service/LeadFormServiceTest.class
 com/salesway/billing/service/CheckoutValidationServiceTest.class
 com/salesway/auth/service/AuthServiceGoogleInviteTest$4.class
 com/salesway/auth/service/AuthServiceGoogleInviteTest$2.class
+com/salesway/leads/service/LeadAiInsightsAsyncServiceTest.class
 com/salesway/tasks/service/TaskBoardServiceTest.class
 com/salesway/leads/service/LeadDetailsServiceTest.class
 com/salesway/billing/service/StripeBillingServiceTest.class

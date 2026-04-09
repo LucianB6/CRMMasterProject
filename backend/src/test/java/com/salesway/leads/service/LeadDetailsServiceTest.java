@@ -132,6 +132,8 @@ class LeadDetailsServiceTest {
         when(leadRepository.findByIdAndCompanyId(leadId, companyId)).thenReturn(Optional.of(lead));
         when(leadEventRepository.findByCompanyIdAndLeadIdOrderByCreatedAtDesc(eq(companyId), eq(leadId), any()))
                 .thenReturn(new PageImpl<>(List.of()));
+        when(leadEventRepository.findLatestCreatedAtByCompanyIdAndLeadId(companyId, leadId))
+                .thenReturn(null);
         when(leadAnswerRepository.findByLeadIdOrderByDisplayOrderSnapshotAscCreatedAtAsc(leadId))
                 .thenReturn(List.of());
         when(leadAnswerRepository.findLatestCreatedAtByLeadId(leadId))
@@ -167,7 +169,8 @@ class LeadDetailsServiceTest {
                 kbChunkRepository,
                 openAiClient,
                 new ObjectMapper(),
-                billingUsageService
+                billingUsageService,
+                60_000L
         );
     }
 
@@ -928,6 +931,79 @@ class LeadDetailsServiceTest {
         verify(openAiClient).chat(any(), eq(0.05));
         verify(openAiClient, times(2)).chat(any(), eq(0.1));
         verify(openAiClient).chat(any(), eq(0.15));
+    }
+
+    @Test
+    void aiInsights_staleProcessingStatusExpiresToFailed() {
+        lead.setAiInsightsStatus("PROCESSING");
+        lead.setUpdatedAt(Instant.now().minusSeconds(120));
+
+        LeadAiInsightsResponse response = leadDetailsService.getAiInsights(leadId);
+
+        assertThat(response.regenerationStatus()).isEqualTo("FAILED");
+        assertThat(response.regenerationError()).isEqualTo("AI insights regeneration timed out");
+        verify(leadRepository, atLeastOnce()).save(lead);
+    }
+
+    @Test
+    void aiInsights_regeneratesWhenNewNoteExistsAfterSnapshotEvenIfLeadActivityIsStale() throws Exception {
+        lead.setLastActivityAt(Instant.parse("2026-03-12T10:00:00Z"));
+
+        LeadAiInsightSnapshot snapshot = new LeadAiInsightSnapshot();
+        snapshot.setId(UUID.randomUUID());
+        UUID previousInsightId = UUID.randomUUID();
+        snapshot.setLatestInsightMemoryId(previousInsightId);
+        snapshot.setScore(61);
+        snapshot.setClientScore(55);
+        snapshot.setNextCallCloseProbability(35);
+        snapshot.setRelationshipSentiment("neutral");
+        snapshot.setRelationshipRiskLevel("low");
+        snapshot.setRelationshipTrend("stable");
+        snapshot.setRelationshipKeyBlocker("");
+        snapshot.setConfidenceScore(0.81);
+        snapshot.setConfidenceLevel("high");
+        snapshot.setGuidanceSource("ai");
+        snapshot.setRecommendedAction("Vechiul pas următor.");
+        snapshot.setSuggestedApproach("Vechiul approach.");
+        snapshot.setGeneratedAt(Instant.parse("2026-03-12T10:00:00Z"));
+        snapshot.setLastRegeneratedAt(Instant.parse("2026-03-12T10:00:00Z"));
+        when(leadAiInsightSnapshotRepository.findByLeadIdAndCompanyId(leadId, companyId))
+                .thenReturn(Optional.of(snapshot));
+        when(leadEventRepository.findLatestCreatedAtByCompanyIdAndLeadId(companyId, leadId))
+                .thenReturn(Instant.parse("2026-03-12T12:00:00Z"));
+
+        LeadEvent noteEvent = new LeadEvent();
+        noteEvent.setActorUserId(userId);
+        noteEvent.setType(LeadEventType.NOTE_ADDED);
+        noteEvent.setPayload(new ObjectMapper().readTree("""
+                {"text":"Clientul a confirmat că vrea pașii următori azi.","category":"TYPE_NEXT_STEP"}
+                """));
+        when(leadEventRepository.findByCompanyIdAndLeadIdOrderByCreatedAtDesc(eq(companyId), eq(leadId), any()))
+                .thenReturn(new PageImpl<>(List.of(noteEvent)));
+        when(openAiClient.chat(any(), eq(0.05))).thenReturn("""
+                {"overall_sentiment":"positive","risk_level":"low","key_blocker":"","trend":"up"}
+                """);
+        when(openAiClient.chat(any(), eq(0.1))).thenReturn("""
+                {"confirmedFacts":["Clientul vrea pașii următori azi"],"currentObjection":"","conversationStage":"După confirmarea interesului.","nextExpectedStep":"Trimite pașii următori și confirmă owner-ul.","openQuestions":["Cine preia următoarea acțiune?"],"confidence":0.84,
+                "next_best_action":{"type":"clarify_next_step","priority":"high","timing":"today","channel":"phone"},
+                "reason":"Clientul cere clarificarea pasului următor.",
+                "psychological_insight":{"dominant_motivation":"claritate","primary_blocker":"","decision_readiness":"ridicată","confidence_state":"bună","risk_of_stalling":"scăzut"},
+                "recommended_conversation_direction":{"primary_angle":"clarifică următorul pas","positioning":"direct","tone":"clar","focus_points":["owner","deadline"]},
+                "key_questions_to_ask":["Cine face următoarea acțiune?"],"objection_strategy":{"main_objection_to_address":"","reframe":"Fixează owner și termen.","supporting_points":["Confirmă responsabilul."]},
+                "what_to_avoid":["ambiguitatea"],"missing_information":["Owner-ul exact"],"scores":{"client_score":66,"next_call_close_probability":48,"lead_readiness_score":7,"buying_intent_score":6,"psychological_resistance_score":3}}
+                """);
+        when(openAiClient.chat(any(), eq(0.15))).thenReturn("""
+                {"knownAlready":["Clientul vrea pașii următori azi"],"doNotAskAgain":[],"insistOn":["Owner-ul exact"],"missingInformation":["Owner-ul exact"]}
+                """);
+        when(openAiClient.chat(any(), eq(0.2))).thenReturn("""
+                {"callDirection":"Clarifică owner-ul și termenul.","openingLine":"Hai să fixăm concret următorul pas.","discoveryQuestions":["Cine face următoarea acțiune?"],"decisionTree":["Dacă owner-ul nu e clar -> propune un responsabil."],"objectionHandling":"Elimină ambiguitatea și confirmă termenul."}
+                """);
+
+        LeadAiInsightsResponse response = leadDetailsService.getAiInsights(leadId);
+
+        assertThat(response.insightId()).isNotEqualTo(previousInsightId);
+        assertThat(response.recommendedAction()).isNotEqualTo("Vechiul pas următor.");
+        verify(leadAiInsightMemoryRepository).save(any());
     }
 
     @Test
