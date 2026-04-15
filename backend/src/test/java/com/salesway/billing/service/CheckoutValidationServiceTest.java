@@ -4,7 +4,6 @@ import com.salesway.auth.entity.User;
 import com.salesway.auth.repository.UserRepository;
 import com.salesway.billing.dto.CheckoutValidationRequest;
 import com.salesway.common.error.FieldValidationException;
-import com.stripe.model.Price;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -32,10 +31,9 @@ class CheckoutValidationServiceTest {
     }
 
     @Test
-    void returnsSuccessForValidData() throws Exception {
+    void returnsSuccessForValidData() {
         when(userRepository.findByEmailIgnoreCase("test@example.com")).thenReturn(Optional.empty());
-        when(planCatalogService.resolvePlanCodeForLookupKey("starter")).thenReturn("STARTER");
-        when(stripeCatalogService.findRecurringPriceByLookupKey("starter")).thenReturn(new Price());
+        when(planCatalogService.resolveCheckoutPlan("starter")).thenReturn(checkoutPlan("starter", "STARTER", "starter_monthly", "price_starter"));
 
         var response = checkoutValidationService.validate(request());
 
@@ -44,11 +42,10 @@ class CheckoutValidationServiceTest {
     }
 
     @Test
-    void returnsConflictForExistingEmail() throws Exception {
+    void returnsConflictForExistingEmail() {
         User existingUser = new User();
         when(userRepository.findByEmailIgnoreCase("test@example.com")).thenReturn(Optional.of(existingUser));
-        when(planCatalogService.resolvePlanCodeForLookupKey("starter")).thenReturn("STARTER");
-        when(stripeCatalogService.findRecurringPriceByLookupKey("starter")).thenReturn(new Price());
+        when(planCatalogService.resolveCheckoutPlan("starter")).thenReturn(checkoutPlan("starter", "STARTER", "starter_monthly", "price_starter"));
 
         assertThatThrownBy(() -> checkoutValidationService.validate(request()))
                 .isInstanceOf(FieldValidationException.class)
@@ -61,10 +58,9 @@ class CheckoutValidationServiceTest {
     }
 
     @Test
-    void returnsBadRequestForPasswordMismatch() throws Exception {
+    void returnsBadRequestForPasswordMismatch() {
         when(userRepository.findByEmailIgnoreCase("test@example.com")).thenReturn(Optional.empty());
-        when(planCatalogService.resolvePlanCodeForLookupKey("starter")).thenReturn("STARTER");
-        when(stripeCatalogService.findRecurringPriceByLookupKey("starter")).thenReturn(new Price());
+        when(planCatalogService.resolveCheckoutPlan("starter")).thenReturn(checkoutPlan("starter", "STARTER", "starter_monthly", "price_starter"));
 
         CheckoutValidationRequest request = request();
         request.setRetypePassword("Mismatch123");
@@ -93,11 +89,10 @@ class CheckoutValidationServiceTest {
     }
 
     @Test
-    void returnsBadRequestForInvalidLookupKey() throws Exception {
+    void returnsBadRequestForInvalidPlan() {
         when(userRepository.findByEmailIgnoreCase("test@example.com")).thenReturn(Optional.empty());
-        when(planCatalogService.resolvePlanCodeForLookupKey("starter")).thenReturn("STARTER");
-        when(stripeCatalogService.findRecurringPriceByLookupKey("starter"))
-                .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "No Stripe price found for lookup_key"));
+        when(planCatalogService.resolveCheckoutPlan("starter"))
+                .thenThrow(new ResponseStatusException(HttpStatus.BAD_REQUEST, "plan is invalid"));
 
         assertThatThrownBy(() -> checkoutValidationService.validate(request()))
                 .isInstanceOf(FieldValidationException.class)
@@ -105,13 +100,17 @@ class CheckoutValidationServiceTest {
                     FieldValidationException validationException = (FieldValidationException) exception;
                     assertThat(validationException.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
                     assertThat(validationException.getFieldErrors())
-                            .contains(java.util.Map.of("field", "lookup_key", "message", "lookup_key is invalid"));
+                            .contains(java.util.Map.of("field", "plan", "message", "plan is invalid"));
                 });
+    }
+
+    private PlanCatalogService.CheckoutPlan checkoutPlan(String plan, String planCode, String lookupKey, String priceId) {
+        return new PlanCatalogService.CheckoutPlan(plan, planCode, lookupKey, priceId);
     }
 
     private CheckoutValidationRequest request() {
         CheckoutValidationRequest request = new CheckoutValidationRequest();
-        request.setLookupKey("starter");
+        request.setPlan("starter");
         request.setEmail("test@example.com");
         request.setPassword("Password123");
         request.setRetypePassword("Password123");

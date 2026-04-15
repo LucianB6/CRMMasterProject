@@ -13,6 +13,15 @@ public class StripeProperties {
     @NotBlank
     private String webhookSecret;
 
+    @NotBlank
+    private String starterPriceId;
+
+    @NotBlank
+    private String proPriceId;
+
+    @NotBlank
+    private String enterprisePriceId;
+
     public String getSecretKey() {
         return secretKey;
     }
@@ -27,5 +36,29 @@ public class StripeProperties {
 
     public void setWebhookSecret(String webhookSecret) {
         this.webhookSecret = webhookSecret;
+    }
+
+    public String getStarterPriceId() {
+        return starterPriceId;
+    }
+
+    public void setStarterPriceId(String starterPriceId) {
+        this.starterPriceId = starterPriceId;
+    }
+
+    public String getProPriceId() {
+        return proPriceId;
+    }
+
+    public void setProPriceId(String proPriceId) {
+        this.proPriceId = proPriceId;
+    }
+
+    public String getEnterprisePriceId() {
+        return enterprisePriceId;
+    }
+
+    public void setEnterprisePriceId(String enterprisePriceId) {
+        this.enterprisePriceId = enterprisePriceId;
     }
 }

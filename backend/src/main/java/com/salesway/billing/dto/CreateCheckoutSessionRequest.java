@@ -1,15 +1,10 @@
 package com.salesway.billing.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
 
 public class CreateCheckoutSessionRequest {
-    @NotBlank(message = "lookup_key is required")
-    @Pattern(
-            regexp = "^[A-Za-z0-9._:-]+$",
-            message = "lookup_key contains invalid characters"
-    )
+    private String plan;
+
     private String lookupKey;
 
     private String email;
@@ -23,6 +18,14 @@ public class CreateCheckoutSessionRequest {
     private String lastName;
 
     private String companyName;
+
+    public String getPlan() {
+        return plan;
+    }
+
+    public void setPlan(String plan) {
+        this.plan = plan;
+    }
 
     @JsonProperty("lookup_key")
     public String getLookupKey() {

@@ -4,7 +4,6 @@ import com.salesway.auth.repository.UserRepository;
 import com.salesway.billing.dto.CheckoutValidationRequest;
 import com.salesway.billing.dto.CheckoutValidationResponse;
 import com.salesway.common.error.FieldValidationException;
-import com.stripe.exception.StripeException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -19,7 +18,6 @@ public class CheckoutValidationService {
     private static final Logger log = LoggerFactory.getLogger(CheckoutValidationService.class);
 
     private final UserRepository userRepository;
-    private final StripeCatalogService stripeCatalogService;
     private final PlanCatalogService planCatalogService;
 
     public CheckoutValidationService(
@@ -28,14 +26,16 @@ public class CheckoutValidationService {
             PlanCatalogService planCatalogService
     ) {
         this.userRepository = userRepository;
-        this.stripeCatalogService = stripeCatalogService;
         this.planCatalogService = planCatalogService;
     }
 
     public CheckoutValidationResponse validate(CheckoutValidationRequest request) {
         List<Map<String, String>> fieldErrors = new ArrayList<>();
 
+        String plan = trimToNull(request.getPlan());
         String lookupKey = trimToNull(request.getLookupKey());
+        String requestedPlan = plan == null ? lookupKey : plan;
+        String requestedPlanField = plan == null ? "lookup_key" : "plan";
         String email = trimToNull(request.getEmail());
         String password = request.getPassword();
         String retypePassword = request.getRetypePassword();
@@ -43,23 +43,15 @@ public class CheckoutValidationService {
         String lastName = trimToNull(request.getLastName());
         String companyName = trimToNull(request.getCompanyName());
 
-        if (lookupKey == null) {
-            fieldErrors.add(fieldError("lookup_key", "lookup_key is required"));
-        } else if (!lookupKey.matches("^[A-Za-z0-9._:-]+$")) {
-            fieldErrors.add(fieldError("lookup_key", "lookup_key contains invalid characters"));
+        if (requestedPlan == null) {
+            fieldErrors.add(fieldError("plan", "plan is required"));
+        } else if (!requestedPlan.matches("^[A-Za-z0-9._:-]+$")) {
+            fieldErrors.add(fieldError(requestedPlanField, requestedPlanField + " contains invalid characters"));
         } else {
             try {
-                planCatalogService.resolvePlanCodeForLookupKey(lookupKey);
-                stripeCatalogService.findRecurringPriceByLookupKey(lookupKey);
-            } catch (StripeException exception) {
-                log.error("Stripe lookup_key validation failed for {}", lookupKey, exception);
-                throw new FieldValidationException(
-                        HttpStatus.BAD_GATEWAY,
-                        "Validation failed",
-                        List.of(fieldError("lookup_key", "Could not validate lookup_key"))
-                );
+                planCatalogService.resolveCheckoutPlan(requestedPlan);
             } catch (RuntimeException exception) {
-                fieldErrors.add(fieldError("lookup_key", "lookup_key is invalid"));
+                fieldErrors.add(fieldError(requestedPlanField, requestedPlanField + " is invalid"));
             }
         }
 

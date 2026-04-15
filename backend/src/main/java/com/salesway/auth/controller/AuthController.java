@@ -71,6 +71,7 @@ public class AuthController {
 
     @GetMapping({"/checkout/validate", "/checkout/validate/"})
     public ResponseEntity<CheckoutValidationResponse> validateCheckout(
+            @RequestParam(name = "plan", required = false) String plan,
             @RequestParam(name = "lookup_key", required = false) String lookupKey,
             @RequestParam(name = "email", required = false) String email,
             @RequestParam(name = "password", required = false) String password,
@@ -80,6 +81,7 @@ public class AuthController {
             @RequestParam(name = "company_name", required = false) String companyName
     ) {
         CheckoutValidationRequest request = new CheckoutValidationRequest();
+        request.setPlan(plan);
         request.setLookupKey(lookupKey);
         request.setEmail(email);
         request.setPassword(password);
@@ -99,6 +101,7 @@ public class AuthController {
 
     @PostMapping({"/checkout/send-payment-link", "/checkout/send-payment-link/"})
     public ResponseEntity<CheckoutValidationResponse> sendPaymentLink(
+            @RequestParam(name = "plan", required = false) String plan,
             @RequestParam(name = "lookup_key", required = false) String lookupKey,
             @RequestParam(name = "email", required = false) String email,
             @RequestParam(name = "password", required = false) String password,
@@ -109,6 +112,7 @@ public class AuthController {
             HttpServletRequest httpServletRequest
     ) {
         CheckoutValidationRequest validationRequest = new CheckoutValidationRequest();
+        validationRequest.setPlan(plan);
         validationRequest.setLookupKey(lookupKey);
         validationRequest.setEmail(email);
         validationRequest.setPassword(password);
@@ -119,6 +123,7 @@ public class AuthController {
         checkoutValidationService.validate(validationRequest);
 
         CreateCheckoutSessionRequest request = new CreateCheckoutSessionRequest();
+        request.setPlan(plan);
         request.setLookupKey(lookupKey);
         request.setEmail(email);
         request.setPassword(password);
