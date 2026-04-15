@@ -119,6 +119,7 @@ com/salesway/analytics/entity/PageViewEvent.class
 com/salesway/analytics/service/PageViewTrackingService.class
 com/salesway/leads/enums/LeadAiInsightsStatus.class
 com/salesway/manager/dto/ManagerInviteCreateRequest.class
+com/salesway/billing/service/PlanCatalogService$CheckoutPlan.class
 com/salesway/leads/entity/LeadAnswer.class
 com/salesway/billing/controller/BillingController.class
 com/salesway/billing/entity/PendingSignupStatus.class
@@ -153,6 +154,7 @@ com/salesway/leads/enums/LeadEventType.class
 com/salesway/leads/controller/LeadFormController.class
 com/salesway/admin/dto/SuperAdminCompanyActivityResponse.class
 com/salesway/email/dto/InvitationEmailPayload.class
+com/salesway/billing/service/StripeBillingService$StripeOperationException.class
 com/salesway/leads/dto/LeadAiExplainabilityResponse.class
 com/salesway/leads/service/LeadDetailsService$ObjectionStrategy.class
 com/salesway/leads/dto/LeadQuestionResponse.class

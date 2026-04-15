@@ -70,6 +70,7 @@ public class StripeBillingController {
 
     private CreateCheckoutSessionRequest fromForm(MultiValueMap<String, String> formData) {
         CreateCheckoutSessionRequest request = new CreateCheckoutSessionRequest();
+        request.setPlan(formData.getFirst("plan"));
         request.setLookupKey(formData.getFirst("lookup_key"));
         request.setEmail(formData.getFirst("email"));
         request.setPassword(formData.getFirst("password"));

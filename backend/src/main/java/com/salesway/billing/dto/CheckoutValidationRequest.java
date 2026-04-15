@@ -3,6 +3,7 @@ package com.salesway.billing.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 public class CheckoutValidationRequest {
+    private String plan;
     private String lookupKey;
     private String email;
     private String password;
@@ -10,6 +11,14 @@ public class CheckoutValidationRequest {
     private String firstName;
     private String lastName;
     private String companyName;
+
+    public String getPlan() {
+        return plan;
+    }
+
+    public void setPlan(String plan) {
+        this.plan = plan;
+    }
 
     @JsonProperty("lookup_key")
     public String getLookupKey() {

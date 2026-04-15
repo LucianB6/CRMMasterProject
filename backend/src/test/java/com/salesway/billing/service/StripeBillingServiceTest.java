@@ -74,7 +74,11 @@ class StripeBillingServiceTest {
     @BeforeEach
     void setUp() {
         StripeProperties stripeProperties = new StripeProperties();
+        stripeProperties.setSecretKey("sk_test_123");
         stripeProperties.setWebhookSecret(WEBHOOK_SECRET);
+        stripeProperties.setStarterPriceId("price_starter");
+        stripeProperties.setProPriceId("price_pro");
+        stripeProperties.setEnterprisePriceId("price_enterprise");
         service = new StripeBillingService(
                 companyAccessService,
                 companyRepository,
@@ -90,6 +94,30 @@ class StripeBillingServiceTest {
                 planCatalogService,
                 emailService
         );
+    }
+
+    @Test
+    void starterSubscriptionDataIncludesTrialWhenEligible() {
+        var subscriptionData = service.buildSubscriptionData(
+                new PlanCatalogService.CheckoutPlan("starter", "STARTER", "starter_monthly", "price_starter"),
+                java.util.Map.of(),
+                true
+        );
+
+        assertThat(subscriptionData.getTrialPeriodDays()).isEqualTo(30L);
+        assertThat(subscriptionData.getMetadata()).containsEntry("plan", "starter");
+    }
+
+    @Test
+    void nonStarterSubscriptionDataOmitsTrial() {
+        var subscriptionData = service.buildSubscriptionData(
+                new PlanCatalogService.CheckoutPlan("pro", "PRO", "pro_monthly", "price_pro"),
+                java.util.Map.of(),
+                true
+        );
+
+        assertThat(subscriptionData.getTrialPeriodDays()).isNull();
+        assertThat(subscriptionData.getMetadata()).containsEntry("plan_code", "PRO");
     }
 
     @Test

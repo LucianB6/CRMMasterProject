@@ -27,12 +27,13 @@ import com.stripe.exception.SignatureVerificationException;
 import com.stripe.exception.StripeException;
 import com.stripe.model.Customer;
 import com.stripe.model.Event;
-import com.stripe.model.Price;
 import com.stripe.model.StripeObject;
 import com.stripe.model.Subscription;
 import com.stripe.model.checkout.Session;
 import com.stripe.net.Webhook;
 import com.stripe.param.CustomerCreateParams;
+import com.stripe.param.CustomerListParams;
+import com.stripe.param.SubscriptionListParams;
 import com.stripe.param.billingportal.SessionCreateParams;
 import jakarta.transaction.Transactional;
 import org.slf4j.Logger;
@@ -61,6 +62,7 @@ public class StripeBillingService {
     private static final String SUBSCRIPTION_CREATED = "customer.subscription.created";
     private static final String SUBSCRIPTION_UPDATED = "customer.subscription.updated";
     private static final String SUBSCRIPTION_DELETED = "customer.subscription.deleted";
+    private static final long STARTER_TRIAL_PERIOD_DAYS = 30L;
     private static final Duration PAYMENT_LINK_RATE_LIMIT_WINDOW = Duration.ofMinutes(2);
     private static final EnumSet<PendingSignupStatus> ACTIVE_PENDING_SIGNUP_STATUSES =
             EnumSet.of(PendingSignupStatus.PENDING, PendingSignupStatus.CHECKOUT_CREATED);
@@ -111,32 +113,37 @@ public class StripeBillingService {
     }
 
     public URI createCheckoutSession(CreateCheckoutSessionRequest request) {
-        String lookupKey = sanitizeLookupKey(request.getLookupKey());
+        PlanCatalogService.CheckoutPlan checkoutPlan = resolveCheckoutPlan(request);
+        String lookupKey = checkoutPlan.lookupKey();
         Optional<CheckoutContext> checkoutContext = resolveCheckoutContext();
         Optional<PendingSignup> pendingSignup = checkoutContext.isEmpty()
                 ? Optional.of(createPendingSignup(request, lookupKey, null))
                 : Optional.empty();
 
         try {
-            Price price = stripeCatalogService.findRecurringPriceByLookupKey(lookupKey);
+            boolean applyStarterTrial;
             com.stripe.param.checkout.SessionCreateParams.Builder sessionParamsBuilder = pendingSignup
-                    .map(signup -> buildSignupCheckoutSessionParams(lookupKey, signup, price))
-                    .orElseGet(() -> buildBaseCheckoutSessionParams(lookupKey, price));
+                    .map(signup -> {
+                        try {
+                            boolean applyTrial = shouldApplyStarterTrial(checkoutPlan, null, signup.getEmail(), null);
+                            return buildSignupCheckoutSessionParams(checkoutPlan, signup, applyTrial);
+                        } catch (StripeException exception) {
+                            throw new StripeOperationException(exception);
+                        }
+                    })
+                    .orElseGet(() -> buildBaseCheckoutSessionParams(checkoutPlan, false));
 
             if (checkoutContext.isPresent()) {
                 CheckoutContext context = checkoutContext.get();
                 Company company = context.company();
                 String customerId = ensureCustomer(company, context.user());
+                applyStarterTrial = shouldApplyStarterTrial(checkoutPlan, customerId, context.user().getEmail(), company);
                 sessionParamsBuilder
                         .setCustomer(customerId)
                         .setClientReferenceId(company.getId().toString())
                         .putMetadata("company_id", company.getId().toString())
                         .setSubscriptionData(
-                                com.stripe.param.checkout.SessionCreateParams.SubscriptionData.builder()
-                                        .putMetadata("company_id", company.getId().toString())
-                                        .putMetadata("lookup_key", lookupKey)
-                                        .putMetadata("plan_code", resolvePlanCode(lookupKey))
-                                        .build()
+                                buildSubscriptionData(checkoutPlan, Map.of("company_id", company.getId().toString()), applyStarterTrial)
                         );
             }
 
@@ -163,8 +170,8 @@ public class StripeBillingService {
 
             checkoutContext.ifPresent(context -> {
                 Company company = context.company();
-                company.setStripePriceId(price.getId());
-                company.setPlanCode(resolvePlanCode(lookupKey));
+                company.setStripePriceId(checkoutPlan.priceId());
+                company.setPlanCode(checkoutPlan.planCode());
                 companyRepository.save(company);
                 log.info("Created Stripe checkout session {} for company {}", session.getId(), company.getId());
             });
@@ -172,6 +179,9 @@ public class StripeBillingService {
                 log.info("Created anonymous Stripe checkout session {}", session.getId());
             }
             return URI.create(session.getUrl());
+        } catch (StripeOperationException exception) {
+            log.error("Failed to inspect Stripe subscription history for plan {}", checkoutPlan.plan(), exception.getCause());
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Failed to validate Stripe subscription history");
         } catch (StripeException exception) {
             log.error("Failed to create Stripe checkout session for lookup_key {}", lookupKey, exception);
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Failed to create Stripe checkout session");
@@ -179,13 +189,14 @@ public class StripeBillingService {
     }
 
     public void sendPaymentLink(CreateCheckoutSessionRequest request, String clientIp) {
-        String lookupKey = sanitizeLookupKey(request.getLookupKey());
+        PlanCatalogService.CheckoutPlan checkoutPlan = resolveCheckoutPlan(request);
+        String lookupKey = checkoutPlan.lookupKey();
         PendingSignup pendingSignup = createPendingSignup(request, lookupKey, clientIp);
 
         try {
-            Price price = stripeCatalogService.findRecurringPriceByLookupKey(lookupKey);
+            boolean applyStarterTrial = shouldApplyStarterTrial(checkoutPlan, null, pendingSignup.getEmail(), null);
             com.stripe.param.checkout.SessionCreateParams sessionParams =
-                    buildSignupCheckoutSessionParams(lookupKey, pendingSignup, price).build();
+                    buildSignupCheckoutSessionParams(checkoutPlan, pendingSignup, applyStarterTrial).build();
             Session session = Session.create(sessionParams);
             if (session.getUrl() == null || session.getUrl().isBlank()) {
                 throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Stripe checkout session did not return a redirect URL");
@@ -435,9 +446,87 @@ public class StripeBillingService {
         return customer.getId();
     }
 
+    private PlanCatalogService.CheckoutPlan resolveCheckoutPlan(CreateCheckoutSessionRequest request) {
+        String rawPlan = request.getPlan();
+        if (rawPlan == null || rawPlan.isBlank()) {
+            rawPlan = request.getLookupKey();
+        }
+        return planCatalogService.resolveCheckoutPlan(rawPlan);
+    }
+
+    private boolean shouldApplyStarterTrial(
+            PlanCatalogService.CheckoutPlan checkoutPlan,
+            String customerId,
+            String email,
+            Company company
+    ) throws StripeException {
+        if (!checkoutPlan.isStarter()) {
+            return false;
+        }
+        return !hasPriorStripeSubscription(customerId, email, company);
+    }
+
+    private boolean hasPriorStripeSubscription(String customerId, String email, Company company) throws StripeException {
+        if (company != null && hasLocalSubscriptionHistory(company)) {
+            return true;
+        }
+        if (customerId != null && !customerId.isBlank() && hasSubscriptionHistoryForCustomer(customerId)) {
+            return true;
+        }
+        if (email == null || email.isBlank()) {
+            return false;
+        }
+
+        CustomerListParams customerParams = CustomerListParams.builder()
+                .setEmail(email)
+                .setLimit(10L)
+                .build();
+        for (Customer customer : Customer.list(customerParams).getData()) {
+            if (hasSubscriptionHistoryForCustomer(customer.getId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasLocalSubscriptionHistory(Company company) {
+        if (company.getStripeSubscriptionId() != null && !company.getStripeSubscriptionId().isBlank()) {
+            return true;
+        }
+        String status = company.getSubscriptionStatus();
+        return status != null && !status.isBlank();
+    }
+
+    private boolean hasSubscriptionHistoryForCustomer(String customerId) throws StripeException {
+        // Stripe keeps canceled subscriptions attached to the Customer; status=all catches active, trialing, and canceled history.
+        SubscriptionListParams subscriptionParams = SubscriptionListParams.builder()
+                .setCustomer(customerId)
+                .setStatus(SubscriptionListParams.Status.ALL)
+                .setLimit(1L)
+                .build();
+        return !Subscription.list(subscriptionParams).getData().isEmpty();
+    }
+
+    com.stripe.param.checkout.SessionCreateParams.SubscriptionData buildSubscriptionData(
+            PlanCatalogService.CheckoutPlan checkoutPlan,
+            Map<String, String> metadata,
+            boolean applyStarterTrial
+    ) {
+        com.stripe.param.checkout.SessionCreateParams.SubscriptionData.Builder builder =
+                com.stripe.param.checkout.SessionCreateParams.SubscriptionData.builder()
+                        .putMetadata("plan", checkoutPlan.plan())
+                        .putMetadata("lookup_key", checkoutPlan.lookupKey())
+                        .putMetadata("plan_code", checkoutPlan.planCode());
+        metadata.forEach(builder::putMetadata);
+        if (applyStarterTrial && checkoutPlan.isStarter()) {
+            builder.setTrialPeriodDays(STARTER_TRIAL_PERIOD_DAYS);
+        }
+        return builder.build();
+    }
+
     private com.stripe.param.checkout.SessionCreateParams.Builder buildBaseCheckoutSessionParams(
-            String lookupKey,
-            Price price
+            PlanCatalogService.CheckoutPlan checkoutPlan,
+            boolean applyStarterTrial
     ) {
         return com.stripe.param.checkout.SessionCreateParams.builder()
                 .setMode(com.stripe.param.checkout.SessionCreateParams.Mode.SUBSCRIPTION)
@@ -446,39 +535,39 @@ public class StripeBillingService {
                 )
                 .setSuccessUrl(successUrl())
                 .setCancelUrl(cancelUrl())
-                .putMetadata("lookup_key", lookupKey)
-                .putMetadata("plan_code", resolvePlanCode(lookupKey))
+                .putMetadata("plan", checkoutPlan.plan())
+                .putMetadata("lookup_key", checkoutPlan.lookupKey())
+                .putMetadata("plan_code", checkoutPlan.planCode())
                 .addLineItem(
                         com.stripe.param.checkout.SessionCreateParams.LineItem.builder()
-                                .setPrice(price.getId())
+                                .setPrice(checkoutPlan.priceId())
                                 .setQuantity(1L)
                                 .build()
                 )
                 .setSubscriptionData(
-                        com.stripe.param.checkout.SessionCreateParams.SubscriptionData.builder()
-                                .putMetadata("lookup_key", lookupKey)
-                                .putMetadata("plan_code", resolvePlanCode(lookupKey))
-                                .build()
+                        buildSubscriptionData(checkoutPlan, Map.of(), applyStarterTrial)
                 );
     }
 
     private com.stripe.param.checkout.SessionCreateParams.Builder buildSignupCheckoutSessionParams(
-            String lookupKey,
+            PlanCatalogService.CheckoutPlan checkoutPlan,
             PendingSignup signup,
-            Price price
+            boolean applyStarterTrial
     ) {
-        return buildBaseCheckoutSessionParams(lookupKey, price)
+        return buildBaseCheckoutSessionParams(checkoutPlan, applyStarterTrial)
                 .setCustomerEmail(signup.getEmail())
                 .putMetadata("pending_signup_id", signup.getId().toString())
                 .putMetadata("email", signup.getEmail())
                 .putMetadata("signup_email", signup.getEmail())
                 .setSubscriptionData(
-                        com.stripe.param.checkout.SessionCreateParams.SubscriptionData.builder()
-                                .putMetadata("pending_signup_id", signup.getId().toString())
-                                .putMetadata("lookup_key", lookupKey)
-                                .putMetadata("plan_code", resolvePlanCode(lookupKey))
-                                .putMetadata("email", signup.getEmail())
-                                .build()
+                        buildSubscriptionData(
+                                checkoutPlan,
+                                Map.of(
+                                        "pending_signup_id", signup.getId().toString(),
+                                        "email", signup.getEmail()
+                                ),
+                                applyStarterTrial
+                        )
                 );
     }
 
@@ -771,5 +860,11 @@ public class StripeBillingService {
     }
 
     private record CheckoutContext(Company company, User user) {
+    }
+
+    private static class StripeOperationException extends RuntimeException {
+        StripeOperationException(StripeException cause) {
+            super(cause);
+        }
     }
 }
