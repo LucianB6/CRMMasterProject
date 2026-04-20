@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Instant;
 import java.util.EnumSet;
 
 @Service
@@ -45,6 +46,34 @@ public class SubscriptionAccessService {
     public void assertSeatAvailableForAcceptance(Company company) {
         if (activeSeatCount(company) >= seatLimit(company)) {
             throw seatLimitExceeded();
+        }
+    }
+
+    public void assertAiFeaturesAvailable(Company company) {
+        assertSubscriptionActive(company);
+    }
+
+    public void assertCanCreateCampaign(Company company) {
+        assertSubscriptionActive(company);
+    }
+
+    public void assertCanCreateLead(Company company) {
+        assertSubscriptionActive(company);
+    }
+
+    public boolean isSubscriptionActive(Company company) {
+        String status = company.getSubscriptionStatus();
+        return ("active".equalsIgnoreCase(status) || "trialing".equalsIgnoreCase(status))
+                && company.getSubscriptionCancelledAt() == null
+                && company.getSubscriptionGraceUntil() == null;
+    }
+
+    private void assertSubscriptionActive(Company company) {
+        if (!isSubscriptionActive(company)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Subscription is not active");
+        }
+        if (company.getSubscriptionGraceUntil() != null && company.getSubscriptionGraceUntil().isBefore(Instant.now())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Subscription grace period expired");
         }
     }
 

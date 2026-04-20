@@ -50,6 +50,15 @@ public class Company extends AuditedEntity {
     @Column(name = "subscription_current_period_end")
     private Instant subscriptionCurrentPeriodEnd;
 
+    @Column(name = "subscription_cancelled_at")
+    private Instant subscriptionCancelledAt;
+
+    @Column(name = "subscription_grace_until")
+    private Instant subscriptionGraceUntil;
+
+    @Column(name = "leads_deactivated_at")
+    private Instant leadsDeactivatedAt;
+
     public String getName() {
         return name;
     }
@@ -120,5 +129,29 @@ public class Company extends AuditedEntity {
 
     public void setSubscriptionCurrentPeriodEnd(Instant subscriptionCurrentPeriodEnd) {
         this.subscriptionCurrentPeriodEnd = subscriptionCurrentPeriodEnd;
+    }
+
+    public Instant getSubscriptionCancelledAt() {
+        return subscriptionCancelledAt;
+    }
+
+    public void setSubscriptionCancelledAt(Instant subscriptionCancelledAt) {
+        this.subscriptionCancelledAt = subscriptionCancelledAt;
+    }
+
+    public Instant getSubscriptionGraceUntil() {
+        return subscriptionGraceUntil;
+    }
+
+    public void setSubscriptionGraceUntil(Instant subscriptionGraceUntil) {
+        this.subscriptionGraceUntil = subscriptionGraceUntil;
+    }
+
+    public Instant getLeadsDeactivatedAt() {
+        return leadsDeactivatedAt;
+    }
+
+    public void setLeadsDeactivatedAt(Instant leadsDeactivatedAt) {
+        this.leadsDeactivatedAt = leadsDeactivatedAt;
     }
 }

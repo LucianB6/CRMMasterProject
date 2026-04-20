@@ -2,6 +2,7 @@ package com.salesway.leads.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.salesway.billing.service.SubscriptionAccessService;
 import com.salesway.companies.entity.Company;
 import com.salesway.leads.dto.PublicLeadSubmitRequest;
 import com.salesway.leads.entity.Lead;
@@ -55,6 +56,8 @@ class LeadCaptureServiceTest {
     private LeadAnswerRepository answerRepository;
     @Mock
     private LeadEventService leadEventService;
+    @Mock
+    private SubscriptionAccessService subscriptionAccessService;
 
     private LeadCaptureService service;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -73,6 +76,7 @@ class LeadCaptureServiceTest {
                 answerRepository,
                 leadEventService,
                 objectMapper,
+                subscriptionAccessService,
                 7
         );
 

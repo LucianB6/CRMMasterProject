@@ -3,6 +3,7 @@ package com.salesway.leads.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.salesway.billing.service.SubscriptionAccessService;
 import com.salesway.leads.dto.LeadFormResponse;
 import com.salesway.leads.dto.LeadQuestionResponse;
 import com.salesway.leads.dto.PublicLeadSubmitRequest;
@@ -45,6 +46,7 @@ public class LeadCaptureService {
     private final LeadEventService leadEventService;
     private final ObjectMapper objectMapper;
     private final int dedupeWindowDays;
+    private final SubscriptionAccessService subscriptionAccessService;
 
     public LeadCaptureService(
             LeadFormRepository leadFormRepository,
@@ -54,6 +56,7 @@ public class LeadCaptureService {
             LeadAnswerRepository answerRepository,
             LeadEventService leadEventService,
             ObjectMapper objectMapper,
+            SubscriptionAccessService subscriptionAccessService,
             @org.springframework.beans.factory.annotation.Value("${app.leads.dedupe-window-days:7}") int dedupeWindowDays
     ) {
         this.leadFormRepository = leadFormRepository;
@@ -63,6 +66,7 @@ public class LeadCaptureService {
         this.answerRepository = answerRepository;
         this.leadEventService = leadEventService;
         this.objectMapper = objectMapper;
+        this.subscriptionAccessService = subscriptionAccessService;
         this.dedupeWindowDays = dedupeWindowDays;
     }
 
@@ -84,6 +88,7 @@ public class LeadCaptureService {
     public PublicLeadSubmitResponse submitLead(String publicSlug, PublicLeadSubmitRequest request) {
         LeadForm form = leadFormRepository.findByPublicSlugAndIsActiveTrue(publicSlug)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead form not found"));
+        subscriptionAccessService.assertCanCreateLead(form.getCompany());
 
         List<LeadFormQuestion> activeQuestions = questionRepository.findByLeadFormIdAndIsActiveTrue(form.getId());
         Map<UUID, LeadFormQuestion> questionsById = new HashMap<>();

@@ -5,6 +5,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -44,6 +45,15 @@ public interface LeadRepository extends JpaRepository<Lead, UUID>, JpaSpecificat
     );
 
     long countByCompanyId(UUID companyId);
+
+    @Modifying
+    @Query("""
+            update Lead l
+            set l.status = 'inactive'
+            where l.company.id = :companyId
+              and lower(l.status) <> 'inactive'
+            """)
+    int deactivateByCompanyId(@Param("companyId") UUID companyId);
 
     @Query("""
             select max(l.lastActivityAt) from Lead l

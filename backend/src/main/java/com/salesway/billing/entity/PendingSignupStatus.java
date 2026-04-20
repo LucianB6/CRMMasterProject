@@ -4,5 +4,6 @@ public enum PendingSignupStatus {
     PENDING,
     CHECKOUT_CREATED,
     COMPLETED,
+    EXPIRED,
     FAILED
 }

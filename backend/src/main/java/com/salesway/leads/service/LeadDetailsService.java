@@ -402,6 +402,7 @@ public class LeadDetailsService {
         CompanyMembership membership = companyAccessService.getActiveMembership();
         UUID companyId = membership.getCompany().getId();
         Lead lead = getLeadOrThrow(leadId, membership);
+        billingUsageService.assertUsageAvailable(lead.getCompany(), UsageType.AI_INSIGHTS, 1);
         expireStaleInFlightInsightsStatus(lead);
         AiInsightsRefreshState refreshState = loadAiInsightsRefreshState(lead, companyId);
         KbDocument activeKbDocument = refreshState.activeKbDocument();

@@ -6,6 +6,9 @@ public record BillingCurrentPlanResponse(
         String planCode,
         String subscriptionStatus,
         Instant currentPeriodEnd,
+        Instant cancelledAt,
+        Instant graceUntil,
+        Instant leadsDeactivatedAt,
         Integer includedSeats,
         Integer aiAssistantLimit,
         Integer aiInsightsLimit
