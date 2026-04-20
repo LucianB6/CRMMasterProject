@@ -1,5 +1,6 @@
 package com.salesway.leads.service;
 
+import com.salesway.billing.service.SubscriptionAccessService;
 import com.salesway.auth.entity.User;
 import com.salesway.companies.entity.Company;
 import com.salesway.leads.dto.LeadAiInsightsRegenerateResponse;
@@ -28,6 +29,7 @@ class LeadAiInsightsAsyncServiceTest {
     private ManagerAccessService managerAccessService;
     private LeadAiInsightsQueueService leadAiInsightsQueueService;
     private LeadDetailsService leadDetailsService;
+    private SubscriptionAccessService subscriptionAccessService;
     private LeadAiInsightsAsyncService service;
     private Lead lead;
     private UUID leadId;
@@ -40,12 +42,14 @@ class LeadAiInsightsAsyncServiceTest {
         managerAccessService = mock(ManagerAccessService.class);
         leadAiInsightsQueueService = mock(LeadAiInsightsQueueService.class);
         leadDetailsService = mock(LeadDetailsService.class);
+        subscriptionAccessService = mock(SubscriptionAccessService.class);
         service = new LeadAiInsightsAsyncService(
                 leadRepository,
                 leadAiInsightSnapshotRepository,
                 managerAccessService,
                 leadAiInsightsQueueService,
                 leadDetailsService,
+                subscriptionAccessService,
                 60_000L
         );
 

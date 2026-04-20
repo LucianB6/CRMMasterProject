@@ -47,7 +47,6 @@ public class SecurityConfig {
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/create-checkout-session", "/create-checkout-session/",
-                                "/create-portal-session", "/create-portal-session/",
                                 "/webhook", "/webhook/"
                         ).permitAll()
                         .requestMatchers(HttpMethod.GET, "/invitations/preview", "/invitations/preview/").permitAll()

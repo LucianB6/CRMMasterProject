@@ -1,5 +1,6 @@
 package com.salesway.leads.service;
 
+import com.salesway.billing.service.SubscriptionAccessService;
 import com.salesway.companies.entity.Company;
 import com.salesway.leads.dto.LeadCampaignCreateRequest;
 import com.salesway.leads.dto.LeadCampaignUpdateRequest;
@@ -40,6 +41,7 @@ class LeadCampaignServiceTest {
         leadFormRepository = mock(LeadFormRepository.class);
         leadFormCampaignRepository = mock(LeadFormCampaignRepository.class);
         ManagerAccessService managerAccessService = mock(ManagerAccessService.class);
+        SubscriptionAccessService subscriptionAccessService = mock(SubscriptionAccessService.class);
 
         companyId = UUID.randomUUID();
         formId = UUID.randomUUID();
@@ -56,7 +58,12 @@ class LeadCampaignServiceTest {
         form.setPublicSlug("lead-form-acme");
         when(leadFormRepository.findByIdAndCompanyId(formId, companyId)).thenReturn(Optional.of(form));
 
-        leadCampaignService = new LeadCampaignService(leadFormRepository, leadFormCampaignRepository, managerAccessService);
+        leadCampaignService = new LeadCampaignService(
+                leadFormRepository,
+                leadFormCampaignRepository,
+                managerAccessService,
+                subscriptionAccessService
+        );
     }
 
     @Test

@@ -31,19 +31,22 @@ public class BillingUsageService {
     private final PlanCatalogService planCatalogService;
     private final CompanyMembershipRepository companyMembershipRepository;
     private final InvitationRepository invitationRepository;
+    private final SubscriptionAccessService subscriptionAccessService;
 
     public BillingUsageService(
             CompanyAccessService companyAccessService,
             CompanyUsageBalanceRepository companyUsageBalanceRepository,
             PlanCatalogService planCatalogService,
             CompanyMembershipRepository companyMembershipRepository,
-            InvitationRepository invitationRepository
+            InvitationRepository invitationRepository,
+            SubscriptionAccessService subscriptionAccessService
     ) {
         this.companyAccessService = companyAccessService;
         this.companyUsageBalanceRepository = companyUsageBalanceRepository;
         this.planCatalogService = planCatalogService;
         this.companyMembershipRepository = companyMembershipRepository;
         this.invitationRepository = invitationRepository;
+        this.subscriptionAccessService = subscriptionAccessService;
     }
 
     @Transactional
@@ -54,6 +57,9 @@ public class BillingUsageService {
                 plan.planCode(),
                 company.getSubscriptionStatus(),
                 company.getSubscriptionCurrentPeriodEnd(),
+                company.getSubscriptionCancelledAt(),
+                company.getSubscriptionGraceUntil(),
+                company.getLeadsDeactivatedAt(),
                 plan.includedSeats(),
                 plan.usageLimits().getOrDefault(UsageType.AI_ASSISTANT, 0),
                 plan.usageLimits().getOrDefault(UsageType.AI_INSIGHTS, 0)
@@ -106,8 +112,8 @@ public class BillingUsageService {
         return new BillingEntitlementsResponse(
                 plan.planCode(),
                 company.getSubscriptionStatus(),
-                assistantUsage.limit() > 0 && "active".equalsIgnoreCase(nullToEmpty(company.getSubscriptionStatus())),
-                insightsUsage.limit() > 0 && "active".equalsIgnoreCase(nullToEmpty(company.getSubscriptionStatus())),
+                assistantUsage.limit() > 0 && subscriptionAccessService.isSubscriptionActive(company),
+                insightsUsage.limit() > 0 && subscriptionAccessService.isSubscriptionActive(company),
                 activeSeats + pendingInvites < plan.includedSeats(),
                 activeSeats < plan.includedSeats(),
                 plan.includedSeats(),
@@ -128,6 +134,7 @@ public class BillingUsageService {
         if (units <= 0) {
             return;
         }
+        subscriptionAccessService.assertAiFeaturesAvailable(company);
         LocalDate periodStart = currentPeriodStart();
         PlanCatalogService.PlanDefinition plan = planCatalogService.getPlan(company.getPlanCode());
         int limit = plan.usageLimits().getOrDefault(usageType, 0);
@@ -157,6 +164,7 @@ public class BillingUsageService {
         if (units <= 0) {
             return;
         }
+        subscriptionAccessService.assertAiFeaturesAvailable(company);
         LocalDate periodStart = currentPeriodStart();
         int limit = planCatalogService.getLimit(company.getPlanCode(), usageType);
         int used = companyUsageBalanceRepository
@@ -181,10 +189,6 @@ public class BillingUsageService {
                 .orElse(0);
         int limit = planCatalogService.getLimit(company.getPlanCode(), usageType);
         return new UsageSnapshot(used, limit, Math.max(limit - used, 0));
-    }
-
-    private String nullToEmpty(String value) {
-        return value == null ? "" : value;
     }
 
     private record UsageSnapshot(int used, int limit, int remaining) {

@@ -3,6 +3,8 @@ package com.salesway.companies.repository;
 import com.salesway.companies.entity.Company;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -12,4 +14,6 @@ public interface CompanyRepository extends JpaRepository<Company, UUID> {
     Optional<Company> findByStripeCustomerId(String stripeCustomerId);
 
     Optional<Company> findByStripeSubscriptionId(String stripeSubscriptionId);
+
+    List<Company> findBySubscriptionGraceUntilBeforeAndLeadsDeactivatedAtIsNull(Instant now);
 }

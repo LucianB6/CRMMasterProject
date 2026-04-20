@@ -1,5 +1,6 @@
 package com.salesway.leads.service;
 
+import com.salesway.billing.service.SubscriptionAccessService;
 import com.salesway.leads.dto.LeadScoringEnqueueResponse;
 import com.salesway.leads.entity.Lead;
 import com.salesway.leads.entity.LeadAnswer;
@@ -33,19 +34,22 @@ public class LeadAsyncScoringService {
     private final LeadAnswerRepository leadAnswerRepository;
     private final ManagerAccessService managerAccessService;
     private final LeadScoringQueueService leadScoringQueueService;
+    private final SubscriptionAccessService subscriptionAccessService;
 
     public LeadAsyncScoringService(
             LeadRepository leadRepository,
             LeadStandardFieldsRepository leadStandardFieldsRepository,
             LeadAnswerRepository leadAnswerRepository,
             ManagerAccessService managerAccessService,
-            LeadScoringQueueService leadScoringQueueService
+            LeadScoringQueueService leadScoringQueueService,
+            SubscriptionAccessService subscriptionAccessService
     ) {
         this.leadRepository = leadRepository;
         this.leadStandardFieldsRepository = leadStandardFieldsRepository;
         this.leadAnswerRepository = leadAnswerRepository;
         this.managerAccessService = managerAccessService;
         this.leadScoringQueueService = leadScoringQueueService;
+        this.subscriptionAccessService = subscriptionAccessService;
     }
 
     @Transactional
@@ -53,6 +57,7 @@ public class LeadAsyncScoringService {
         CompanyMembership membership = managerAccessService.getManagerMembership();
         Lead lead = leadRepository.findByIdAndCompanyId(leadId, membership.getCompany().getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead not found"));
+        subscriptionAccessService.assertAiFeaturesAvailable(lead.getCompany());
 
         lead.setAiStatus(LeadAiStatus.PENDING.name());
         lead.setAiError(null);
@@ -85,6 +90,7 @@ public class LeadAsyncScoringService {
     public ScoringResult computeScore(UUID leadId) {
         Lead lead = leadRepository.findById(leadId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead not found"));
+        subscriptionAccessService.assertAiFeaturesAvailable(lead.getCompany());
         LeadStandardFields standardFields = leadStandardFieldsRepository.findByLeadId(leadId).orElse(null);
         List<LeadAnswer> answers = leadAnswerRepository.findByLeadIdOrderByDisplayOrderSnapshotAscCreatedAtAsc(leadId);
         boolean hasEmail = standardFields != null && standardFields.getEmail() != null && !standardFields.getEmail().isBlank();

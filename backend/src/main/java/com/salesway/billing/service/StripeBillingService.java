@@ -4,7 +4,9 @@ import com.salesway.auth.dto.LoginResponse;
 import com.salesway.auth.entity.User;
 import com.salesway.auth.repository.UserRepository;
 import com.salesway.billing.config.StripeProperties;
+import com.salesway.billing.dto.CancelSubscriptionResponse;
 import com.salesway.billing.dto.CreateCheckoutSessionRequest;
+import com.salesway.billing.dto.ReactivateSubscriptionResponse;
 import com.salesway.billing.entity.PendingSignup;
 import com.salesway.billing.entity.PendingSignupStatus;
 import com.salesway.billing.entity.ProcessedStripeEvent;
@@ -34,6 +36,7 @@ import com.stripe.net.Webhook;
 import com.stripe.param.CustomerCreateParams;
 import com.stripe.param.CustomerListParams;
 import com.stripe.param.SubscriptionListParams;
+import com.stripe.param.SubscriptionUpdateParams;
 import com.stripe.param.billingportal.SessionCreateParams;
 import jakarta.transaction.Transactional;
 import org.slf4j.Logger;
@@ -63,7 +66,9 @@ public class StripeBillingService {
     private static final String SUBSCRIPTION_UPDATED = "customer.subscription.updated";
     private static final String SUBSCRIPTION_DELETED = "customer.subscription.deleted";
     private static final long STARTER_TRIAL_PERIOD_DAYS = 30L;
+    private static final Duration SUBSCRIPTION_CANCELLATION_GRACE = Duration.ofDays(30);
     private static final Duration PAYMENT_LINK_RATE_LIMIT_WINDOW = Duration.ofMinutes(2);
+    private static final Duration PENDING_SIGNUP_EXPIRATION = Duration.ofMinutes(30);
     private static final EnumSet<PendingSignupStatus> ACTIVE_PENDING_SIGNUP_STATUSES =
             EnumSet.of(PendingSignupStatus.PENDING, PendingSignupStatus.CHECKOUT_CREATED);
 
@@ -170,9 +175,6 @@ public class StripeBillingService {
 
             checkoutContext.ifPresent(context -> {
                 Company company = context.company();
-                company.setStripePriceId(checkoutPlan.priceId());
-                company.setPlanCode(checkoutPlan.planCode());
-                companyRepository.save(company);
                 log.info("Created Stripe checkout session {} for company {}", session.getId(), company.getId());
             });
             if (checkoutContext.isEmpty()) {
@@ -235,6 +237,7 @@ public class StripeBillingService {
 
     public URI createPortalSession(String rawSessionId) {
         String sessionId = sanitizeSessionId(rawSessionId);
+        Company company = companyAccessService.getActiveMembership().getCompany();
 
         try {
             Session checkoutSession = Session.retrieve(sessionId);
@@ -242,6 +245,7 @@ public class StripeBillingService {
             if (customerId == null || customerId.isBlank()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Checkout session is missing Stripe customer information");
             }
+            assertPortalSessionOwnership(company, checkoutSession, customerId);
 
             com.stripe.model.billingportal.Session portalSession = com.stripe.model.billingportal.Session.create(
                     SessionCreateParams.builder()
@@ -253,18 +257,111 @@ public class StripeBillingService {
                 throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Stripe billing portal did not return a redirect URL");
             }
 
-            companyRepository.findByStripeCustomerId(customerId).ifPresent(company -> {
-                if (company.getStripeCustomerId() == null) {
-                    company.setStripeCustomerId(customerId);
-                    companyRepository.save(company);
-                }
-            });
             log.info("Created Stripe billing portal session for checkout session {}", sessionId);
             return URI.create(portalSession.getUrl());
         } catch (StripeException exception) {
             log.error("Failed to create Stripe portal session for session_id {}", sessionId, exception);
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Failed to create Stripe billing portal session");
         }
+    }
+
+    @Transactional
+    public CancelSubscriptionResponse cancelCurrentSubscription() {
+        Company company = companyAccessService.getActiveMembership().getCompany();
+        String subscriptionId = company.getStripeSubscriptionId();
+        if (subscriptionId == null || subscriptionId.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Company has no Stripe subscription to cancel");
+        }
+
+        try {
+            Subscription subscription = Subscription.retrieve(subscriptionId);
+            if (!"canceled".equalsIgnoreCase(subscription.getStatus())) {
+                subscription.update(SubscriptionUpdateParams.builder()
+                        .setCancelAtPeriodEnd(true)
+                        .build());
+            }
+        } catch (StripeException exception) {
+            log.error("Failed to cancel Stripe subscription {} for company {}", subscriptionId, company.getId(), exception);
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Failed to cancel Stripe subscription");
+        }
+
+        applySubscriptionCancellation(company, Instant.now());
+        return new CancelSubscriptionResponse(
+                "Subscription canceled",
+                company.getSubscriptionStatus(),
+                company.getSubscriptionCancelledAt(),
+                company.getSubscriptionGraceUntil()
+        );
+    }
+
+    @Transactional
+    public void syncCurrentSubscriptionSnapshotIfMissingPeriodEnd() {
+        Company company = companyAccessService.getActiveMembership().getCompany();
+        if (company.getSubscriptionCurrentPeriodEnd() != null) {
+            return;
+        }
+        String subscriptionId = company.getStripeSubscriptionId();
+        if (subscriptionId == null || subscriptionId.isBlank()) {
+            return;
+        }
+
+        try {
+            Subscription subscription = Subscription.retrieve(subscriptionId);
+            company.setSubscriptionStatus(subscription.getStatus());
+            company.setStripePriceId(resolvePriceId(subscription));
+            company.setPlanCode(resolvePlanCode(resolveLookupKey(subscription, company.getPlanCode())));
+            company.setSubscriptionCurrentPeriodEnd(resolveCurrentPeriodEnd(subscription));
+            synchronizeCancellationState(company, subscription);
+            companyRepository.save(company);
+            log.info("Synchronized missing subscription period end for company {}", company.getId());
+        } catch (StripeException exception) {
+            log.warn(
+                    "Could not synchronize missing subscription period end for company {} and subscription {}",
+                    company.getId(),
+                    subscriptionId,
+                    exception
+            );
+        }
+    }
+
+    @Transactional
+    public ReactivateSubscriptionResponse reactivateCurrentSubscription() {
+        Company company = companyAccessService.getActiveMembership().getCompany();
+        String subscriptionId = company.getStripeSubscriptionId();
+        if (subscriptionId == null || subscriptionId.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Company has no Stripe subscription to reactivate");
+        }
+
+        Subscription subscription;
+        try {
+            subscription = Subscription.retrieve(subscriptionId);
+            if ("canceled".equalsIgnoreCase(subscription.getStatus())) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Stripe subscription already ended; create a new checkout session"
+                );
+            }
+            subscription = subscription.update(SubscriptionUpdateParams.builder()
+                    .setCancelAtPeriodEnd(false)
+                    .build());
+        } catch (ResponseStatusException exception) {
+            throw exception;
+        } catch (StripeException exception) {
+            log.error("Failed to reactivate Stripe subscription {} for company {}", subscriptionId, company.getId(), exception);
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Failed to reactivate Stripe subscription");
+        }
+
+        company.setSubscriptionStatus(subscription.getStatus());
+        company.setSubscriptionCurrentPeriodEnd(resolveCurrentPeriodEnd(subscription));
+        clearSubscriptionCancellation(company);
+        companyRepository.save(company);
+        log.info("event=subscription_reactivated company_id={} stripe_subscription_id={}", company.getId(), subscriptionId);
+
+        return new ReactivateSubscriptionResponse(
+                "Subscription reactivated",
+                company.getSubscriptionStatus(),
+                company.getSubscriptionCurrentPeriodEnd()
+        );
     }
 
     @Transactional
@@ -326,7 +423,9 @@ public class StripeBillingService {
         Company resolvedCompany = company.get();
         resolvedCompany.setStripeCustomerId(session.getCustomer());
         resolvedCompany.setStripeSubscriptionId(session.getSubscription());
-        resolvedCompany.setSubscriptionStatus("active");
+        resolvedCompany.setSubscriptionStatus(resolveSessionSubscriptionStatus(session));
+        resolvedCompany.setSubscriptionCurrentPeriodEnd(resolveSessionCurrentPeriodEnd(session));
+        clearSubscriptionCancellation(resolvedCompany);
         resolvedCompany.setPlanCode(resolvePlanCode(Optional.ofNullable(session.getMetadata()).orElse(Map.of()).get("lookup_key")));
         companyRepository.save(resolvedCompany);
         log.info("Processed Stripe checkout.session.completed for company {}", resolvedCompany.getId());
@@ -346,6 +445,7 @@ public class StripeBillingService {
         resolvedCompany.setStripePriceId(resolvePriceId(subscription));
         resolvedCompany.setPlanCode(resolvePlanCode(resolveLookupKey(subscription, resolvedCompany.getPlanCode())));
         resolvedCompany.setSubscriptionCurrentPeriodEnd(resolveCurrentPeriodEnd(subscription));
+        synchronizeCancellationState(resolvedCompany, subscription);
         companyRepository.save(resolvedCompany);
         log.info("Processed Stripe subscription event {} for company {}", subscription.getStatus(), resolvedCompany.getId());
     }
@@ -396,7 +496,7 @@ public class StripeBillingService {
         if (pendingSignup.getStatus() != PendingSignupStatus.COMPLETED) {
             try {
                 Session session = Session.retrieve(sessionId);
-                if (!"complete".equalsIgnoreCase(session.getStatus()) || "paid".equalsIgnoreCase(session.getPaymentStatus()) == false) {
+                if (!"complete".equalsIgnoreCase(session.getStatus()) || !isSuccessfulCheckoutPaymentStatus(session.getPaymentStatus())) {
                     throw new ResponseStatusException(HttpStatus.CONFLICT, "Checkout session is not paid yet");
                 }
                 synchronizePendingSignupFromCheckoutSession(session);
@@ -444,6 +544,51 @@ public class StripeBillingService {
         company.setStripeCustomerId(customer.getId());
         companyRepository.save(company);
         return customer.getId();
+    }
+
+    private void applySubscriptionCancellation(Company company, Instant cancelledAt) {
+        company.setSubscriptionStatus("canceled");
+        company.setSubscriptionCancelledAt(cancelledAt);
+        company.setSubscriptionGraceUntil(cancelledAt.plus(SUBSCRIPTION_CANCELLATION_GRACE));
+        company.setLeadsDeactivatedAt(null);
+        companyRepository.save(company);
+        log.info(
+                "event=subscription_canceled company_id={} stripe_subscription_id={} grace_until={}",
+                company.getId(),
+                company.getStripeSubscriptionId(),
+                company.getSubscriptionGraceUntil()
+        );
+    }
+
+    private void synchronizeCancellationState(Company company, Subscription subscription) {
+        String status = subscription.getStatus();
+        if (Boolean.TRUE.equals(subscription.getCancelAtPeriodEnd())) {
+            Instant cancelledAt = company.getSubscriptionCancelledAt() == null
+                    ? Instant.now()
+                    : company.getSubscriptionCancelledAt();
+            applyCancellationFields(company, cancelledAt);
+            return;
+        }
+        if ("active".equalsIgnoreCase(status) || "trialing".equalsIgnoreCase(status)) {
+            clearSubscriptionCancellation(company);
+            return;
+        }
+        if ("canceled".equalsIgnoreCase(status) && company.getSubscriptionCancelledAt() == null) {
+            Long canceledAt = subscription.getCanceledAt();
+            applyCancellationFields(company, canceledAt == null ? Instant.now() : Instant.ofEpochSecond(canceledAt));
+        }
+    }
+
+    private void applyCancellationFields(Company company, Instant cancelledAt) {
+        company.setSubscriptionCancelledAt(cancelledAt);
+        company.setSubscriptionGraceUntil(cancelledAt.plus(SUBSCRIPTION_CANCELLATION_GRACE));
+        company.setLeadsDeactivatedAt(null);
+    }
+
+    private void clearSubscriptionCancellation(Company company) {
+        company.setSubscriptionCancelledAt(null);
+        company.setSubscriptionGraceUntil(null);
+        company.setLeadsDeactivatedAt(null);
     }
 
     private PlanCatalogService.CheckoutPlan resolveCheckoutPlan(CreateCheckoutSessionRequest request) {
@@ -528,7 +673,8 @@ public class StripeBillingService {
             PlanCatalogService.CheckoutPlan checkoutPlan,
             boolean applyStarterTrial
     ) {
-        return com.stripe.param.checkout.SessionCreateParams.builder()
+        com.stripe.param.checkout.SessionCreateParams.Builder builder =
+                com.stripe.param.checkout.SessionCreateParams.builder()
                 .setMode(com.stripe.param.checkout.SessionCreateParams.Mode.SUBSCRIPTION)
                 .setBillingAddressCollection(
                         com.stripe.param.checkout.SessionCreateParams.BillingAddressCollection.AUTO
@@ -547,6 +693,19 @@ public class StripeBillingService {
                 .setSubscriptionData(
                         buildSubscriptionData(checkoutPlan, Map.of(), applyStarterTrial)
                 );
+        if (shouldCollectPaymentMethodUpfront(checkoutPlan, applyStarterTrial)) {
+            builder.setPaymentMethodCollection(
+                    com.stripe.param.checkout.SessionCreateParams.PaymentMethodCollection.ALWAYS
+            );
+        }
+        return builder;
+    }
+
+    boolean shouldCollectPaymentMethodUpfront(
+            PlanCatalogService.CheckoutPlan checkoutPlan,
+            boolean applyStarterTrial
+    ) {
+        return applyStarterTrial && checkoutPlan.isStarter();
     }
 
     private com.stripe.param.checkout.SessionCreateParams.Builder buildSignupCheckoutSessionParams(
@@ -609,6 +768,8 @@ public class StripeBillingService {
             );
         }
 
+        expireStalePendingSignups(email);
+
         if (pendingSignupRepository.existsByEmailIgnoreCaseAndStatusIn(email, ACTIVE_PENDING_SIGNUP_STATUSES)) {
             log.info("event=validation_failed reason=active_pending_signup email={}", email);
             throw new FieldValidationException(
@@ -629,6 +790,25 @@ public class StripeBillingService {
         pendingSignup.setStatus(PendingSignupStatus.PENDING);
         log.info("event=pending_signup_created lookup_key={} email={}", lookupKey, email);
         return pendingSignupRepository.save(pendingSignup);
+    }
+
+    void expireStalePendingSignups(String email) {
+        Instant expiresBefore = Instant.now().minus(PENDING_SIGNUP_EXPIRATION);
+        List<PendingSignup> staleSignups = pendingSignupRepository.findByEmailIgnoreCaseAndStatusInAndCreatedAtBefore(
+                email,
+                ACTIVE_PENDING_SIGNUP_STATUSES,
+                expiresBefore
+        );
+        if (staleSignups.isEmpty()) {
+            return;
+        }
+
+        staleSignups.forEach(signup -> {
+            signup.setStatus(PendingSignupStatus.EXPIRED);
+            signup.setFailureReason("Checkout was not completed within 30 minutes");
+        });
+        pendingSignupRepository.saveAll(staleSignups);
+        log.info("event=pending_signups_expired count={} email={}", staleSignups.size(), email);
     }
 
     private void enforcePaymentLinkRateLimit(String email, String clientIp) {
@@ -678,7 +858,8 @@ public class StripeBillingService {
             company.setPlanCode(pendingSignup.getPlanCode());
             company.setStripeCustomerId(session.getCustomer());
             company.setStripeSubscriptionId(session.getSubscription());
-            company.setSubscriptionStatus("active");
+            company.setSubscriptionStatus(resolveSessionSubscriptionStatus(session));
+            company.setSubscriptionCurrentPeriodEnd(resolveSessionCurrentPeriodEnd(session));
             company = companyRepository.save(company);
 
             CompanyMembership membership = new CompanyMembership();
@@ -717,6 +898,38 @@ public class StripeBillingService {
         pendingSignup.setStatus(PendingSignupStatus.FAILED);
         pendingSignup.setFailureReason(reason);
         pendingSignupRepository.save(pendingSignup);
+    }
+
+    void assertPortalSessionOwnership(Company company, Session checkoutSession, String customerId) {
+        String companyCustomerId = company.getStripeCustomerId();
+        if (companyCustomerId != null && !companyCustomerId.isBlank()) {
+            if (!companyCustomerId.equals(customerId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Checkout session does not belong to the active company");
+            }
+            return;
+        }
+
+        String metadataCompanyId = Optional.ofNullable(checkoutSession.getMetadata()).orElse(Map.of()).get("company_id");
+        if (metadataCompanyId != null && !metadataCompanyId.isBlank()) {
+            UUID checkoutCompanyId = parseUuid(metadataCompanyId);
+            if (!company.getId().equals(checkoutCompanyId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Checkout session does not belong to the active company");
+            }
+            company.setStripeCustomerId(customerId);
+            companyRepository.save(company);
+            return;
+        }
+
+        if (companyRepository.findByStripeCustomerId(customerId)
+                .map(Company::getId)
+                .filter(company.getId()::equals)
+                .isPresent()) {
+            company.setStripeCustomerId(customerId);
+            companyRepository.save(company);
+            return;
+        }
+
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Checkout session does not belong to the active company");
     }
 
     private Optional<PendingSignup> resolvePendingSignup(Session session) {
@@ -806,6 +1019,49 @@ public class StripeBillingService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "session_id must be a valid Stripe Checkout Session id");
         }
         return sessionId;
+    }
+
+    boolean isSuccessfulCheckoutPaymentStatus(String paymentStatus) {
+        return "paid".equalsIgnoreCase(paymentStatus) || "no_payment_required".equalsIgnoreCase(paymentStatus);
+    }
+
+    String resolveSessionSubscriptionStatus(Session session) {
+        Subscription sessionSubscription = session.getSubscriptionObject();
+        if (sessionSubscription != null && sessionSubscription.getStatus() != null) {
+            return sessionSubscription.getStatus();
+        }
+        String subscriptionId = session.getSubscription();
+        if (subscriptionId != null && !subscriptionId.isBlank()) {
+            try {
+                Subscription retrievedSubscription = Subscription.retrieve(subscriptionId);
+                if (retrievedSubscription.getStatus() != null && !retrievedSubscription.getStatus().isBlank()) {
+                    return retrievedSubscription.getStatus();
+                }
+            } catch (StripeException exception) {
+                log.warn("Could not retrieve Stripe subscription status for session {}", session.getId(), exception);
+            }
+        }
+        return "active";
+    }
+
+    private Instant resolveSessionCurrentPeriodEnd(Session session) {
+        Subscription sessionSubscription = session.getSubscriptionObject();
+        if (sessionSubscription != null) {
+            Instant resolved = resolveCurrentPeriodEnd(sessionSubscription);
+            if (resolved != null) {
+                return resolved;
+            }
+        }
+        String subscriptionId = session.getSubscription();
+        if (subscriptionId != null && !subscriptionId.isBlank()) {
+            try {
+                Subscription retrievedSubscription = Subscription.retrieve(subscriptionId);
+                return resolveCurrentPeriodEnd(retrievedSubscription);
+            } catch (StripeException exception) {
+                log.warn("Could not retrieve Stripe subscription period end for session {}", session.getId(), exception);
+            }
+        }
+        return null;
     }
 
     private String resolvePriceId(Subscription subscription) {

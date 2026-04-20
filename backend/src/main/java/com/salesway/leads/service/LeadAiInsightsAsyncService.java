@@ -1,5 +1,6 @@
 package com.salesway.leads.service;
 
+import com.salesway.billing.service.SubscriptionAccessService;
 import com.salesway.leads.dto.LeadAiInsightsRegenerateResponse;
 import com.salesway.leads.entity.Lead;
 import com.salesway.leads.entity.LeadAiInsightSnapshot;
@@ -29,6 +30,7 @@ public class LeadAiInsightsAsyncService {
     private final ManagerAccessService managerAccessService;
     private final LeadAiInsightsQueueService leadAiInsightsQueueService;
     private final LeadDetailsService leadDetailsService;
+    private final SubscriptionAccessService subscriptionAccessService;
     private final long staleStatusTimeoutMs;
 
     public LeadAiInsightsAsyncService(
@@ -37,6 +39,7 @@ public class LeadAiInsightsAsyncService {
             ManagerAccessService managerAccessService,
             LeadAiInsightsQueueService leadAiInsightsQueueService,
             LeadDetailsService leadDetailsService,
+            SubscriptionAccessService subscriptionAccessService,
             @Value("${app.leads.ai-insights-stale-timeout-ms:60000}") long staleStatusTimeoutMs
     ) {
         this.leadRepository = leadRepository;
@@ -44,6 +47,7 @@ public class LeadAiInsightsAsyncService {
         this.managerAccessService = managerAccessService;
         this.leadAiInsightsQueueService = leadAiInsightsQueueService;
         this.leadDetailsService = leadDetailsService;
+        this.subscriptionAccessService = subscriptionAccessService;
         this.staleStatusTimeoutMs = staleStatusTimeoutMs;
     }
 
@@ -52,6 +56,7 @@ public class LeadAiInsightsAsyncService {
         CompanyMembership membership = managerAccessService.getManagerMembership();
         Lead lead = leadRepository.findByIdAndCompanyId(leadId, membership.getCompany().getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Lead not found"));
+        subscriptionAccessService.assertAiFeaturesAvailable(lead.getCompany());
         if (!leadDetailsService.isAiInsightsRefreshRequired(lead) && !LeadAiInsightsStatus.FAILED.name().equalsIgnoreCase(lead.getAiInsightsStatus())) {
             LOG.info("AI insights regenerate skipped because snapshot is already fresh leadId={}", leadId);
             return new LeadAiInsightsRegenerateResponse("completed", leadId);

@@ -1,5 +1,6 @@
 package com.salesway.leads.service;
 
+import com.salesway.billing.service.SubscriptionAccessService;
 import com.salesway.leads.dto.LeadCampaignCreateRequest;
 import com.salesway.leads.dto.LeadCampaignResponse;
 import com.salesway.leads.dto.LeadCampaignUpdateRequest;
@@ -27,15 +28,18 @@ public class LeadCampaignService {
     private final LeadFormRepository leadFormRepository;
     private final LeadFormCampaignRepository leadFormCampaignRepository;
     private final ManagerAccessService managerAccessService;
+    private final SubscriptionAccessService subscriptionAccessService;
 
     public LeadCampaignService(
             LeadFormRepository leadFormRepository,
             LeadFormCampaignRepository leadFormCampaignRepository,
-            ManagerAccessService managerAccessService
+            ManagerAccessService managerAccessService,
+            SubscriptionAccessService subscriptionAccessService
     ) {
         this.leadFormRepository = leadFormRepository;
         this.leadFormCampaignRepository = leadFormCampaignRepository;
         this.managerAccessService = managerAccessService;
+        this.subscriptionAccessService = subscriptionAccessService;
     }
 
     @Transactional(readOnly = true)
@@ -50,6 +54,7 @@ public class LeadCampaignService {
     @Transactional
     public LeadCampaignResponse createCampaign(UUID formId, LeadCampaignCreateRequest request) {
         LeadForm form = getFormOrThrow(formId);
+        subscriptionAccessService.assertCanCreateCampaign(form.getCompany());
         String campaignCode = normalizeRequired(request.getCampaignCode(), "campaignCode");
         if (leadFormCampaignRepository.existsByLeadFormIdAndIsActiveTrueAndCampaignCodeIgnoreCase(form.getId(), campaignCode)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "campaignCode already exists for this form");

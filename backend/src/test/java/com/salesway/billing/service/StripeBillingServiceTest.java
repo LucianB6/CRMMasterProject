@@ -18,6 +18,8 @@ import com.salesway.memberships.entity.CompanyMembership;
 import com.salesway.memberships.repository.CompanyMembershipRepository;
 import com.salesway.security.JwtService;
 import com.stripe.Stripe;
+import com.stripe.model.Subscription;
+import com.stripe.model.checkout.Session;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,6 +38,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -121,6 +125,44 @@ class StripeBillingServiceTest {
     }
 
     @Test
+    void starterTrialRequiresUpfrontPaymentMethodCollection() {
+        assertThat(service.shouldCollectPaymentMethodUpfront(
+                new PlanCatalogService.CheckoutPlan("starter", "STARTER", "starter_monthly", "price_starter"),
+                true
+        )).isTrue();
+    }
+
+    @Test
+    void nonTrialCheckoutDoesNotForceUpfrontPaymentMethodCollection() {
+        assertThat(service.shouldCollectPaymentMethodUpfront(
+                new PlanCatalogService.CheckoutPlan("starter", "STARTER", "starter_monthly", "price_starter"),
+                false
+        )).isFalse();
+        assertThat(service.shouldCollectPaymentMethodUpfront(
+                new PlanCatalogService.CheckoutPlan("pro", "PRO", "pro_monthly", "price_pro"),
+                true
+        )).isFalse();
+    }
+
+    @Test
+    void expireStalePendingSignupsMarksActiveRowsExpired() {
+        PendingSignup staleSignup = pendingSignup(UUID.randomUUID());
+        staleSignup.setStatus(PendingSignupStatus.CHECKOUT_CREATED);
+
+        when(pendingSignupRepository.findByEmailIgnoreCaseAndStatusInAndCreatedAtBefore(
+                eq("ana@example.com"),
+                eq(java.util.EnumSet.of(PendingSignupStatus.PENDING, PendingSignupStatus.CHECKOUT_CREATED)),
+                any(Instant.class)
+        )).thenReturn(java.util.List.of(staleSignup));
+
+        service.expireStalePendingSignups("ana@example.com");
+
+        assertThat(staleSignup.getStatus()).isEqualTo(PendingSignupStatus.EXPIRED);
+        assertThat(staleSignup.getFailureReason()).isEqualTo("Checkout was not completed within 30 minutes");
+        verify(pendingSignupRepository).saveAll(java.util.List.of(staleSignup));
+    }
+
+    @Test
     void duplicateWebhookEventDoesNotCreateUserOrCompanyAgain() {
         String payload = checkoutCompletedPayload("evt_duplicate", UUID.randomUUID());
         when(processedStripeEventRepository.existsByStripeEventId("evt_duplicate")).thenReturn(true);
@@ -178,6 +220,35 @@ class StripeBillingServiceTest {
     }
 
     @Test
+    void successfulCheckoutPaymentStatusAcceptsTrialWithoutImmediateCharge() {
+        assertThat(service.isSuccessfulCheckoutPaymentStatus("paid")).isTrue();
+        assertThat(service.isSuccessfulCheckoutPaymentStatus("no_payment_required")).isTrue();
+        assertThat(service.isSuccessfulCheckoutPaymentStatus("unpaid")).isFalse();
+    }
+
+    @Test
+    void resolveSessionSubscriptionStatusPrefersExpandedSubscriptionStatus() {
+        Session session = mock(Session.class);
+        Subscription subscription = mock(Subscription.class);
+        when(session.getSubscriptionObject()).thenReturn(subscription);
+        when(subscription.getStatus()).thenReturn("trialing");
+
+        assertThat(service.resolveSessionSubscriptionStatus(session)).isEqualTo("trialing");
+    }
+
+    @Test
+    void assertPortalSessionOwnershipRejectsForeignCustomerForKnownCompany() {
+        Company company = existingCompany();
+        company.setStripeCustomerId("cus_company");
+        Session session = mock(Session.class);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                () -> service.assertPortalSessionOwnership(company, session, "cus_other")
+        ).isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .hasMessageContaining("Checkout session does not belong to the active company");
+    }
+
+    @Test
     void subscriptionUpdatedSynchronizesCompanyStatus() {
         Company company = existingCompany();
         String payload = subscriptionPayload("evt_subscription_updated", "customer.subscription.updated", "past_due");
@@ -192,6 +263,31 @@ class StripeBillingServiceTest {
         assertThat(companyCaptor.getValue().getSubscriptionStatus()).isEqualTo("past_due");
         assertThat(companyCaptor.getValue().getStripePriceId()).isEqualTo("price_pro");
         assertThat(companyCaptor.getValue().getPlanCode()).isEqualTo("PRO");
+    }
+
+    @Test
+    void subscriptionUpdatedWithCancelAtPeriodEndKeepsLocalCancellation() {
+        Company company = existingCompany();
+        Instant cancelledAt = Instant.parse("2026-04-15T07:00:00Z");
+        company.setSubscriptionCancelledAt(cancelledAt);
+        company.setSubscriptionGraceUntil(cancelledAt.plus(java.time.Duration.ofDays(30)));
+        String payload = subscriptionPayload(
+                "evt_subscription_cancel_at_period_end",
+                "customer.subscription.updated",
+                "active",
+                true
+        );
+        when(processedStripeEventRepository.existsByStripeEventId("evt_subscription_cancel_at_period_end")).thenReturn(false);
+        when(companyRepository.findByStripeSubscriptionId("sub_test_123")).thenReturn(Optional.of(company));
+        when(planCatalogService.resolvePlanCodeForLookupKey("pro_monthly")).thenReturn("PRO");
+
+        service.handleWebhook(payload, signatureHeader(payload));
+
+        ArgumentCaptor<Company> companyCaptor = ArgumentCaptor.forClass(Company.class);
+        verify(companyRepository).save(companyCaptor.capture());
+        assertThat(companyCaptor.getValue().getSubscriptionStatus()).isEqualTo("active");
+        assertThat(companyCaptor.getValue().getSubscriptionCancelledAt()).isEqualTo(cancelledAt);
+        assertThat(companyCaptor.getValue().getSubscriptionGraceUntil()).isEqualTo(cancelledAt.plus(java.time.Duration.ofDays(30)));
     }
 
     @Test
@@ -264,6 +360,10 @@ class StripeBillingServiceTest {
     }
 
     private String subscriptionPayload(String eventId, String eventType, String subscriptionStatus) {
+        return subscriptionPayload(eventId, eventType, subscriptionStatus, false);
+    }
+
+    private String subscriptionPayload(String eventId, String eventType, String subscriptionStatus, boolean cancelAtPeriodEnd) {
         long currentPeriodEnd = Instant.parse("2026-05-01T00:00:00Z").getEpochSecond();
         return """
                 {
@@ -278,6 +378,7 @@ class StripeBillingServiceTest {
                       "object": "subscription",
                       "customer": "cus_test_123",
                       "status": "%s",
+                      "cancel_at_period_end": %s,
                       "current_period_end": %d,
                       "metadata": {
                         "lookup_key": "pro_monthly"
@@ -299,7 +400,7 @@ class StripeBillingServiceTest {
                     }
                   }
                 }
-                """.formatted(eventId, Stripe.API_VERSION, eventType, subscriptionStatus, currentPeriodEnd);
+                """.formatted(eventId, Stripe.API_VERSION, eventType, subscriptionStatus, cancelAtPeriodEnd, currentPeriodEnd);
     }
 
     private String signatureHeader(String payload) {
